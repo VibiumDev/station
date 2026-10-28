@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{.Title}}</title>
+<link rel="stylesheet" href="{{.Assets}}/viewer/viewer.css">
+</head>
+<body data-device="{{.DeviceID}}" data-api="{{.API}}" data-csrf="{{.CSRF}}" data-shortcuts="{{.ShortcutsJSON}}">
+<div id="toolbar">
+  <a href="{{.Back}}">&larr;</a>
+  <span class="name">{{.DeviceName}}</span>
+  <button type="button" id="speakerBtn" title="Sound from the device">Speaker</button>
+  <button type="button" id="micBtn" title="Your microphone into the device">Mic</button>
+  <span class="sep"></span>
+  <button type="button" id="mouseBtn" title="Clicks as a mouse">Mouse</button>
+  <button type="button" id="touchBtn" title="Clicks as a finger">Touch</button>
+  <button type="button" id="kbdBtn" title="Keys you type go to the device">Keyboard</button>
+  <span class="sep"></span>
+  <span id="shortcuts"></span>
+  <span class="sep"></span>
+  <button type="button" id="statsBtn" title="Picture and sound numbers">Stats</button>
+  <button type="button" id="takeBtn">Take control</button>
+  <button type="button" id="releaseBtn">Release</button>
+  <span id="status"></span>
+</div>
+<div id="viewer">
+  <img id="feed" alt="">
+  <video id="rtcVideo" autoplay playsinline muted disablepictureinpicture></video>
+  <audio id="rtcAudio" autoplay></audio>
+  <div id="rtcStats"></div>
+  <div id="note"></div>
+</div>
+<script src="{{.Assets}}/viewer/input.js"></script>
+<script src="{{.Assets}}/viewer/viewer.js"></script>
+<script src="{{.Assets}}/viewer/webrtc.js"></script>
+</body>
+</html>
