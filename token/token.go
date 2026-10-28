@@ -5,7 +5,9 @@
 package token
 
 import (
+	"crypto/rand"
 	"encoding/base64"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -85,6 +87,11 @@ func (g Grant) event() nostr.Event {
 		tags = append(tags, nostr.Tag{"scope", string(s)})
 	}
 	tags = append(tags, nostr.Tag{"expiration", strconv.FormatInt(g.ExpiresAt.Unix(), 10)})
+	// Two grants with the same fields in the same second would share an id,
+	// and the id is the replay nonce; so each grant gets its own.
+	var nonce [8]byte
+	rand.Read(nonce[:])
+	tags = append(tags, nostr.Tag{"nonce", hex.EncodeToString(nonce[:])})
 	return nostr.Event{Kind: KindGrant, CreatedAt: nostr.Timestamp(g.IssuedAt.Unix()), Tags: tags}
 }
 

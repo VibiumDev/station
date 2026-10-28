@@ -34,6 +34,7 @@ the device has a key, the device. Station's own tags are single words.
 | `seq` | the device's lease counter | Never lower than the one it has |
 | `scope` | one per tag: `view`, `input`, `bidi`, `admin` | Each operation's scope, and the rig policy allows it |
 | `expiration` | NIP-40, 10 minutes after `created_at` | Not expired, 30 s skew |
+| `nonce` | 8 random bytes, hex | Nothing; it keeps every grant's id distinct |
 
 `content` is empty. The event `id` is the replay nonce: a grant is accepted
 once per connection. Refreshed grants carry the same `lease` and `seq`.
