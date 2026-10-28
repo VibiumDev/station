@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/hex"
+	"log"
 	"net"
 	"net/http"
 	"strings"
@@ -80,10 +81,13 @@ func (a *auth) Authenticate(r *http.Request) (station.Principal, error) {
 	}
 	if a.who != nil && len(a.cfg.Allow) > 0 {
 		login, tags, err := a.who(r.Context(), r.RemoteAddr)
-		if err == nil {
-			if a.allowed(login, tags) {
-				return station.Principal{Subject: login, Admin: true}, nil
-			}
+		switch {
+		case err != nil:
+			log.Printf("identity: %s: %v", r.RemoteAddr, err)
+		case a.allowed(login, tags):
+			return station.Principal{Subject: login, Admin: true}, nil
+		default:
+			log.Printf("identity: %s is %s %v, not in --allow", r.RemoteAddr, login, tags)
 		}
 	}
 	return station.Principal{}, station.ErrUnauthenticated
