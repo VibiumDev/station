@@ -18,7 +18,7 @@ import (
 	"github.com/VibiumDev/station"
 )
 
-//go:embed webrtc.js shell.js shell.css shell.html pcm-player.js pcm-sender.js
+//go:embed webrtc.js shell.js shell.css shell.html pcm-player.js pcm-sender.js pages.css pages.js plex-sans.woff2 plex-mono-400.woff2 plex-mono-500.woff2 rajdhani-600.woff2 rajdhani-700.woff2
 var files embed.FS
 
 func mustRead(name string) []byte {
@@ -84,7 +84,11 @@ type Page struct {
 	Assets string // prefix the module files are served under, usually empty
 	// Minimal hides the toolbar, for a page embedded in a frame.
 	Minimal bool
-	Config  Config
+	// Home is where the toolbar's first button leads, the host's front
+	// page as a rule; empty leaves the button out. HomeTitle names it.
+	Home      string
+	HomeTitle string
+	Config    Config
 }
 
 // ConfigJSON is the config for the page's data attribute.
@@ -124,6 +128,8 @@ func Assets() http.Handler {
 			ctype = "application/javascript; charset=utf-8"
 		case strings.HasSuffix(name, ".css"):
 			ctype = "text/css; charset=utf-8"
+		case strings.HasSuffix(name, ".woff2"):
+			ctype = "font/woff2"
 		default:
 			http.NotFound(w, r)
 			return
@@ -134,7 +140,11 @@ func Assets() http.Handler {
 			return
 		}
 		w.Header().Set("Content-Type", ctype)
-		w.Header().Set("Cache-Control", "no-cache")
+		if ctype == "font/woff2" {
+			w.Header().Set("Cache-Control", "public, max-age=604800")
+		} else {
+			w.Header().Set("Cache-Control", "no-cache")
+		}
 		w.Write(data)
 	})
 }

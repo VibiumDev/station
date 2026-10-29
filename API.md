@@ -10,7 +10,7 @@ appears in paths as two segments.
 
 | Method and path | Purpose |
 |---|---|
-| `GET /v1/devices` | Every rig's devices: id, kind, capabilities, shortcuts, the pointer mode the rig suggests (`input`: `touch` or `mouse`), rig, online, and the hold held on it |
+| `GET /v1/devices` | Every rig's devices: id, kind, capabilities, shortcuts, the pointer mode the rig suggests (`input`: `touch` or `mouse`), `label` (the device's name for people, when the rig gives one) and `platform` (`ios`, `android`, `mac`, `windows`, `linux`), rig, online, and the hold held on it |
 | `POST /v1/devices/{rig}/{name}/hold` | Take the device, or a seat watching whoever has it. Body `{"scopes": ["view", "input"]}`; `view` is always included. Returns the signed grant, the hold, whether the caller is watching, and the signaling and BiDi URLs. A person recalls a device someone else holds; an agent (a token) gets a place in line instead, `202 {"queued": true, "position": 2, "holder": "token:ci"}`, and `?wait=30` waits up to 30 s there for the hold. With `"watch": true` a held device is watched instead, whoever asks and whatever the scopes; a free one is taken when the scopes include control, and is `409 {"free": true}` when they do not, so a watcher never holds a device by itself |
 | `DELETE /v1/devices/{rig}/{name}/hold` | Release the caller's hold, or leave the line. An observer cannot end the holder's |
 | `POST /v1/devices/{rig}/{name}/reservation` | A place in line for a set time: `{"at": "2026-10-30T15:00:00Z", "scopes": [...]}`, `at` left out for now. The place sorts ahead of the line once its time comes, and must be taken within five minutes of it |

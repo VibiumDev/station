@@ -67,8 +67,10 @@ Then enroll a rig:
    the same LAN the URL can be left out; the station advertises itself over
    mDNS. The rig checks the station's key against the code, sends its key
    and devices, and writes its policy file.
-3. Restart `roadie`. The device appears on the station's front page; Open
-   takes a hold and shows it over WebRTC. The same link opened while an
+3. Restart `roadie`, with `--label "Dev iPhone 15"` to name the device on
+   the station's pages and `--platform ios` so they say what it runs. The
+   device appears on the station's front page; Open takes a hold and
+   shows it over WebRTC. The same link opened while an
    agent or someone else holds the device watches it instead, with a Hold
    button that takes it; `?watch=1` only ever watches.
 

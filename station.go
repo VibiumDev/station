@@ -112,6 +112,12 @@ type Device struct {
 	// Extras is the path on the rig of a script that adds the device's
 	// own buttons and panels to the shared viewer; empty when none.
 	Extras string `json:"extras,omitempty"`
+	// Label is the device's name for people, such as "Dev iPhone 15",
+	// when the id's name ("phone") is not one. Empty shows the name.
+	Label string `json:"label,omitempty"`
+	// Platform is what the device runs: "ios", "android", "macos",
+	// "windows", "linux", or empty when the kind says enough.
+	Platform string `json:"platform,omitempty"`
 }
 
 // Name is the device's name inside its rig.

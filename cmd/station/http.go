@@ -53,10 +53,6 @@ func (s *server) handler() http.Handler {
 	mux.HandleFunc("POST /v1/enroll", s.enroll.ServeEnroll)
 	mux.Handle("/v1/tunnel", s.tunnel)
 	mux.Handle("GET /viewer/", http.StripPrefix("/viewer/", viewer.Assets()))
-	mux.HandleFunc("GET /static/station.css", func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "text/css; charset=utf-8")
-		w.Write(stationCSS)
-	})
 	mux.HandleFunc("GET /login", s.loginPage)
 	mux.HandleFunc("POST /login", s.loginPost)
 	mux.HandleFunc("POST /logout", s.logout)
@@ -259,6 +255,8 @@ type deviceView struct {
 	Shortcuts []station.Shortcut `json:"shortcuts,omitempty"`
 	Input     string             `json:"input,omitempty"`
 	Extras    string             `json:"extras,omitempty"`
+	Label     string             `json:"label,omitempty"`
+	Platform  string             `json:"platform,omitempty"`
 	Rig       rigView            `json:"rig"`
 	Online    bool               `json:"online"`
 	Hold      *holdView          `json:"hold"`
@@ -289,7 +287,7 @@ func (s *server) devices(ctx context.Context) ([]deviceView, error) {
 		online := s.tunnel.IsOnline(rg.ID)
 		for _, d := range rg.Devices {
 			v := deviceView{ID: d.ID, Name: d.Name(), Kind: d.Kind, Caps: d.Caps, Shortcuts: d.Shortcuts, Input: d.Input, Extras: d.Extras,
-				Rig: rigView{ID: rg.ID, Name: rg.Name, Npub: npub(rg.PubKey)}, Online: online}
+				Label: d.Label, Platform: d.Platform, Rig: rigView{ID: rg.ID, Name: rg.Name, Npub: npub(rg.PubKey)}, Online: online}
 			if l, err := s.db.Current(ctx, d.ID); err == nil {
 				v.Hold = &holdView{ID: l.ID, Seq: l.Seq, Subject: l.Subject, Scopes: station.ScopeStrings(l.Scopes), Since: l.CreatedAt, Expires: l.ExpiresAt}
 			}
@@ -588,7 +586,7 @@ func (s *server) indexPage(w http.ResponseWriter, r *http.Request, p station.Pri
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	s.render(w, "index", map[string]any{"Devices": devs, "Principal": p, "CSRF": s.auth.csrfToken(r), "Name": s.cfg.Name})
+	s.render(w, "index", map[string]any{"Page": "index", "Devices": devs, "Principal": p, "CSRF": s.auth.csrfToken(r), "Name": s.cfg.Name})
 }
 
 func (s *server) viewPage(w http.ResponseWriter, r *http.Request, p station.Principal) {
@@ -601,7 +599,11 @@ func (s *server) viewPage(w http.ResponseWriter, r *http.Request, p station.Prin
 	rg, _ := s.db.Rig(r.Context(), r.PathValue("rig"))
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	q := r.URL.Query()
-	cfg := viewer.Config{Mode: "station", Device: dev.ID, Name: rg.Name + " / " + dev.Name(), API: viewer.Relayed("", dev.ID),
+	label := dev.Name()
+	if dev.Label != "" {
+		label = dev.Label
+	}
+	cfg := viewer.Config{Mode: "station", Device: dev.ID, Name: rg.Name + " / " + label, API: viewer.Relayed("", dev.ID),
 		InputMode: dev.Input, Shortcuts: dev.Shortcuts, CSRF: s.auth.csrfToken(r), WebRTC: true}
 	for _, c := range dev.Caps {
 		if c == station.CapVideo {
@@ -617,7 +619,7 @@ func (s *server) viewPage(w http.ResponseWriter, r *http.Request, p station.Prin
 	if dev.Extras != "" {
 		cfg.Extras = "/v1/devices/" + dev.ID + "/extras.js"
 	}
-	viewer.Render(w, viewer.Page{Title: rg.Name + " / " + dev.Name() + " · " + s.cfg.Name, Minimal: q.Get("minimal") == "1", Config: cfg})
+	viewer.Render(w, viewer.Page{Title: rg.Name + " / " + label + " · " + s.cfg.Name, Minimal: q.Get("minimal") == "1", Home: "/", HomeTitle: "Devices", Config: cfg})
 }
 
 func (s *server) settingsData(r *http.Request, p station.Principal, extra map[string]any) map[string]any {
@@ -626,7 +628,7 @@ func (s *server) settingsData(r *http.Request, p station.Principal, extra map[st
 	rigs, _ := s.db.Rigs(ctx)
 	codes, _ := s.db.OpenCodes(ctx, time.Now())
 	data := map[string]any{
-		"Principal": p, "CSRF": s.auth.csrfToken(r), "Name": s.cfg.Name, "Tokens": tokens, "Rigs": rigs, "OpenCodes": codes,
+		"Page": "settings", "Principal": p, "CSRF": s.auth.csrfToken(r), "Name": s.cfg.Name, "Tokens": tokens, "Rigs": rigs, "OpenCodes": codes,
 		"Mode": s.mode, "PublicURL": s.publicURL, "TunnelURL": s.enroll.TunnelURL, "MDNS": s.mdns,
 		"Npub": npub(s.key.Public()), "Fingerprint": enroll.Fingerprint(s.key.Public()), "Allow": s.cfg.Allow,
 		"NoPassword": s.cfg.PasswordHash == "", "TURN": s.turnInfo,

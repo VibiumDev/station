@@ -130,7 +130,7 @@ func (r *Rig) Reannounce() {
 func (r *Rig) announce(e *StationEntry, st nostr.PubKey) ([]nostr.Event, error) {
 	var devices []station.Device
 	for _, d := range r.Devices {
-		devices = append(devices, station.Device{ID: station.DeviceID(e.RigID, d.Name), Kind: d.Kind, Caps: d.Caps, Key: d.Key, Shortcuts: d.Shortcuts, Input: d.Input, Extras: d.Extras})
+		devices = append(devices, d.Device(e.RigID))
 	}
 	content, _ := json.Marshal(devices)
 	tags := nostr.Tags{{"p", st.Hex()}}
