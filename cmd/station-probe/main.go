@@ -6,12 +6,22 @@
 // for any station, including a hosted one.
 //
 //	station-probe -station https://host -token stk_... [-device rig_x/phone] [-t 10s] [-ice relay|all] [-tap 0.5,0.5] [-insecure]
+//
+// With -bidi it is a plain WebDriver BiDi client instead: it opens the
+// device's BiDi socket through the station (the URL the hold endpoint
+// returns), runs session.new, session.status, browsingContext.getTree,
+// browsingContext.captureScreenshot, a tap with input.performActions and
+// session.end, and prints what came back. With -bidi-direct ws://roadie/session
+// (and -bidi-direct-token for its own token) it runs the same sequence
+// straight at the rig and compares the shapes of every answer, so the
+// relay is shown to change nothing.
 package main
 
 import (
 	"bytes"
 	"context"
 	"crypto/tls"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"flag"
@@ -19,8 +29,10 @@ import (
 	"image"
 	"image/jpeg"
 	"io"
+	"math"
 	"net/http"
 	"os"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -86,6 +98,9 @@ func main() {
 	tap := flag.String("tap", "0.5,0.5", "where to tap, as fractions of the picture; empty for no tap")
 	insecure := flag.Bool("insecure", false, "accept the station's self-signed certificate (LAN mode)")
 	diff := flag.Bool("diff", false, "no probe: print the mean luma difference between the two JPEG files given, for scripts")
+	bidi := flag.Bool("bidi", false, "run the WebDriver BiDi sequence through the station instead of the WebRTC probe")
+	bidiDirect := flag.String("bidi-direct", "", "with -bidi: also run the sequence straight at the rig's BiDi socket, this URL, and compare")
+	bidiDirectToken := flag.String("bidi-direct-token", os.Getenv("ROADIE_TOKEN"), "with -bidi-direct: the rig's own bearer token (or $ROADIE_TOKEN)")
 	flag.Parse()
 	if *diff {
 		a, err1 := os.ReadFile(flag.Arg(0))
@@ -108,7 +123,11 @@ func main() {
 	}
 	p := &probe{base: strings.TrimRight(*station, "/"), token: *token,
 		client: &http.Client{Timeout: 30 * time.Second, Transport: &http.Transport{TLSClientConfig: &tls.Config{InsecureSkipVerify: *insecure}}}}
-	if err := p.run(*dev, *dur, *ice, *tap); err != nil {
+	if *bidi {
+		if err := p.runBiDi(*dev, *tap, *bidiDirect, *bidiDirectToken); err != nil {
+			p.fail(err.Error())
+		}
+	} else if err := p.run(*dev, *dur, *ice, *tap); err != nil {
 		p.fail(err.Error())
 	}
 	if len(p.failures) > 0 {
@@ -574,4 +593,257 @@ func keycodes(keys string) ([]int, bool) {
 		}
 	}
 	return codes, len(codes) > 0
+}
+
+// --- WebDriver BiDi ---
+
+// bidiStep is one command of the sequence and what came back.
+type bidiStep struct {
+	Method string
+	Params map[string]any
+	Reply  map[string]any
+	Took   time.Duration
+}
+
+// bidiRun opens a BiDi socket and runs the sequence, tapping at fx, fy
+// of the viewport when tap is set. It returns every reply.
+func (p *probe) bidiRun(ctx context.Context, wsURL, bearer string, tap string) ([]bidiStep, error) {
+	header := http.Header{}
+	if bearer != "" {
+		header.Set("Authorization", "Bearer "+bearer)
+	}
+	conn, _, err := websocket.Dial(ctx, wsURL, &websocket.DialOptions{HTTPClient: p.client, HTTPHeader: header})
+	if err != nil {
+		return nil, fmt.Errorf("bidi: %w", err)
+	}
+	defer conn.CloseNow()
+	conn.SetReadLimit(16 << 20)
+	id := 0
+	call := func(method string, params map[string]any) (bidiStep, error) {
+		id++
+		if params == nil {
+			params = map[string]any{}
+		}
+		req, _ := json.Marshal(map[string]any{"id": id, "method": method, "params": params})
+		start := time.Now()
+		if err := conn.Write(ctx, websocket.MessageText, req); err != nil {
+			return bidiStep{}, err
+		}
+		for {
+			_, data, err := conn.Read(ctx)
+			if err != nil {
+				return bidiStep{}, fmt.Errorf("%s: %w", method, err)
+			}
+			var reply map[string]any
+			if err := json.Unmarshal(data, &reply); err != nil {
+				return bidiStep{}, fmt.Errorf("%s: not JSON: %w", method, err)
+			}
+			// Events have no id; the answer to this command carries ours.
+			if rid, ok := reply["id"].(float64); ok && int(rid) == id {
+				return bidiStep{Method: method, Params: params, Reply: reply, Took: time.Since(start)}, nil
+			}
+		}
+	}
+	var steps []bidiStep
+	add := func(st bidiStep, err error) error {
+		if err != nil {
+			return err
+		}
+		steps = append(steps, st)
+		return nil
+	}
+	if err := add(call("session.status", nil)); err != nil {
+		return steps, err
+	}
+	if err := add(call("session.new", map[string]any{"capabilities": map[string]any{}})); err != nil {
+		return steps, err
+	}
+	var width, height float64
+	if res, ok := steps[len(steps)-1].Reply["result"].(map[string]any); ok {
+		if caps, ok := res["capabilities"].(map[string]any); ok {
+			if vp, ok := caps["roadie:viewport"].(map[string]any); ok {
+				width, _ = vp["width"].(float64)
+				height, _ = vp["height"].(float64)
+			}
+		}
+	}
+	if err := add(call("browsingContext.getTree", nil)); err != nil {
+		return steps, err
+	}
+	if err := add(call("browsingContext.captureScreenshot", map[string]any{"context": "roadie"})); err != nil {
+		return steps, err
+	}
+	if tap != "" && width > 0 && height > 0 {
+		var fx, fy float64
+		if _, err := fmt.Sscanf(tap, "%g,%g", &fx, &fy); err != nil {
+			return steps, fmt.Errorf("-tap %q: want x,y as fractions", tap)
+		}
+		x, y := math.Round(fx*width), math.Round(fy*height)
+		if err := add(call("input.performActions", map[string]any{"context": "roadie", "actions": []map[string]any{{
+			"type": "pointer", "id": "finger", "parameters": map[string]any{"pointerType": "touch"},
+			"actions": []map[string]any{
+				{"type": "pointerMove", "x": x, "y": y},
+				{"type": "pointerDown", "button": 0},
+				{"type": "pause", "duration": 80},
+				{"type": "pointerUp", "button": 0},
+			}}}})); err != nil {
+			return steps, err
+		}
+		time.Sleep(2 * time.Second)
+		if err := add(call("browsingContext.captureScreenshot", map[string]any{"context": "roadie"})); err != nil {
+			return steps, err
+		}
+	}
+	if err := add(call("session.end", nil)); err != nil {
+		return steps, err
+	}
+	return steps, nil
+}
+
+// shape describes a JSON value by its keys and types, not its values, so
+// two runs can be compared although screenshots and timings differ.
+func shape(v any) string {
+	switch x := v.(type) {
+	case map[string]any:
+		keys := make([]string, 0, len(x))
+		for k := range x {
+			keys = append(keys, k)
+		}
+		sort.Strings(keys)
+		var b strings.Builder
+		b.WriteString("{")
+		for i, k := range keys {
+			if i > 0 {
+				b.WriteString(",")
+			}
+			b.WriteString(k + ":" + shape(x[k]))
+		}
+		b.WriteString("}")
+		return b.String()
+	case []any:
+		if len(x) == 0 {
+			return "[]"
+		}
+		return "[" + shape(x[0]) + "...]"
+	case string:
+		return "string"
+	case float64:
+		return "number"
+	case bool:
+		return "bool"
+	case nil:
+		return "null"
+	}
+	return "?"
+}
+
+func summarize(st bidiStep) string {
+	if e, ok := st.Reply["error"]; ok {
+		return fmt.Sprintf("error %v: %v", e, st.Reply["message"])
+	}
+	res, _ := st.Reply["result"].(map[string]any)
+	switch st.Method {
+	case "browsingContext.captureScreenshot":
+		data, _ := res["data"].(string)
+		return fmt.Sprintf("%d bytes of %v", len(data)*3/4, res["format"])
+	default:
+		out, _ := json.Marshal(res)
+		if len(out) > 160 {
+			out = append(out[:160], "..."...)
+		}
+		return string(out)
+	}
+}
+
+func (p *probe) runBiDi(devID, tap, direct, directToken string) error {
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	defer cancel()
+	var devices []device
+	if err := p.api(ctx, "GET", "/v1/devices", nil, &devices); err != nil {
+		return err
+	}
+	var dev *device
+	for i := range devices {
+		d := &devices[i]
+		if (devID == "" && d.Online && d.ID != "") || d.ID == devID {
+			dev = d
+			break
+		}
+	}
+	if dev == nil {
+		return fmt.Errorf("no device to probe among %d listed", len(devices))
+	}
+	fmt.Printf("device %s (%s) online=%v\n", dev.ID, dev.Kind, dev.Online)
+	// The hold endpoint names the BiDi URL; the socket is opened with the
+	// same bearer token and nothing else: no handshake of ours.
+	var hold struct {
+		BiDi string `json:"bidi"`
+	}
+	if err := p.api(ctx, "POST", "/v1/devices/"+dev.ID+"/hold", map[string]any{"scopes": []string{"view", "input", "bidi"}}, &hold); err != nil {
+		return err
+	}
+	if hold.BiDi == "" {
+		return errors.New("the hold response names no bidi URL")
+	}
+	defer p.api(context.Background(), "DELETE", "/v1/devices/"+dev.ID+"/hold", nil, nil)
+	wsURL := "ws" + strings.TrimPrefix(p.base, "http") + hold.BiDi
+	fmt.Printf("bidi through the station: %s\n", wsURL)
+	via, err := p.bidiRun(ctx, wsURL, p.token, tap)
+	for _, st := range via {
+		fmt.Printf("   %-36s %6.0f ms  %s\n", st.Method, float64(st.Took)/float64(time.Millisecond), summarize(st))
+	}
+	if err != nil {
+		return err
+	}
+	if len(via) < 5 {
+		p.fail(fmt.Sprintf("only %d replies", len(via)))
+	}
+	for _, st := range via {
+		if _, isErr := st.Reply["error"]; isErr {
+			p.fail(st.Method + " answered an error through the station")
+		}
+	}
+	if tap != "" && len(via) >= 7 {
+		before, _ := via[3].Reply["result"].(map[string]any)["data"].(string)
+		after, _ := via[5].Reply["result"].(map[string]any)["data"].(string)
+		b1, _ := base64.StdEncoding.DecodeString(before)
+		b2, _ := base64.StdEncoding.DecodeString(after)
+		if d, err := difference(b1, b2); err != nil {
+			p.fail("screenshots: " + err.Error())
+		} else {
+			fmt.Printf("tap at %s: screenshots differ by %.1f\n", tap, d)
+			if d < 2 {
+				p.fail("the screen did not change after the BiDi tap")
+			}
+		}
+	}
+	if direct == "" {
+		return nil
+	}
+	fmt.Printf("bidi straight at the rig: %s\n", direct)
+	raw, err := p.bidiRun(ctx, direct, directToken, tap)
+	for _, st := range raw {
+		fmt.Printf("   %-36s %6.0f ms  %s\n", st.Method, float64(st.Took)/float64(time.Millisecond), summarize(st))
+	}
+	if err != nil {
+		return err
+	}
+	if len(raw) != len(via) {
+		p.fail(fmt.Sprintf("%d replies direct, %d through the station", len(raw), len(via)))
+		return nil
+	}
+	same := true
+	for i := range raw {
+		a, b := shape(raw[i].Reply), shape(via[i].Reply)
+		if a != b {
+			same = false
+			fmt.Printf("   %s differs:\n      direct  %s\n      station %s\n", raw[i].Method, a, b)
+		}
+	}
+	if same {
+		fmt.Println("every reply has the same shape direct and through the station")
+	} else {
+		p.fail("replies differ between the direct socket and the station")
+	}
+	return nil
 }

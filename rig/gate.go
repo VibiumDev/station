@@ -1,15 +1,18 @@
 package rig
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"log"
 	"os"
+	"strings"
 	"sync"
 	"time"
 
 	"fiatjaf.com/nostr"
+	"golang.org/x/time/rate"
 
 	"github.com/VibiumDev/station"
 	"github.com/VibiumDev/station/token"
@@ -30,11 +33,117 @@ type Gate struct {
 	OnEnd func(deviceID, holdID string)
 	Now   func() time.Time
 	Logf  func(format string, args ...any)
+	// Rate and Burst limit the relayed requests and messages a hold may
+	// send: DefaultRate and DefaultBurst when zero.
+	Rate  float64
+	Burst int
 
 	mu     sync.Mutex
 	loaded bool
 	st     state
 	seen   map[nostr.ID]time.Time
+
+	cmu      sync.Mutex
+	conns    map[string]map[*reg]struct{} // open relayed connections by hold id
+	counts   map[string]int               // open connections by hold id and rule path
+	limiters map[string]*rate.Limiter     // by hold id
+}
+
+// The limits a hold gets unless the gate says otherwise: generous for a
+// viewer's pointer moves, tight enough that one hold cannot flood the
+// Pi.
+const (
+	DefaultRate  = 120 // requests and messages a second
+	DefaultBurst = 240
+)
+
+func (g *Gate) limiter(holdID string) *rate.Limiter {
+	g.cmu.Lock()
+	defer g.cmu.Unlock()
+	if g.limiters == nil {
+		g.limiters = map[string]*rate.Limiter{}
+	}
+	l := g.limiters[holdID]
+	if l == nil {
+		r, b := g.Rate, g.Burst
+		if r <= 0 {
+			r = DefaultRate
+		}
+		if b <= 0 {
+			b = DefaultBurst
+		}
+		l = rate.NewLimiter(rate.Limit(r), b)
+		g.limiters[holdID] = l
+	}
+	return l
+}
+
+// reg is one open relayed connection on a hold.
+type reg struct {
+	cancel context.CancelFunc
+	key    string // hold id and rule, for the cap
+}
+
+// track registers an open connection on a hold under a rule; nil when
+// the rule's cap is reached.
+func (g *Gate) track(holdID string, rule Rule, cancel context.CancelFunc) *reg {
+	g.cmu.Lock()
+	defer g.cmu.Unlock()
+	if g.conns == nil {
+		g.conns = map[string]map[*reg]struct{}{}
+		g.counts = map[string]int{}
+	}
+	key := holdID + "|" + rule.Method + " " + rule.Path
+	if rule.Max > 0 && g.counts[key] >= rule.Max {
+		return nil
+	}
+	g.counts[key]++
+	r := &reg{cancel: cancel, key: key}
+	if g.conns[holdID] == nil {
+		g.conns[holdID] = map[*reg]struct{}{}
+	}
+	g.conns[holdID][r] = struct{}{}
+	return r
+}
+
+func (g *Gate) untrack(holdID string, r *reg) {
+	g.cmu.Lock()
+	defer g.cmu.Unlock()
+	if _, ok := g.conns[holdID][r]; !ok {
+		return // closed already
+	}
+	delete(g.conns[holdID], r)
+	if len(g.conns[holdID]) == 0 {
+		delete(g.conns, holdID)
+	}
+	if g.counts[r.key]--; g.counts[r.key] <= 0 {
+		delete(g.counts, r.key)
+	}
+}
+
+// closeAll ends every open relayed connection on a hold and forgets its
+// limiter.
+func (g *Gate) closeAll(holdID string) {
+	g.cmu.Lock()
+	conns := g.conns[holdID]
+	delete(g.conns, holdID)
+	delete(g.limiters, holdID)
+	for key := range g.counts {
+		if strings.HasPrefix(key, holdID+"|") {
+			delete(g.counts, key)
+		}
+	}
+	g.cmu.Unlock()
+	for r := range conns {
+		r.cancel()
+	}
+}
+
+// Open is how many relayed connections a hold has, for tests.
+func (g *Gate) Open(holdID string) int {
+	g.cmu.Lock()
+	defer g.cmu.Unlock()
+	return len(g.conns[holdID])
 }
 
 // Errors the gate returns, besides the token package's.
@@ -201,8 +310,11 @@ func (g *Gate) Check(ev nostr.Event, need station.Scope) (token.Grant, error) {
 		}
 	}
 	g.save()
-	if ended != "" && g.OnEnd != nil {
-		go g.OnEnd(grant.DeviceID, ended)
+	if ended != "" {
+		g.closeAll(ended)
+		if g.OnEnd != nil {
+			go g.OnEnd(grant.DeviceID, ended)
+		}
 	}
 	return grant, nil
 }
@@ -230,6 +342,7 @@ func (g *Gate) Revoke(ev nostr.Event) error {
 		}
 	}
 	g.save()
+	g.closeAll(r.HoldID)
 	return nil
 }
 

@@ -8,6 +8,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sync"
 	"time"
 
 	"fiatjaf.com/nostr"
@@ -37,10 +38,24 @@ type Manager struct {
 	// ICE names the STUN and TURN servers a hold's grants carry, with
 	// credentials good until the hold's end. Optional.
 	ICE func(hold station.Hold) []token.ICEServer
+	// OnEnd is told when a hold ends, after its revocation went out, so
+	// relayed connections on it can be closed. Optional.
+	OnEnd func(hold station.Hold)
+	// InUse says whether a hold has connections open, which keeps it from
+	// ending as idle. Optional.
+	InUse func(holdID string) bool
 
 	Now         func() time.Time // optional, for tests
 	IdleTimeout time.Duration    // zero means IdleTimeout
 	MaxDuration time.Duration    // zero means MaxDuration
+	ClaimWindow time.Duration    // zero means ClaimWindow
+
+	mu         sync.Mutex
+	queues     map[string][]*place  // by device id
+	observers  map[string]observer  // by hold id
+	unclaimed  map[string]time.Time // holds handed to the next in line, by id, with the deadline
+	handed     map[string]*place    // places handed a hold, by device id and subject, until claimed
+	handedHold map[string]string    // the key above, by hold id
 }
 
 // Request asks for a device.
@@ -48,6 +63,9 @@ type Request struct {
 	DeviceID string
 	Subject  string
 	Scopes   []station.Scope // empty means view only; view is always included
+	// Recall lets the request take a device another subject holds. A
+	// person recalls; an agent without it waits in line.
+	Recall bool
 }
 
 // Result is what a request got: the hold the grant is on, the grant, and
@@ -106,11 +124,13 @@ func subset(scopes, of []station.Scope) bool {
 
 // Take gives the subject the device, or a seat watching whoever has it.
 //
-// With no hold on the device, a new hold. With the subject's own hold,
-// a fresh grant on it (and a new hold when more scopes are asked for).
-// With someone else's hold: a request with input, bidi or admin takes
-// over with a new hold, which ends the old one on the rig; a view-only
-// request gets a grant on the holder's hold as an observer.
+// With no hold on the device, a new hold, unless others whose turn it
+// is wait in line. With the subject's own hold, a fresh grant on it (and
+// a new hold when more scopes are asked for). With someone else's hold:
+// a request with input, bidi or admin either recalls the device with a
+// new hold, which ends the old one on the rig, or, without Recall, takes
+// a place in line and gets a Queued error; a view-only request gets a
+// grant on the holder's hold as the one observer.
 func (m *Manager) Take(ctx context.Context, req Request) (Result, error) {
 	dev, err := m.Devices.Device(ctx, req.DeviceID)
 	if err != nil {
@@ -129,30 +149,53 @@ func (m *Manager) Take(ctx context.Context, req Request) (Result, error) {
 	cur, err := m.Holds.Current(ctx, dev.ID)
 	switch {
 	case errors.Is(err, station.ErrNoHold):
-		// Free: a new hold.
+		// Free: a new hold, unless someone else's turn in line has come.
+		m.mu.Lock()
+		m.init()
+		p := m.due(dev.ID, now)
+		if p != nil && p.subject == req.Subject {
+			m.remove(dev.ID, p)
+			p = nil
+		}
+		if p != nil && controls(scopes) && !req.Recall {
+			pos := m.enqueue(dev.ID, req, time.Time{}, now)
+			m.mu.Unlock()
+			return Result{}, &Queued{Position: pos, Holder: p.subject + " (next in line)"}
+		}
+		m.mu.Unlock()
 	case err != nil:
 		return Result{}, err
 	case cur.Subject == req.Subject && subset(scopes, cur.Scopes):
 		if err := m.Holds.Touch(ctx, cur.ID, now); err != nil {
 			return Result{}, err
 		}
+		m.claim(cur.ID)
 		cur.ActiveAt = now
 		return m.issue(ctx, rig, dev, cur, scopes, false)
 	case cur.Subject == req.Subject:
 		// The holder wants more than the hold has: a new hold.
-		if err := m.end(ctx, cur, "replaced by its holder"); err != nil {
+		if err := m.end(ctx, cur, "replaced by its holder", false); err != nil {
 			return Result{}, err
 		}
+	case controls(scopes) && !req.Recall:
+		m.mu.Lock()
+		m.init()
+		pos := m.enqueue(dev.ID, req, time.Time{}, now)
+		m.mu.Unlock()
+		return Result{}, &Queued{Position: pos, Holder: cur.Subject}
 	case controls(scopes):
-		if err := m.end(ctx, cur, "taken over by "+req.Subject); err != nil {
+		if err := m.end(ctx, cur, "recalled by "+req.Subject, false); err != nil {
 			return Result{}, err
 		}
 	default:
 		// Someone else holds it and the request only watches.
+		if err := m.watch(cur.ID, req.Subject, now); err != nil {
+			return Result{}, err
+		}
 		return m.issue(ctx, rig, dev, cur, []station.Scope{station.ScopeView}, true)
 	}
 	hold, err := m.Holds.Create(ctx, station.Hold{
-		ID: station.NewID("lse"), DeviceID: dev.ID, RigID: rig.ID, Subject: req.Subject, Scopes: scopes,
+		ID: station.NewID("hld"), DeviceID: dev.ID, RigID: rig.ID, Subject: req.Subject, Scopes: scopes,
 		CreatedAt: now, ActiveAt: now, ExpiresAt: now.Add(m.max()),
 	})
 	if err != nil {
@@ -194,8 +237,10 @@ func (m *Manager) issue(ctx context.Context, rig station.Rig, dev station.Device
 	return Result{Hold: hold, Observer: observer, Grant: g, Event: ev}, nil
 }
 
-// Touch records activity on a hold, so it is not released as idle.
+// Touch records activity on a hold, so it is not released as idle, and
+// claims it if it was handed over from the line.
 func (m *Manager) Touch(ctx context.Context, holdID string) error {
+	m.claim(holdID)
 	return m.Holds.Touch(ctx, holdID, m.now())
 }
 
@@ -212,28 +257,43 @@ func (m *Manager) Release(ctx context.Context, holdID, subject string) error {
 	if !hold.Held(m.now()) {
 		return nil
 	}
-	return m.end(ctx, hold, "released")
+	return m.end(ctx, hold, "released", true)
 }
 
-// Expire ends every hold past its idle or maximum time and returns them.
+// Expire ends every hold past its idle or maximum time, or handed over
+// from the line and not claimed, and returns them. It also drops places
+// in line nobody asks about.
 func (m *Manager) Expire(ctx context.Context) ([]station.Hold, error) {
 	held, err := m.Holds.Held(ctx)
 	if err != nil {
 		return nil, err
 	}
 	now := m.now()
+	passed := map[string]bool{}
+	for _, id := range m.sweep(now) {
+		passed[id] = true
+	}
+	// A reservation whose time came while its device sat free gets the
+	// device now; nobody released it, so nothing else would.
+	for _, dev := range m.pending(now) {
+		if _, err := m.Holds.Current(ctx, dev); errors.Is(err, station.ErrNoHold) {
+			m.next(ctx, dev)
+		}
+	}
 	var ended []station.Hold
 	for _, l := range held {
 		var why string
 		switch {
 		case !now.Before(l.ExpiresAt):
 			why = "maximum time"
-		case now.Sub(l.ActiveAt) >= m.idle():
+		case passed[l.ID]:
+			why = "not claimed in time"
+		case now.Sub(l.ActiveAt) >= m.idle() && (m.InUse == nil || !m.InUse(l.ID)):
 			why = "idle"
 		default:
 			continue
 		}
-		if err := m.end(ctx, l, why); err != nil {
+		if err := m.end(ctx, l, why, true); err != nil {
 			return ended, err
 		}
 		ended = append(ended, l)
@@ -241,8 +301,9 @@ func (m *Manager) Expire(ctx context.Context) ([]station.Hold, error) {
 	return ended, nil
 }
 
-// end releases a hold and signs, stores and pushes its revocation.
-func (m *Manager) end(ctx context.Context, hold station.Hold, why string) error {
+// end releases a hold and signs, stores and pushes its revocation; with
+// handOn, the device then goes to the next in line.
+func (m *Manager) end(ctx context.Context, hold station.Hold, why string, handOn bool) error {
 	if err := m.Holds.Release(ctx, hold.ID, m.now()); err != nil && !errors.Is(err, station.ErrNotFound) {
 		return err
 	}
@@ -260,6 +321,16 @@ func (m *Manager) end(ctx context.Context, hold station.Hold, why string) error 
 	m.audit(ctx, station.AuditEntry{Subject: hold.Subject, Action: "release", DeviceID: hold.DeviceID, HoldID: hold.ID, Detail: why})
 	if m.OnRevoke != nil {
 		m.OnRevoke(ctx, hold.RigID, ev)
+	}
+	m.claim(hold.ID)
+	m.mu.Lock()
+	delete(m.observers, hold.ID)
+	m.mu.Unlock()
+	if m.OnEnd != nil {
+		m.OnEnd(hold)
+	}
+	if handOn {
+		m.next(ctx, hold.DeviceID)
 	}
 	return nil
 }

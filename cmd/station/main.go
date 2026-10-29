@@ -419,6 +419,10 @@ func serve(args []string) int {
 		turnInfo = fmt.Sprintf("on: %s, relay ports %d-%d", strings.Join(turnSrv.URLs(), " "), lo, hi)
 	}
 	rl := &relay.Relay{Tunnel: ts, Logf: func(format string, args ...any) { fmt.Printf(format+"\n", args...) }}
+	// A hold's end closes the connections relayed on it, and a hold with
+	// connections open is in use, not idle.
+	mgr.OnEnd = func(h station.Hold) { rl.End(h.ID) }
+	mgr.InUse = func(holdID string) bool { return rl.Open(holdID) > 0 }
 	s := &server{
 		cfg: cfg, dir: dir, db: db, key: key, mode: mode, publicURL: base,
 		auth:     newAuth(cfg, db, who, strings.HasPrefix(base, "https"), proxied),

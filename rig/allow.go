@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"fiatjaf.com/nostr"
+	"golang.org/x/time/rate"
 
 	"github.com/VibiumDev/station"
 	"github.com/VibiumDev/station/token"
@@ -21,6 +22,9 @@ type Rule struct {
 	// message rather than a header: the request passes without one and the
 	// handler checks it through FirstMessageCheck.
 	FirstMessage bool
+	// Max caps the connections one hold may have open on this rule at
+	// once, for streams and sockets; zero means no cap.
+	Max int
 }
 
 // Allowlist is what a rig lets the station reach. Anything not listed is
@@ -51,7 +55,16 @@ type ctxKey int
 const (
 	ctxGrant ctxKey = iota
 	ctxCheck
+	ctxLimiter
 )
+
+// LimiterFrom returns the hold's rate limiter for a relayed request, so
+// a handler reading a stream of messages can pace them with Wait; nil
+// when the request did not come through the tunnel.
+func LimiterFrom(ctx context.Context) *rate.Limiter {
+	l, _ := ctx.Value(ctxLimiter).(*rate.Limiter)
+	return l
+}
 
 // GrantFrom returns the grant a relayed request was admitted with.
 func GrantFrom(ctx context.Context) (token.Grant, bool) {
@@ -103,6 +116,24 @@ func (g *Gate) Middleware(allow Allowlist, next http.Handler) http.Handler {
 			refuse(w, http.StatusForbidden, err.Error())
 			return
 		}
-		next.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), ctxGrant, grant)))
+		// The hold's limits: requests and messages per second, and how
+		// many connections it may hold open on this endpoint. Every
+		// connection is tracked, so the hold's end closes it.
+		lim := g.limiter(grant.HoldID)
+		if !lim.Allow() {
+			refuse(w, http.StatusTooManyRequests, "too many requests on this hold")
+			return
+		}
+		ctx, cancel := context.WithCancel(r.Context())
+		defer cancel()
+		reg := g.track(grant.HoldID, rule, cancel)
+		if reg == nil {
+			refuse(w, http.StatusTooManyRequests, "this hold already has that many open")
+			return
+		}
+		defer g.untrack(grant.HoldID, reg)
+		ctx = context.WithValue(ctx, ctxGrant, grant)
+		ctx = context.WithValue(ctx, ctxLimiter, lim)
+		next.ServeHTTP(w, r.WithContext(ctx))
 	})
 }

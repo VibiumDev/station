@@ -68,7 +68,7 @@ var pages = template.Must(template.New("").Funcs(template.FuncMap{"npub": npub, 
 <td>{{.Rig.Name}} <span class="muted">{{.Rig.ID}}</span></td>
 <td>{{.Kind}}</td>
 <td>{{if .Online}}<span class="ok">online</span>{{else}}<span class="muted">offline</span>{{end}}</td>
-<td>{{if .Hold}}{{.Hold.Subject}}{{else}}<span class="muted">free</span>{{end}}</td>
+<td>{{if .Hold}}{{.Hold.Subject}}{{else}}<span class="muted">free</span>{{end}}{{if .Waiting}} <span class="muted">{{.Waiting}} waiting</span>{{end}}</td>
 <td>{{if .ID}}<a href="/devices/{{.ID}}/view">Open</a>{{end}}</td>
 </tr>{{end}}</table>{{end}}
 </main></body></html>{{end}}

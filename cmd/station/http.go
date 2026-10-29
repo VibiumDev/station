@@ -9,6 +9,7 @@ import (
 	"log"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 	"time"
 
@@ -73,6 +74,8 @@ func (s *server) handler() http.Handler {
 	mux.Handle("POST /v1/devices/{rig}/{name}/hold", s.api(station.ActionView, s.takeHold))
 	mux.Handle("DELETE /v1/devices/{rig}/{name}/hold", s.api(station.ActionView, s.releaseHold))
 	mux.Handle("POST /v1/devices/{rig}/{name}/hold/release", s.api(station.ActionView, s.releaseHold))
+	mux.Handle("POST /v1/devices/{rig}/{name}/reservation", s.api(station.ActionView, s.reserve))
+	mux.Handle("DELETE /v1/devices/{rig}/{name}/reservation", s.api(station.ActionView, s.unreserve))
 	mux.Handle("GET /v1/devices/{rig}/{name}/signal", s.api(station.ActionView, func(w http.ResponseWriter, r *http.Request, _ station.Principal) {
 		s.signal.ServeDevice(w, r, deviceID(r))
 	}))
@@ -83,6 +86,13 @@ func (s *server) handler() http.Handler {
 	mux.Handle("GET /v1/devices/{rig}/{name}/hid", s.api(station.ActionControl, s.relayed("/api/hid/ws", station.ScopeInput)))
 	mux.Handle("GET /v1/devices/{rig}/{name}/audio", s.api(station.ActionView, s.relayed("/audio", station.ScopeView)))
 	mux.Handle("GET /v1/devices/{rig}/{name}/mic", s.api(station.ActionControl, s.relayed("/api/mic", station.ScopeInput)))
+	// Agents: WebDriver BiDi, byte for byte, and the rig's REST under
+	// /api, with the rig's allowlist deciding what each scope reaches.
+	mux.Handle("GET /v1/devices/{rig}/{name}/bidi", s.api(station.ActionBidi, s.relayed("/session", station.ScopeBidi)))
+	mux.Handle("GET /v1/devices/{rig}/{name}/health", s.api(station.ActionView, s.relayed("/health", station.ScopeView)))
+	mux.Handle("/v1/devices/{rig}/{name}/api/{path...}", s.api(station.ActionView, func(w http.ResponseWriter, r *http.Request, p station.Principal) {
+		s.relayTo(w, r, p, "/api/"+r.PathValue("path"), "")
+	}))
 	return secure(mux)
 }
 
@@ -230,6 +240,7 @@ func (s *server) logout(w http.ResponseWriter, r *http.Request) {
 // deviceView is a device as the pages and the API show it.
 type deviceView struct {
 	ID        string             `json:"id"`
+	Waiting   int                `json:"waiting,omitempty"`
 	Name      string             `json:"name"`
 	Kind      string             `json:"kind"`
 	Caps      []string           `json:"caps"`
@@ -269,6 +280,7 @@ func (s *server) devices(ctx context.Context) ([]deviceView, error) {
 			if l, err := s.db.Current(ctx, d.ID); err == nil {
 				v.Hold = &holdView{ID: l.ID, Seq: l.Seq, Subject: l.Subject, Scopes: station.ScopeStrings(l.Scopes), Since: l.CreatedAt, Expires: l.ExpiresAt}
 			}
+			v.Waiting = s.holds.Waiting(d.ID)
 			out = append(out, v)
 		}
 		if len(rg.Devices) == 0 {
@@ -290,8 +302,54 @@ func (s *server) listDevices(w http.ResponseWriter, r *http.Request, _ station.P
 	apiJSON(w, devs)
 }
 
+// actionFor is what the authorizer must allow for a set of scopes.
+func actionFor(scopes []station.Scope) station.Action {
+	action := station.ActionView
+	for _, sc := range scopes {
+		switch sc {
+		case station.ScopeInput:
+			if action == station.ActionView {
+				action = station.ActionControl
+			}
+		case station.ScopeBidi:
+			if action != station.ActionAdmin {
+				action = station.ActionBidi
+			}
+		case station.ScopeAdmin:
+			action = station.ActionAdmin
+		}
+	}
+	return action
+}
+
+// person says whether a principal is someone at a page rather than an
+// agent with a token: people recall a device, agents wait in line.
+func person(p station.Principal) bool { return !strings.HasPrefix(p.Subject, "token:") }
+
+// holdResponse is what a grant on a hold looks like to the caller.
+func (s *server) holdResponse(id string, res hold.Result) map[string]any {
+	ice := res.Grant.ICE
+	if ice == nil {
+		ice = []token.ICEServer{}
+	}
+	return map[string]any{
+		"grant":    res.Event,
+		"ice":      ice,
+		"observer": res.Observer,
+		"hold": holdView{ID: res.Hold.ID, Seq: res.Hold.Seq, Subject: res.Hold.Subject, Scopes: station.ScopeStrings(res.Grant.Scopes),
+			Since: res.Hold.CreatedAt, Expires: res.Grant.ExpiresAt},
+		"signal":  "/v1/devices/" + id + "/signal",
+		"bidi":    "/v1/devices/" + id + "/bidi",
+		"online":  s.tunnel.IsOnline(res.Hold.RigID),
+		"waiting": s.holds.Waiting(id),
+	}
+}
+
 // takeHold is POST /v1/devices/{rig}/{name}/hold: {"scopes": [...]}
 // gives a grant on a hold, the caller's own or, watching, the holder's.
+// A person recalls a device someone else holds; an agent gets a place in
+// line (202 with its position), and ?wait=SECONDS waits there for the
+// hold, up to 30 s a call.
 func (s *server) takeHold(w http.ResponseWriter, r *http.Request, p station.Principal) {
 	var body struct {
 		Scopes []string `json:"scopes"`
@@ -304,23 +362,76 @@ func (s *server) takeHold(w http.ResponseWriter, r *http.Request, p station.Prin
 		apiError(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	action := station.ActionView
-	for _, sc := range scopes {
-		switch sc {
-		case station.ScopeInput:
-			action = station.ActionControl
-		case station.ScopeBidi:
-			action = station.ActionBidi
-		case station.ScopeAdmin:
-			action = station.ActionAdmin
-		}
-	}
 	id := deviceID(r)
-	if err := s.auth.Authorize(r.Context(), p, action, id); err != nil {
+	if err := s.auth.Authorize(r.Context(), p, actionFor(scopes), id); err != nil {
 		apiError(w, http.StatusForbidden, "this token may only view")
 		return
 	}
-	res, err := s.holds.Take(r.Context(), hold.Request{DeviceID: id, Subject: p.Subject, Scopes: scopes})
+	res, err := s.holds.Take(r.Context(), hold.Request{DeviceID: id, Subject: p.Subject, Scopes: scopes, Recall: person(p)})
+	var queued *hold.Queued
+	switch {
+	case errors.Is(err, station.ErrNotFound):
+		apiError(w, http.StatusNotFound, "no such device")
+		return
+	case errors.Is(err, hold.ErrWatched):
+		apiError(w, http.StatusConflict, "someone is already watching this device")
+		return
+	case errors.As(err, &queued):
+		wait, _ := strconv.Atoi(r.URL.Query().Get("wait"))
+		if wait > 0 {
+			if wait > 30 {
+				wait = 30
+			}
+			ctx, cancel := context.WithTimeout(r.Context(), time.Duration(wait)*time.Second)
+			defer cancel()
+			if got, ok := s.holds.Wait(ctx, id, p.Subject); ok {
+				apiJSON(w, s.holdResponse(id, got))
+				return
+			}
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusAccepted)
+		json.NewEncoder(w).Encode(map[string]any{"queued": true, "position": s.holds.Position(id, p.Subject), "holder": queued.Holder, "waiting": s.holds.Waiting(id)})
+		return
+	case err != nil:
+		apiError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	apiJSON(w, s.holdResponse(id, res))
+}
+
+// reserve is POST /v1/devices/{rig}/{name}/reservation: {"at": RFC 3339,
+// "scopes": [...]} puts the caller in line for the device at that time
+// (now, when at is left out); the place sorts ahead once its time comes.
+func (s *server) reserve(w http.ResponseWriter, r *http.Request, p station.Principal) {
+	var body struct {
+		At     string   `json:"at"`
+		Scopes []string `json:"scopes"`
+	}
+	if r.Body != nil {
+		json.NewDecoder(io.LimitReader(r.Body, 4096)).Decode(&body)
+	}
+	if len(body.Scopes) == 0 {
+		body.Scopes = []string{"view", "input"}
+	}
+	scopes, err := station.ParseScopes(body.Scopes)
+	if err != nil {
+		apiError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	var at time.Time
+	if body.At != "" {
+		if at, err = time.Parse(time.RFC3339, body.At); err != nil {
+			apiError(w, http.StatusBadRequest, "at: want RFC 3339, such as 2026-10-30T15:00:00Z")
+			return
+		}
+	}
+	id := deviceID(r)
+	if err := s.auth.Authorize(r.Context(), p, actionFor(scopes), id); err != nil {
+		apiError(w, http.StatusForbidden, "this token may only view")
+		return
+	}
+	pos, err := s.holds.Reserve(r.Context(), hold.Request{DeviceID: id, Subject: p.Subject, Scopes: scopes}, at)
 	if errors.Is(err, station.ErrNotFound) {
 		apiError(w, http.StatusNotFound, "no such device")
 		return
@@ -329,56 +440,91 @@ func (s *server) takeHold(w http.ResponseWriter, r *http.Request, p station.Prin
 		apiError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
-	ice := res.Grant.ICE
-	if ice == nil {
-		ice = []token.ICEServer{}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusAccepted)
+	out := map[string]any{"reserved": true, "position": pos, "waiting": s.holds.Waiting(id)}
+	if !at.IsZero() {
+		out["at"] = at.UTC().Format(time.RFC3339)
 	}
-	apiJSON(w, map[string]any{
-		"grant":    res.Event,
-		"ice":      ice,
-		"observer": res.Observer,
-		"hold": holdView{ID: res.Hold.ID, Seq: res.Hold.Seq, Subject: res.Hold.Subject, Scopes: station.ScopeStrings(res.Grant.Scopes),
-			Since: res.Hold.CreatedAt, Expires: res.Grant.ExpiresAt},
-		"signal": "/v1/devices/" + id + "/signal",
-		"online": s.tunnel.IsOnline(res.Hold.RigID),
-	})
+	json.NewEncoder(w).Encode(out)
+}
+
+func (s *server) unreserve(w http.ResponseWriter, r *http.Request, p station.Principal) {
+	apiJSON(w, map[string]any{"left": s.holds.Leave(deviceID(r), p.Subject)})
 }
 
 // relayed forwards a request to one of the rig's own endpoints with a
-// grant the station signs for the caller: a seat on the device's hold
-// with the scope the endpoint needs. Viewing gets the caller's own hold
-// or a seat watching the holder's; input needs the caller to hold the
-// hold already, taken through the hold endpoint. The rig checks the
-// grant like any other, and the stream it serves is capped on its side.
+// grant the station signs for the caller; scope is what the endpoint
+// needs, or empty for the rig's REST, where the rig's allowlist decides.
 func (s *server) relayed(rigPath string, scope station.Scope) handlerWithPrincipal {
-	return func(w http.ResponseWriter, r *http.Request, p station.Principal) {
-		id := deviceID(r)
-		scopes := []station.Scope{station.ScopeView}
-		if scope != station.ScopeView {
-			cur, err := s.db.Current(r.Context(), id)
-			if err != nil || cur.Subject != p.Subject {
-				apiError(w, http.StatusConflict, "take the device first")
-				return
-			}
+	return func(w http.ResponseWriter, r *http.Request, p station.Principal) { s.relayTo(w, r, p, rigPath, scope) }
+}
+
+// relayTo signs a grant for the caller and relays. The holder gets its
+// own scopes (plus the one the endpoint needs, which makes a new hold);
+// a free device is taken on the spot, with the needed scope, or with
+// input for the REST when the caller may control; someone else's device
+// gives a seat watching for view endpoints and 409 for the rest, since
+// taking it from them is the hold endpoint's business. The rig checks
+// the grant like any other and caps what it serves.
+func (s *server) relayTo(w http.ResponseWriter, r *http.Request, p station.Principal, rigPath string, scope station.Scope) {
+	id := deviceID(r)
+	cur, err := s.db.Current(r.Context(), id)
+	free := errors.Is(err, station.ErrNoHold)
+	if err != nil && !free {
+		apiError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	scopes := []station.Scope{station.ScopeView}
+	switch {
+	case !free && cur.Subject == p.Subject:
+		scopes = append([]station.Scope(nil), cur.Scopes...)
+		if scope != "" && !station.HasScope(scopes, scope) {
 			scopes = append(scopes, scope)
 		}
-		res, err := s.holds.Take(r.Context(), hold.Request{DeviceID: id, Subject: p.Subject, Scopes: scopes})
-		if errors.Is(err, station.ErrNotFound) {
-			apiError(w, http.StatusNotFound, "no such device")
+	case free:
+		if scope != "" && scope != station.ScopeView {
+			scopes = append(scopes, scope)
+		} else if scope == "" && !p.ReadOnly {
+			scopes = append(scopes, station.ScopeInput)
+		}
+	default:
+		if scope != "" && scope != station.ScopeView {
+			apiError(w, http.StatusConflict, "held by "+cur.Subject+": take the device first, or wait in line")
 			return
 		}
-		if err != nil {
-			apiError(w, http.StatusInternalServerError, err.Error())
-			return
-		}
-		r.Header.Set("Authorization", token.Header(res.Event))
-		rigID, _, _ := station.SplitDeviceID(id)
-		s.relay.Serve(w, r, rigID, rigPath)
 	}
+	if err := s.auth.Authorize(r.Context(), p, actionFor(scopes), id); err != nil {
+		apiError(w, http.StatusForbidden, "this token may only view")
+		return
+	}
+	res, err := s.holds.Take(r.Context(), hold.Request{DeviceID: id, Subject: p.Subject, Scopes: scopes})
+	var queued *hold.Queued
+	switch {
+	case errors.Is(err, station.ErrNotFound):
+		apiError(w, http.StatusNotFound, "no such device")
+		return
+	case errors.Is(err, hold.ErrWatched):
+		apiError(w, http.StatusConflict, "someone is already watching this device")
+		return
+	case errors.As(err, &queued):
+		apiError(w, http.StatusConflict, queued.Error()+": take the device first, or wait in line")
+		return
+	case err != nil:
+		apiError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	r.Header.Set("Authorization", token.Header(res.Event))
+	rigID, _, _ := station.SplitDeviceID(id)
+	s.relay.ServeHold(w, r, rigID, rigPath, res.Hold.ID)
 }
 
 func (s *server) releaseHold(w http.ResponseWriter, r *http.Request, p station.Principal) {
 	id := deviceID(r)
+	if s.holds.Leave(id, p.Subject) {
+		apiJSON(w, map[string]any{"released": false, "left": true})
+		return
+	}
 	cur, err := s.db.Current(r.Context(), id)
 	if errors.Is(err, station.ErrNoHold) {
 		apiJSON(w, map[string]any{"released": false})
