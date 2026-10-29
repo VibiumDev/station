@@ -92,6 +92,29 @@ func (rl *Relay) ServeHold(w http.ResponseWriter, r *http.Request, rigID, path, 
 	rl.Serve(&hijackRecorder{ResponseWriter: w, t: t}, r.WithContext(ctx), rigID, path)
 }
 
+// Watch registers a connection the relay did not make itself, with what
+// closes it; End calls that. The returned function unregisters it.
+func (rl *Relay) Watch(holdID string, close func()) func() {
+	t := &tracked{cancel: close}
+	rl.mu.Lock()
+	if rl.open == nil {
+		rl.open = map[string]map[*tracked]struct{}{}
+	}
+	if rl.open[holdID] == nil {
+		rl.open[holdID] = map[*tracked]struct{}{}
+	}
+	rl.open[holdID][t] = struct{}{}
+	rl.mu.Unlock()
+	return func() {
+		rl.mu.Lock()
+		delete(rl.open[holdID], t)
+		if len(rl.open[holdID]) == 0 {
+			delete(rl.open, holdID)
+		}
+		rl.mu.Unlock()
+	}
+}
+
 // End closes every relayed connection on a hold.
 func (rl *Relay) End(holdID string) {
 	rl.mu.Lock()

@@ -89,6 +89,7 @@ func (s *server) handler() http.Handler {
 	// Agents: WebDriver BiDi, byte for byte, and the rig's REST under
 	// /api, with the rig's allowlist deciding what each scope reaches.
 	mux.Handle("GET /v1/devices/{rig}/{name}/bidi", s.api(station.ActionBidi, s.relayed("/session", station.ScopeBidi)))
+	mux.Handle("GET /session", s.api(station.ActionBidi, s.serveSession))
 	mux.Handle("GET /v1/devices/{rig}/{name}/health", s.api(station.ActionView, s.relayed("/health", station.ScopeView)))
 	mux.Handle("/v1/devices/{rig}/{name}/api/{path...}", s.api(station.ActionView, func(w http.ResponseWriter, r *http.Request, p station.Principal) {
 		s.relayTo(w, r, p, "/api/"+r.PathValue("path"), "")

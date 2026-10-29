@@ -101,6 +101,7 @@ func main() {
 	bidi := flag.Bool("bidi", false, "run the WebDriver BiDi sequence through the station instead of the WebRTC probe")
 	bidiDirect := flag.String("bidi-direct", "", "with -bidi: also run the sequence straight at the rig's BiDi socket, this URL, and compare")
 	bidiDirectToken := flag.String("bidi-direct-token", os.Getenv("ROADIE_TOKEN"), "with -bidi-direct: the rig's own bearer token (or $ROADIE_TOKEN)")
+	bidiEntry := flag.String("bidi-entry", "", "with -bidi: open this path on the station instead of the device's, such as /session (the standard entry point), with no hold taken first")
 	flag.Parse()
 	if *diff {
 		a, err1 := os.ReadFile(flag.Arg(0))
@@ -124,7 +125,7 @@ func main() {
 	p := &probe{base: strings.TrimRight(*station, "/"), token: *token,
 		client: &http.Client{Timeout: 30 * time.Second, Transport: &http.Transport{TLSClientConfig: &tls.Config{InsecureSkipVerify: *insecure}}}}
 	if *bidi {
-		if err := p.runBiDi(*dev, *tap, *bidiDirect, *bidiDirectToken); err != nil {
+		if err := p.runBiDi(*dev, *tap, *bidiDirect, *bidiDirectToken, *bidiEntry); err != nil {
 			p.fail(err.Error())
 		}
 	} else if err := p.run(*dev, *dur, *ice, *tap); err != nil {
@@ -755,7 +756,7 @@ func summarize(st bidiStep) string {
 	}
 }
 
-func (p *probe) runBiDi(devID, tap, direct, directToken string) error {
+func (p *probe) runBiDi(devID, tap, direct, directToken, entry string) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 	defer cancel()
 	var devices []device
@@ -775,11 +776,14 @@ func (p *probe) runBiDi(devID, tap, direct, directToken string) error {
 	}
 	fmt.Printf("device %s (%s) online=%v\n", dev.ID, dev.Kind, dev.Online)
 	// The hold endpoint names the BiDi URL; the socket is opened with the
-	// same bearer token and nothing else: no handshake of ours.
+	// same bearer token and nothing else: no handshake of ours. With an
+	// entry path, that path is opened cold, as a generic client would.
 	var hold struct {
 		BiDi string `json:"bidi"`
 	}
-	if err := p.api(ctx, "POST", "/v1/devices/"+dev.ID+"/hold", map[string]any{"scopes": []string{"view", "input", "bidi"}}, &hold); err != nil {
+	if entry != "" {
+		hold.BiDi = entry
+	} else if err := p.api(ctx, "POST", "/v1/devices/"+dev.ID+"/hold", map[string]any{"scopes": []string{"view", "input", "bidi"}}, &hold); err != nil {
 		return err
 	}
 	if hold.BiDi == "" {
