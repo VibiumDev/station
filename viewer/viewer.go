@@ -73,6 +73,9 @@ type Config struct {
 	Extras string `json:"extras,omitempty"`
 	// Info is what the extras want to know about the host, opaque here.
 	Info map[string]any `json:"info,omitempty"`
+	// Minimal says the toolbar is hidden: a page in a frame or driven by
+	// a script, which gets a top-left picture rather than a centered one.
+	Minimal bool `json:"minimal,omitempty"`
 }
 
 // Page is what the shell page is rendered with.
@@ -86,7 +89,9 @@ type Page struct {
 
 // ConfigJSON is the config for the page's data attribute.
 func (p Page) ConfigJSON() string {
-	data, _ := json.Marshal(p.Config)
+	cfg := p.Config
+	cfg.Minimal = p.Minimal
+	data, _ := json.Marshal(cfg)
 	return string(data)
 }
 

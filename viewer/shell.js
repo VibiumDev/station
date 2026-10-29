@@ -221,7 +221,8 @@
       clearTimeout(timeout);
       lastHealth = data;
       serving = data.status === 'ok' || data.status === 'no_signal';
-      setBusy(!!data.rotating, 'Rotating the screen…');
+      hostBusy = !!data.rotating;
+      setBusy(hostBusy || heldBusy, 'Rotating the screen…');
       if (serving && !stream && (!station || fallen)) startStream();
       if (data.status === 'ok') {
         healthOk = true;
@@ -398,7 +399,9 @@
   var zoomVal = $('zoomVal');
   var alignTLBtn = $('alignTLBtn');
   var alignCenterBtn = $('alignCenterBtn');
-  var alignment = 'top-left';
+  // Centered for a person at the page; top-left for a page embedded in a
+  // frame or driven by a script (?minimal=1), where a fixed origin helps.
+  var alignment = cfg.minimal ? 'top-left' : 'center';
 
   function positionPanel() {
     var tr = toolbarEl.getBoundingClientRect();
@@ -778,7 +781,7 @@
   }
   // While the host is busy with the screen (turning it, for one), input
   // waits; whatever is held is let go first.
-  var busy = false, busyMessage = 'Busy…';
+  var busy = false, busyMessage = 'Busy\u2026', hostBusy = false, heldBusy = false;
   function setBusy(on, message) {
     var note = $('turnNote');
     if (on && message) busyMessage = message;
@@ -1195,15 +1198,15 @@
       return r.json().then(function (j) { if (!r.ok) throw new Error(j.error || r.status); return j; });
     });
   }
+  // The hold shows only as the Release button while you have the device,
+  // and as the Hold button with a note while you watch someone else's.
   function showHold() {
     if (!station) return;
-    var text = !hold ? '' : observer ? 'watching ' + hold.subject : 'held';
-    holdStatus.textContent = text;
-    holdStatus.title = !hold ? '' : observer ? 'Watching ' + hold.subject + '’s session; Hold takes the device' : 'You hold this device';
+    holdStatus.textContent = hold && observer ? 'watching ' + hold.subject : '';
+    holdStatus.title = hold && observer ? 'Watching ' + hold.subject + '\u2019s session; Hold takes the device' : '';
     takeBtn.style.display = observer ? 'flex' : 'none';
     releaseBtn.style.display = hold && !observer ? 'flex' : 'none';
-    takeBtn.classList.toggle('held', false);
-    releaseBtn.classList.toggle('held', !!hold && !observer);
+    releaseBtn.title = hold && !observer ? 'Release the device (you hold it)' : 'Release the device';
     emit('hold', {hold: hold, observer: observer});
   }
   function takeHold(scopes, quiet) {
@@ -1317,7 +1320,7 @@
     },
     send: hidSend,
     keys: function (codes) { sendKeys(typeof codes === 'string' ? (keycodes(codes) || []) : codes); },
-    busy: setBusy,
+    busy: function (on, message) { heldBusy = !!on; setBusy(hostBusy || heldBusy, message); },
     isBusy: function () { return busy; },
     health: function () { return lastHealth; },
     on: on,
