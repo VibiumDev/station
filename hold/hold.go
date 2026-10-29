@@ -66,6 +66,11 @@ type Request struct {
 	// Recall lets the request take a device another subject holds. A
 	// person recalls; an agent without it waits in line.
 	Recall bool
+	// Watch asks for a seat watching whoever holds the device instead of
+	// taking it or waiting in line, whatever scopes were asked for; a
+	// free device is taken when the scopes include control, and is
+	// ErrFree when they do not, so a watcher never holds a device alone.
+	Watch bool
 }
 
 // Result is what a request got: the hold the grant is on, the grant, and
@@ -79,6 +84,9 @@ type Result struct {
 
 // ErrNotHolder says the subject does not hold the hold.
 var ErrNotHolder = errors.New("not the holder of this hold")
+
+// ErrFree says nobody holds the device a Watch request asked to watch.
+var ErrFree = errors.New("nobody holds the device")
 
 func (m *Manager) now() time.Time {
 	if m.Now != nil {
@@ -129,8 +137,9 @@ func subset(scopes, of []station.Scope) bool {
 // a new hold when more scopes are asked for). With someone else's hold:
 // a request with input, bidi or admin either recalls the device with a
 // new hold, which ends the old one on the rig, or, without Recall, takes
-// a place in line and gets a Queued error; a view-only request gets a
-// grant on the holder's hold as the one observer.
+// a place in line and gets a Queued error; a view-only request, or any
+// request with Watch, gets a grant on the holder's hold as the one
+// observer.
 func (m *Manager) Take(ctx context.Context, req Request) (Result, error) {
 	dev, err := m.Devices.Device(ctx, req.DeviceID)
 	if err != nil {
@@ -149,6 +158,9 @@ func (m *Manager) Take(ctx context.Context, req Request) (Result, error) {
 	cur, err := m.Holds.Current(ctx, dev.ID)
 	switch {
 	case errors.Is(err, station.ErrNoHold):
+		if req.Watch && !controls(scopes) {
+			return Result{}, ErrFree
+		}
 		// Free: a new hold, unless someone else's turn in line has come.
 		m.mu.Lock()
 		m.init()
@@ -177,18 +189,19 @@ func (m *Manager) Take(ctx context.Context, req Request) (Result, error) {
 		if err := m.end(ctx, cur, "replaced by its holder", false); err != nil {
 			return Result{}, err
 		}
-	case controls(scopes) && !req.Recall:
+	case controls(scopes) && !req.Watch && !req.Recall:
 		m.mu.Lock()
 		m.init()
 		pos := m.enqueue(dev.ID, req, time.Time{}, now)
 		m.mu.Unlock()
 		return Result{}, &Queued{Position: pos, Holder: cur.Subject}
-	case controls(scopes):
+	case controls(scopes) && !req.Watch:
 		if err := m.end(ctx, cur, "recalled by "+req.Subject, false); err != nil {
 			return Result{}, err
 		}
 	default:
-		// Someone else holds it and the request only watches.
+		// Someone else holds it and the request only watches, or asked
+		// to watch rather than take.
 		if err := m.watch(cur.ID, req.Subject, now); err != nil {
 			return Result{}, err
 		}

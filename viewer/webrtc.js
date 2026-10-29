@@ -344,7 +344,7 @@
   }
 
   function start() {
-    if (active) return;
+    if (active && !fallen) return;  // wanted and still trying; after a fallback, try again
     active = true;
     fallen = false;
     attempts = 0;

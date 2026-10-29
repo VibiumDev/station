@@ -362,10 +362,13 @@ func (s *server) holdResponse(id string, res hold.Result) map[string]any {
 // gives a grant on a hold, the caller's own or, watching, the holder's.
 // A person recalls a device someone else holds; an agent gets a place in
 // line (202 with its position), and ?wait=SECONDS waits there for the
-// hold, up to 30 s a call.
+// hold, up to 30 s a call. With "watch": true a held device is watched
+// instead, whoever asks, and a free one is taken only when the scopes
+// include control; view only, it is 409 with "free": true.
 func (s *server) takeHold(w http.ResponseWriter, r *http.Request, p station.Principal) {
 	var body struct {
 		Scopes []string `json:"scopes"`
+		Watch  bool     `json:"watch"`
 	}
 	if r.Body != nil {
 		json.NewDecoder(io.LimitReader(r.Body, 4096)).Decode(&body)
@@ -380,7 +383,7 @@ func (s *server) takeHold(w http.ResponseWriter, r *http.Request, p station.Prin
 		apiError(w, http.StatusForbidden, "this token may only view")
 		return
 	}
-	res, err := s.holds.Take(r.Context(), hold.Request{DeviceID: id, Subject: p.Subject, Scopes: scopes, Recall: person(p)})
+	res, err := s.holds.Take(r.Context(), hold.Request{DeviceID: id, Subject: p.Subject, Scopes: scopes, Recall: person(p), Watch: body.Watch})
 	var queued *hold.Queued
 	switch {
 	case errors.Is(err, station.ErrNotFound):
@@ -388,6 +391,11 @@ func (s *server) takeHold(w http.ResponseWriter, r *http.Request, p station.Prin
 		return
 	case errors.Is(err, hold.ErrWatched):
 		apiError(w, http.StatusConflict, "someone is already watching this device")
+		return
+	case errors.Is(err, hold.ErrFree):
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusConflict)
+		json.NewEncoder(w).Encode(map[string]any{"error": "nobody holds the device", "free": true})
 		return
 	case errors.As(err, &queued):
 		wait, _ := strconv.Atoi(r.URL.Query().Get("wait"))
@@ -495,6 +503,14 @@ func (s *server) relayTo(w http.ResponseWriter, r *http.Request, p station.Princ
 		if scope != "" && !station.HasScope(scopes, scope) {
 			scopes = append(scopes, scope)
 		}
+	case free && person(p):
+		// A person takes a device through the hold endpoint, on purpose;
+		// a relayed request never does it for them, so a page left
+		// watching a free device cannot take it by polling.
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusConflict)
+		json.NewEncoder(w).Encode(map[string]any{"error": "nobody holds the device: take it first", "free": true})
+		return
 	case free:
 		if scope != "" && scope != station.ScopeView {
 			scopes = append(scopes, scope)
@@ -528,6 +544,12 @@ func (s *server) relayTo(w http.ResponseWriter, r *http.Request, p station.Princ
 		return
 	}
 	r.Header.Set("Authorization", token.Header(res.Event))
+	// Which hold the request rides on, so a page notices when the hold
+	// it knows is over and someone else's has begun.
+	w.Header().Set("X-Hold", res.Hold.ID)
+	if res.Observer {
+		w.Header().Set("X-Hold-Observer", "1")
+	}
 	rigID, _, _ := station.SplitDeviceID(id)
 	s.relay.ServeHold(w, r, rigID, rigPath, res.Hold.ID)
 }

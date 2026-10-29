@@ -318,3 +318,44 @@ func TestOneObserver(t *testing.T) {
 		t.Errorf("after the first observer's grant lapsed: %v", err)
 	}
 }
+
+func TestWatch(t *testing.T) {
+	f := setup(t)
+	ctx := context.Background()
+	// A watch request on a free device: with control among the scopes it
+	// takes the device, as a page opening on a free device does; view
+	// only, it holds nothing and learns the device is free.
+	if _, err := f.m.Take(ctx, Request{DeviceID: "rig_1/phone", Subject: "guest", Watch: true}); !errors.Is(err, ErrFree) {
+		t.Fatalf("watching a free device: %v, want ErrFree", err)
+	}
+	if _, err := f.db.Current(ctx, "rig_1/phone"); !errors.Is(err, station.ErrNoHold) {
+		t.Fatalf("a watcher took a hold: %v", err)
+	}
+	drive, err := f.m.Take(ctx, Request{DeviceID: "rig_1/phone", Subject: "owner", Scopes: []station.Scope{station.ScopeInput}, Recall: true, Watch: true})
+	if err != nil || drive.Observer || !drive.Grant.HasScope(station.ScopeInput) {
+		t.Fatalf("driving a free device: %+v %v", drive, err)
+	}
+	// The same request from someone else while the owner holds it: a
+	// seat watching, not a recall and not a place in line, even with
+	// Recall set.
+	watch, err := f.m.Take(ctx, Request{DeviceID: "rig_1/phone", Subject: "guest", Scopes: []station.Scope{station.ScopeInput}, Recall: true, Watch: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !watch.Observer || watch.Hold.ID != drive.Hold.ID || watch.Grant.HasScope(station.ScopeInput) || watch.Grant.Subject != "owner" {
+		t.Errorf("watch: %+v", watch)
+	}
+	if len(f.revoked) != 0 || f.m.Waiting("rig_1/phone") != 0 {
+		t.Errorf("watching changed the hold: revoked %v, waiting %d", f.revoked, f.m.Waiting("rig_1/phone"))
+	}
+	// The holder's own watch request is a refresh on their hold.
+	again, err := f.m.Take(ctx, Request{DeviceID: "rig_1/phone", Subject: "owner", Scopes: []station.Scope{station.ScopeInput}, Recall: true, Watch: true})
+	if err != nil || again.Observer || again.Hold.ID != drive.Hold.ID || !again.Grant.HasScope(station.ScopeInput) {
+		t.Errorf("holder watching: %+v %v", again, err)
+	}
+	// Without Watch, the guest's request recalls as before.
+	take, err := f.m.Take(ctx, Request{DeviceID: "rig_1/phone", Subject: "guest", Scopes: []station.Scope{station.ScopeInput}, Recall: true})
+	if err != nil || take.Observer || take.Hold.ID == drive.Hold.ID || len(f.revoked) != 1 {
+		t.Errorf("recall after watching: %+v %v, revoked %v", take, err, f.revoked)
+	}
+}

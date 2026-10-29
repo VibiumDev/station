@@ -195,7 +195,7 @@
     start: function () {
       fallen = true;
       if (!stream && serving) startStream();
-      if (station) openHID();
+      if (driving()) openHID();
       applySpeaker();
     }
   };
@@ -217,7 +217,15 @@
     if (station && !holding()) return;
     var ctl = new AbortController();
     var timeout = setTimeout(function () { ctl.abort(); }, 3000);
-    fetch(api.health, opts({signal: ctl.signal, cache: 'no-store'})).then(function (r) { return r.json(); }).then(function (data) {
+    fetch(api.health, opts({signal: ctl.signal, cache: 'no-store'})).then(function (r) {
+      // On a station the answer says which hold it rode on: ours, or the
+      // one we watch. Another id means the device changed hands, and a
+      // free device means the hold we knew is over.
+      if (station && r.status === 409) return r.json().then(function (j) { if (j.free) nobody(); throw new Error('free'); });
+      var rode = r.headers.get('X-Hold');
+      if (station && hold && rode && rode !== hold.id) changedHands();
+      return r.json();
+    }).then(function (data) {
       clearTimeout(timeout);
       lastHealth = data;
       serving = data.status === 'ok' || data.status === 'no_signal';
@@ -235,7 +243,11 @@
       }
       if (data.audio) unmuteBtn.style.display = 'flex';
       emit('health', data);
-    }).catch(function () { clearTimeout(timeout); healthOk = serving = false; showOverlay(); });
+    }).catch(function (e) {
+      clearTimeout(timeout);
+      healthOk = serving = false;
+      if (!e || e.message !== 'free') showOverlay();  // a free device keeps its own message
+    });
   }
   setInterval(poll, 1000);
 
@@ -349,7 +361,7 @@
   }
   function startTalk() {
     if (talking || !navigator.mediaDevices) return;
-    if (station && !holding()) return;
+    if (!driving()) return;
     talking = true;
     pttBtn.classList.add('live');
     navigator.mediaDevices.getUserMedia({audio: {channelCount: 1, echoCancellation: true, noiseSuppression: true}}).then(function (stream) {
@@ -757,6 +769,7 @@
   // otherwise the input socket. Held back while the host is busy.
   var hidWs = null, hidReady = false, hidWanted = !station;
   function openHID() {
+    if (!driving()) return;  // a watcher has no input to send
     hidWanted = true;
     if (hidWs) return;
     var sock = new WebSocket(wsURL(api.hid));
@@ -775,7 +788,7 @@
   }
   function hidSend(msg) {
     if (busy) return;
-    if (station && (!holding() || observer)) return;
+    if (!driving()) return;
     if (window.__roadieRTC && window.__roadieRTC.sendHID(msg)) return;
     if (hidWs && hidReady) hidWs.send(JSON.stringify(msg));
   }
@@ -1186,62 +1199,115 @@
   }
   if (saved.kbdVisible) showKbd(true);
 
-  // --- The hold, on a station: taken on load, renewed every three
-  // minutes, released by the button or when the page goes away. A grant
-  // is good for one signaling connection, so each gets a fresh one.
+  // --- The hold, on a station, and the page's role. The page drives
+  // when it took the device, and watches when someone else has it or
+  // ?watch=1 asked for a look only. The request on load and on every
+  // reconnect asks for control if the device is free and a seat watching
+  // if it is not; only the Hold button takes a held device. A watcher of
+  // a device nobody holds holds nothing itself, so it never blocks the
+  // next agent: it looks again every few seconds and shows the next
+  // holder's picture. The hold is renewed every three minutes and
+  // released by the button or when the page goes away. A grant is good
+  // for one signaling connection, so each gets a fresh one.
   var grant = null, grantUsed = false, hold = null, observer = false, released = false;
+  var watchOnly = station && qs.get('watch') === '1';
+  var role = watchOnly ? 'watch' : 'drive';
+  var lookAgain = null;
   var holdStatus = $('holdStatus');
   var takeBtn = $('takeBtn'), releaseBtn = $('releaseBtn');
   function holding() { return !station || (!!hold && !released); }
+  function driving() { return !station || (holding() && role === 'drive'); }
+  function wanted() { return role === 'drive' ? ['view', 'input'] : ['view']; }
   function request(method, path, data) {
     return fetch(path, opts({method: method, headers: {'Content-Type': 'application/json'}, body: data ? JSON.stringify(data) : undefined})).then(function (r) {
-      return r.json().then(function (j) { if (!r.ok) throw new Error(j.error || r.status); return j; });
+      return r.json().then(function (j) {
+        if (r.ok) return j;
+        var err = new Error(j.error || r.status);
+        err.free = !!j.free;
+        throw err;
+      });
     });
   }
-  // The hold shows only as the Release button while you have the device,
-  // and as the Hold button with a note while you watch someone else's.
+  // The hold shows as the Release button while you drive, and as the
+  // Hold button with a note while you watch.
   function showHold() {
     if (!station) return;
-    holdStatus.textContent = hold && observer ? 'watching ' + hold.subject : '';
-    holdStatus.title = hold && observer ? 'Watching ' + hold.subject + '\u2019s session; Hold takes the device' : '';
-    takeBtn.style.display = observer ? 'flex' : 'none';
-    releaseBtn.style.display = hold && !observer ? 'flex' : 'none';
+    var watching = hold && observer && role === 'watch';
+    holdStatus.textContent = watching ? 'watching ' + hold.subject : '';
+    holdStatus.title = watching ? 'Watching ' + hold.subject + '’s session' + (watchOnly ? '' : '; Hold takes the device') : '';
+    takeBtn.style.display = role === 'watch' && !watchOnly ? 'flex' : 'none';
+    releaseBtn.style.display = hold && !observer && !watchOnly ? 'flex' : 'none';
     releaseBtn.title = hold && !observer ? 'Release the device (you hold it)' : 'Release the device';
-    emit('hold', {hold: hold, observer: observer});
+    emit('hold', {hold: hold, observer: observer, role: role});
   }
-  function takeHold(scopes, quiet) {
-    return request('POST', api.hold, {scopes: scopes}).then(function (res) {
+  // takeHold asks the station: for the role's scopes with watch set (a
+  // held device is then watched), or, from the Hold button, for control
+  // outright. Quiet leaves the picture as it is, for renewals and the
+  // signaling hello. The promise fails when there is no grant.
+  function takeHold(scopes, quiet, watch) {
+    return request('POST', api.hold, {scopes: scopes, watch: !!watch}).then(function (res) {
       grant = res.grant;
       grantUsed = false;
       hold = res.hold;
       observer = !!res.observer;
       released = false;
+      var granted = (res.hold && res.hold.scopes) || [];
+      role = !observer && !watchOnly && granted.indexOf('input') >= 0 ? 'drive' : 'watch';
+      clearTimeout(lookAgain);
+      lookAgain = null;
       window.__roadieRTCConfig.iceServers = res.ice || [];
       showHold();
       loadExtras();
-      if (quiet) return;
-      poll();
-      var rtc = window.__roadieRTC;
-      if (qs.get('transport') === 'mjpeg' || (!qs.get('transport') && saved.transport === 'mjpeg') || !rtc) { window.__roadieFeed.start(); return; }
-      if (!rtc.active()) rtc.start();
-      else rtc.sendControl({type: 'grant', grant: grant});
-      setupTransport.show && setupTransport.show(rtc.active() ? 'webrtc' : 'mjpeg');
+      if (!quiet) startPicture();
     }).catch(function (err) {
-      showNotice('Could not take the device: ' + err.message);
+      if (err.free) nobody();
+      else if (!quiet) showNotice('Could not take the device: ' + err.message);
+      throw err;
     });
   }
-  function release() {
-    released = true;
-    releaseEverythingHeld();
+  // The picture on a hold just taken: WebRTC afresh (a connection still
+  // up was on a hold that is over), or the MJPEG feed.
+  function startPicture() {
+    poll();
+    var rtc = window.__roadieRTC;
+    if (qs.get('transport') === 'mjpeg' || (!qs.get('transport') && saved.transport === 'mjpeg') || !rtc) { window.__roadieFeed.start(); return; }
+    if (rtc.active()) rtc.stop();
+    rtc.start();
+    setupTransport.show && setupTransport.show('webrtc');
+  }
+  function stopPicture() {
     if (window.__roadieRTC) window.__roadieRTC.stop();
     stopStream();
     closeHID();
     stopAudio();
     stopTalk();
-    if (hold && !observer) request('DELETE', api.hold).catch(function () {});
-    hold = null; grant = null;
+  }
+  // Nobody holds the device: no picture, and a look every few seconds
+  // for the next holder.
+  function nobody() {
+    hold = null; grant = null; observer = false;
+    role = 'watch';
+    stopPicture();
     showHold();
-    showOverlay('Released. Reload the page to take the device again.');
+    showOverlay(watchOnly ? 'Nobody holds the device.' : 'Nobody holds the device. Hold takes it.');
+    clearTimeout(lookAgain);
+    lookAgain = setTimeout(function () { lookAgain = null; takeHold(['view'], false, true).catch(function () {}); }, 5000);
+  }
+  // The device changed hands under the page: ask again for the role's
+  // scopes, which lands as the new holder's watcher, or, when the new
+  // hold is our own from another tab, on it.
+  var changing = false;
+  function changedHands() {
+    if (changing) return;
+    changing = true;
+    takeHold(wanted(), false, true).catch(function () {}).then(function () { changing = false; });
+  }
+  function release() {
+    released = true;
+    releaseEverythingHeld();
+    stopPicture();
+    if (hold && !observer) request('DELETE', api.hold).catch(function () {});
+    nobody();
   }
   if (station) {
     window.__roadieRTCConfig = {
@@ -1251,14 +1317,14 @@
       iceTransportPolicy: qs.get('ice') === 'relay' ? 'relay' : undefined,
       hello: function () {
         if (grant && !grantUsed) { grantUsed = true; return {grant: grant}; }
-        return takeHold(observer ? ['view'] : ['view', 'input'], true).then(function () { grantUsed = true; return grant ? {grant: grant} : {}; });
+        return takeHold(wanted(), true, true).then(function () { grantUsed = true; return {grant: grant}; });
       }
     };
-    takeBtn.onclick = function () { takeHold(['view', 'input']); };
+    takeBtn.onclick = function () { takeHold(['view', 'input']).catch(function () {}); };
     releaseBtn.onclick = release;
-    setInterval(function () { if (hold && !released) takeHold(observer ? ['view'] : ['view', 'input'], true); }, 3 * 60 * 1000);
+    setInterval(function () { if (hold && !released) takeHold(wanted(), true, true).catch(function () {}); }, 3 * 60 * 1000);
     window.addEventListener('pagehide', function () {
-      if (hold && !observer && !released) {
+      if (hold && !observer && !released && !watchOnly) {
         try { navigator.sendBeacon(api.hold + '/release', new Blob([JSON.stringify({csrf: cfg.csrf})], {type: 'application/json'})); } catch (e) {}
       }
     });
@@ -1308,7 +1374,10 @@
     config: cfg,
     station: station,
     hostURL: hostURL,
-    fetch: function (path, o) { return fetch(hostURL(path), opts(o)); },
+    fetch: function (path, o) {
+      if (!holding()) return Promise.reject(new Error('no hold on the device'));  // a watcher of a free device asks the rig nothing
+      return fetch(hostURL(path), opts(o));
+    },
     addButton: addButton,
     // A settings row (an element styled like the others), in the top
     // (video) section, the middle (input) or the bottom; mjpegOnly rows
@@ -1334,6 +1403,7 @@
     img: img,
     holding: holding,
     observer: function () { return observer; },
+    role: function () { return role; },  // 'drive' or 'watch'; a watcher sends no input
     admin: function () { return !station || !!(hold && hold.scopes && hold.scopes.indexOf('admin') >= 0); },
     inputMode: function () { return inputMode; },
     setInputMode: setInputMode,
@@ -1345,7 +1415,7 @@
   // of the body; a station page takes the hold first, a Roadie's starts.
   window.addEventListener('load', function () {
     setupTransport();
-    if (station) takeHold(['view', 'input']);
+    if (station) takeHold(wanted(), false, true).catch(function () {});
     else { loadExtras(); poll(); }
   });
 })();

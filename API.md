@@ -11,13 +11,13 @@ appears in paths as two segments.
 | Method and path | Purpose |
 |---|---|
 | `GET /v1/devices` | Every rig's devices: id, kind, capabilities, shortcuts, the pointer mode the rig suggests (`input`: `touch` or `mouse`), rig, online, and the hold held on it |
-| `POST /v1/devices/{rig}/{name}/hold` | Take the device, or a seat watching whoever has it. Body `{"scopes": ["view", "input"]}`; `view` is always included. Returns the signed grant, the hold, whether the caller is watching, and the signaling and BiDi URLs. A person recalls a device someone else holds; an agent (a token) gets a place in line instead, `202 {"queued": true, "position": 2, "holder": "token:ci"}`, and `?wait=30` waits up to 30 s there for the hold |
+| `POST /v1/devices/{rig}/{name}/hold` | Take the device, or a seat watching whoever has it. Body `{"scopes": ["view", "input"]}`; `view` is always included. Returns the signed grant, the hold, whether the caller is watching, and the signaling and BiDi URLs. A person recalls a device someone else holds; an agent (a token) gets a place in line instead, `202 {"queued": true, "position": 2, "holder": "token:ci"}`, and `?wait=30` waits up to 30 s there for the hold. With `"watch": true` a held device is watched instead, whoever asks and whatever the scopes; a free one is taken when the scopes include control, and is `409 {"free": true}` when they do not, so a watcher never holds a device by itself |
 | `DELETE /v1/devices/{rig}/{name}/hold` | Release the caller's hold, or leave the line. An observer cannot end the holder's |
 | `POST /v1/devices/{rig}/{name}/reservation` | A place in line for a set time: `{"at": "2026-10-30T15:00:00Z", "scopes": [...]}`, `at` left out for now. The place sorts ahead of the line once its time comes, and must be taken within five minutes of it |
 | `DELETE /v1/devices/{rig}/{name}/reservation` | Give the place up |
 | `wss /session` | The standard WebDriver BiDi entry point: `session.new` picks the device by the `vibium:device` capability, else the first online one; then relayed byte for byte like the route below |
 | `wss /v1/devices/{rig}/{name}/bidi` | WebDriver BiDi, byte for byte: the socket is relayed to the rig's own `/session`, authenticated at the upgrade (the bearer token, or the page's cookie from the station's own origin) and authorized for the device, the `bidi` scope and a hold, which is taken on the spot when the device is free. Nothing is inserted or rewritten; the first message is the client's `session.new` |
-| `/v1/devices/{rig}/{name}/api/{path}` | The rig's REST under `/api`, relayed with a grant carrying the caller's hold scopes (a free device is taken with `input` when the caller may control). The rig's allowlist decides which scope each endpoint needs: HID input, status with `view`, settings and resets with `admin` |
+| `/v1/devices/{rig}/{name}/api/{path}` | The rig's REST under `/api`, relayed with a grant carrying the caller's hold scopes (a token's request takes a free device with `input` when the token may control; a person's needs a hold already). The rig's allowlist decides which scope each endpoint needs: HID input, status with `view`, settings and resets with `admin` |
 | `GET /v1/devices/{rig}/{name}/health` | The rig's health, with `view` |
 | `GET /v1/devices/{rig}/{name}/extras.js` | The device's viewer extras, relayed from the path it announced (`extras` on the device), with `view` |
 | `wss /v1/devices/{rig}/{name}/signal` | WebRTC signaling, relayed to the rig. The first message is `{"type":"hello","grant":{...}}`; the rig checks the grant and answers with its offer |
@@ -60,6 +60,27 @@ free at that time goes to it on the next tick.
 
 One observer at a time: a second view-only subject asking for a held
 device gets 409 until the first's grant lapses.
+
+The viewer page uses `"watch": true` for everything but its Hold button,
+so one link serves the driver and the watcher: opening it on a free
+device takes the device, opening it on a held device watches, and only
+the button takes a held device (from an agent at once; a person's hold
+is recalled the same way, since there is one owner). A page that
+watches a device nobody holds holds nothing itself, which is what lets
+an agent take the device while someone follows along; the page looks
+again every five seconds and shows the next holder's picture.
+`?watch=1` opens the page as a watcher that never asks for control.
+
+A relayed request (`stream`, `screenshot`, `health`, `audio`, `hid`,
+`mic`, `bidi`, `extras.js`, `api/...`) rides on a hold: the caller's
+own, or, for `view`, a seat watching the holder's. A token's request on
+a free device takes one with the scope the endpoint needs, so a single
+screenshot works without a hold call first. A person's request on a free
+device does not: it is `409 {"free": true}`, because people take devices
+through the hold endpoint on purpose, and a page left watching must not
+take the device by polling. Every relayed answer carries `X-Hold`, the
+id of the hold it rode on, and `X-Hold-Observer: 1` when that is someone
+else's; the page uses them to notice the device changing hands.
 
 The rig limits every hold: 120 requests and messages a second with a
 burst of 240, one MJPEG stream, one audio socket, one microphone socket,
@@ -145,7 +166,7 @@ refuses private peers.
 |---|---|
 | `/login` | Sign in with the password; in tailnet mode an allowed identity needs none |
 | `/` | The devices: rig, kind, online, who controls it, Open |
-| `/devices/{rig}/{name}/view` | The viewer: Roadie's shell with the WebRTC picture, sound, touch and keyboard, the mic, the settings panel, the on-screen keyboard, stats, the device's own buttons and panels from its extras, and Hold and Release. `?minimal=1`, `?input=`, `?transport=`, `?ice=relay`, `?toolbar=`, `?align=`, `?zoom=` and `?stats=1` as on a Roadie |
+| `/devices/{rig}/{name}/view` | The viewer: Roadie's shell with the WebRTC picture, sound, touch and keyboard, the mic, the settings panel, the on-screen keyboard, stats, the device's own buttons and panels from its extras, and Hold and Release. One link for driving and watching: a free device is taken, a held one is watched, and Hold takes it. `?watch=1` watches only; `?minimal=1`, `?input=`, `?transport=`, `?ice=relay`, `?toolbar=`, `?align=`, `?zoom=` and `?stats=1` as on a Roadie |
 | `/settings` | Enrollment codes, rigs, API tokens, the password, the network |
 
 The viewer's files are at `/viewer/shell.js`, `/viewer/shell.css`,

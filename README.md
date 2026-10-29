@@ -68,7 +68,9 @@ Then enroll a rig:
    mDNS. The rig checks the station's key against the code, sends its key
    and devices, and writes its policy file.
 3. Restart `roadie`. The device appears on the station's front page; Open
-   takes a hold and shows it over WebRTC.
+   takes a hold and shows it over WebRTC. The same link opened while an
+   agent or someone else holds the device watches it instead, with a Hold
+   button that takes it; `?watch=1` only ever watches.
 
 Agents use API tokens from the Settings page or `station token create
 NAME`, sent as `Authorization: Bearer`. A read-only token may watch but
