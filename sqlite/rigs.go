@@ -120,8 +120,8 @@ func setDevices(ctx context.Context, tx *sql.Tx, rigID string, devices []station
 	for i, dev := range devices {
 		caps, _ := json.Marshal(dev.Caps)
 		shortcuts, _ := json.Marshal(dev.Shortcuts)
-		if _, err := tx.ExecContext(ctx, `INSERT INTO devices (id, rig_id, position, kind, caps, key, shortcuts) VALUES (?, ?, ?, ?, ?, ?, ?)`,
-			dev.ID, rigID, i, dev.Kind, string(caps), dev.Key, string(shortcuts)); err != nil {
+		if _, err := tx.ExecContext(ctx, `INSERT INTO devices (id, rig_id, position, kind, caps, key, shortcuts, input) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+			dev.ID, rigID, i, dev.Kind, string(caps), dev.Key, string(shortcuts), dev.Input); err != nil {
 			return err
 		}
 	}
@@ -129,7 +129,7 @@ func setDevices(ctx context.Context, tx *sql.Tx, rigID string, devices []station
 }
 
 func (d *DB) devices(ctx context.Context, rigID string) ([]station.Device, error) {
-	rows, err := d.db.QueryContext(ctx, `SELECT id, kind, caps, key, shortcuts FROM devices WHERE rig_id = ? ORDER BY position`, rigID)
+	rows, err := d.db.QueryContext(ctx, `SELECT id, kind, caps, key, shortcuts, input FROM devices WHERE rig_id = ? ORDER BY position`, rigID)
 	if err != nil {
 		return nil, err
 	}
@@ -148,7 +148,7 @@ func (d *DB) devices(ctx context.Context, rigID string) ([]station.Device, error
 func scanDevice(s scanner) (station.Device, error) {
 	var dev station.Device
 	var caps, shortcuts string
-	if err := s.Scan(&dev.ID, &dev.Kind, &caps, &dev.Key, &shortcuts); err != nil {
+	if err := s.Scan(&dev.ID, &dev.Kind, &caps, &dev.Key, &shortcuts, &dev.Input); err != nil {
 		return dev, err
 	}
 	json.Unmarshal([]byte(caps), &dev.Caps)
@@ -158,7 +158,7 @@ func scanDevice(s scanner) (station.Device, error) {
 
 // Device finds a device by id.
 func (d *DB) Device(ctx context.Context, id string) (station.Device, error) {
-	dev, err := scanDevice(d.db.QueryRowContext(ctx, `SELECT id, kind, caps, key, shortcuts FROM devices WHERE id = ?`, id))
+	dev, err := scanDevice(d.db.QueryRowContext(ctx, `SELECT id, kind, caps, key, shortcuts, input FROM devices WHERE id = ?`, id))
 	if errors.Is(err, sql.ErrNoRows) {
 		return dev, station.ErrNotFound
 	}

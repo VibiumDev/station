@@ -105,6 +105,10 @@ type Device struct {
 	Caps      []string   `json:"caps"`          // see the Cap constants
 	Key       string     `json:"key,omitempty"` // hex public key, when the device has its own
 	Shortcuts []Shortcut `json:"shortcuts,omitempty"`
+	// Input is how the device is best driven, "touch" or "mouse": the
+	// viewer's pointer mode until the person picks one. Empty leaves it
+	// to the viewer.
+	Input string `json:"input,omitempty"`
 }
 
 // Name is the device's name inside its rig.

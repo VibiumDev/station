@@ -215,6 +215,7 @@ type deviceView struct {
 	Kind      string             `json:"kind"`
 	Caps      []string           `json:"caps"`
 	Shortcuts []station.Shortcut `json:"shortcuts,omitempty"`
+	Input     string             `json:"input,omitempty"`
 	Rig       rigView            `json:"rig"`
 	Online    bool               `json:"online"`
 	Lease     *leaseView         `json:"lease"`
@@ -244,7 +245,7 @@ func (s *server) devices(ctx context.Context) ([]deviceView, error) {
 	for _, rg := range rigs {
 		online := s.tunnel.IsOnline(rg.ID)
 		for _, d := range rg.Devices {
-			v := deviceView{ID: d.ID, Name: d.Name(), Kind: d.Kind, Caps: d.Caps, Shortcuts: d.Shortcuts,
+			v := deviceView{ID: d.ID, Name: d.Name(), Kind: d.Kind, Caps: d.Caps, Shortcuts: d.Shortcuts, Input: d.Input,
 				Rig: rigView{ID: rg.ID, Name: rg.Name, Npub: npub(rg.PubKey)}, Online: online}
 			if l, err := s.db.Current(ctx, d.ID); err == nil {
 				v.Lease = &leaseView{ID: l.ID, Seq: l.Seq, Subject: l.Subject, Scopes: station.ScopeStrings(l.Scopes), Since: l.CreatedAt, Expires: l.ExpiresAt}
@@ -400,7 +401,7 @@ func (s *server) viewPage(w http.ResponseWriter, r *http.Request, p station.Prin
 	rg, _ := s.db.Rig(r.Context(), r.PathValue("rig"))
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	viewer.Render(w, viewer.Page{Title: rg.Name + " / " + dev.Name() + " · " + s.cfg.Name, DeviceID: dev.ID, DeviceName: rg.Name + " / " + dev.Name(),
-		Shortcuts: dev.Shortcuts, CSRF: s.auth.csrfToken(r)})
+		Shortcuts: dev.Shortcuts, Input: dev.Input, CSRF: s.auth.csrfToken(r)})
 }
 
 func (s *server) settingsData(r *http.Request, p station.Principal, extra map[string]any) map[string]any {

@@ -275,7 +275,7 @@
     }
     lastMJPEG = m;
     var lines = [
-      'video    MJPEG, JPEG quality ' + m.quality,
+      'video    MJPEG' + (m.quality ? ', JPEG quality ' + m.quality : '') + (m.via ? ', ' + m.via : ''),
       'picture  ' + (m.size || '?') + ', ' + fps + ' fps, ' + kbps + ' kbps',
       'audio    ' + (m.audio ? m.audio.format + ', ' + audioKbps + ' kbps' : 'off') +
         (m.mic ? ', mic PCM 16 kHz ' + micKbps + ' kbps' : '')

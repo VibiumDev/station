@@ -38,10 +38,93 @@
   };
 
   // The MJPEG fallback: the picture as the capped stream relayed through
-  // the station, input over a relayed WebSocket. webrtc.js starts it when
-  // WebRTC gives up.
+  // the station, read with fetch so frames and bytes can be counted for
+  // the stats box (and so Safari, which takes multipart responses apart
+  // before a page sees them, gets a plain stream), input over a relayed
+  // WebSocket. webrtc.js starts it when WebRTC gives up.
   var fallen = false, hidSock = null;
-  var streamURL = api + '/v1/devices/' + device + '/stream';
+  var streamURL = api + '/v1/devices/' + device + '/stream?as=bytes';
+  var stream = null, lastFrame = 0, shownURL = null, nextURL = null, shownSize = '';
+  var mjpegFrames = 0, mjpegBytes = 0;
+  window.__roadieMJPEGStats = function () {
+    if (!fallen) return null;
+    return {frames: mjpegFrames, bytes: mjpegBytes, size: shownSize, via: 'through the station'};
+  };
+  function showFrame(bytes) {
+    lastFrame = Date.now();
+    mjpegFrames++;
+    mjpegBytes += bytes.length;
+    if (nextURL) return;  // the last one is still decoding: skip this one
+    nextURL = URL.createObjectURL(new Blob([bytes], {type: 'image/jpeg'}));
+    img.src = nextURL;
+  }
+  img.addEventListener('load', function () {
+    if (!nextURL) return;
+    shownSize = img.naturalWidth + 'x' + img.naturalHeight;
+    if (shownURL) URL.revokeObjectURL(shownURL);
+    shownURL = nextURL;
+    nextURL = null;
+  });
+  img.addEventListener('error', function () {
+    if (nextURL) URL.revokeObjectURL(nextURL);
+    nextURL = null;
+  });
+  function indexOfCRLF2(buf) {
+    for (var i = 0; i + 3 < buf.length; i++) {
+      if (buf[i] === 13 && buf[i + 1] === 10 && buf[i + 2] === 13 && buf[i + 3] === 10) return i;
+    }
+    return -1;
+  }
+  // takeFrames shows each whole frame in buf (parts of
+  // "--frame\r\nContent-Type: image/jpeg\r\nContent-Length: N\r\n\r\n"
+  // and N bytes) and returns what is left of the next.
+  var decoder = new TextDecoder();
+  function takeFrames(buf) {
+    for (;;) {
+      var end = indexOfCRLF2(buf);
+      if (end < 0) return buf;
+      var m = /Content-Length:\s*(\d+)/i.exec(decoder.decode(buf.subarray(0, end)));
+      var start = end + 4;
+      if (!m) { buf = buf.subarray(start); continue; }
+      var len = parseInt(m[1], 10);
+      if (buf.length < start + len) return buf;
+      showFrame(buf.slice(start, start + len));
+      buf = buf.subarray(start + len);
+    }
+  }
+  function startStream() {
+    if (stream) stream.abort();
+    var ctl = new AbortController();
+    stream = ctl;
+    lastFrame = Date.now();
+    fetch(streamURL, {signal: ctl.signal, cache: 'no-store', credentials: 'same-origin'}).then(function (r) {
+      if (!r.ok || !r.body) throw new Error('stream: ' + r.status);
+      var reader = r.body.getReader();
+      var buf = new Uint8Array(0);
+      function pump() {
+        return reader.read().then(function (res) {
+          if (res.done) throw new Error('stream ended');
+          var joined = new Uint8Array(buf.length + res.value.length);
+          joined.set(buf);
+          joined.set(res.value, buf.length);
+          buf = takeFrames(joined);
+          return pump();
+        });
+      }
+      return pump();
+    }).catch(function () {
+      if (stream === ctl) stream = null;  // the watchdog starts another
+    });
+  }
+  function stopStream() {
+    if (stream) { stream.abort(); stream = null; }
+  }
+  // A stream that ended or went quiet for 4 s is started again.
+  setInterval(function () {
+    if (!fallen || released) return;
+    if (stream && Date.now() - lastFrame > 4000) stopStream();
+    if (!stream) startStream();
+  }, 1000);
   function openHID() {
     closeHID();
     if (observer || released) return;
@@ -63,19 +146,24 @@
     start: function () {
       if (fallen || released) return;
       fallen = true;
-      img.src = streamURL + '?ts=' + Date.now();
+      startStream();
       openHID();
     },
     stop: function () {
       if (!fallen) return;
       fallen = false;
+      stopStream();
       closeHID();
     }
   };
 
+  // The pointer mode: what the person picked last, else what the device
+  // announced (a phone says touch), else touch on a touchscreen.
+  var savedMode = localStorage.getItem('station-input-mode');
+  var coarse = window.matchMedia && window.matchMedia('(pointer: coarse)').matches;
   var input = window.__roadieInput.attach({
     surface: img,
-    mode: localStorage.getItem('station-input-mode') === 'touch' ? 'touch' : 'mouse',
+    mode: savedMode || body.dataset.input || (coarse ? 'touch' : 'mouse'),
     send: function (msg) {
       if (observer || released) return;
       if (fallen) {
@@ -134,7 +222,7 @@
     input.releaseAll();
     if (window.__roadieRTC) window.__roadieRTC.stop();
     closeHID();
-    if (fallen) img.src = '';
+    stopStream();
     if (lease && !observer) request('DELETE', '/v1/devices/' + device + '/lease').catch(function () {});
     lease = null; grant = null;
     showStatus();

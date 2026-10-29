@@ -10,7 +10,7 @@ appears in paths as two segments.
 
 | Method and path | Purpose |
 |---|---|
-| `GET /v1/devices` | Every rig's devices: id, kind, capabilities, shortcuts, rig, online, and the lease held on it |
+| `GET /v1/devices` | Every rig's devices: id, kind, capabilities, shortcuts, the pointer mode the rig suggests (`input`: `touch` or `mouse`), rig, online, and the lease held on it |
 | `POST /v1/devices/{rig}/{name}/lease` | Take the device, or a seat watching whoever has it. Body `{"scopes": ["view", "input"]}`; `view` is always included. Returns the signed grant, the lease and whether the caller is an observer |
 | `DELETE /v1/devices/{rig}/{name}/lease` | Release the caller's lease. An observer cannot end the holder's |
 | `wss /v1/devices/{rig}/{name}/signal` | WebRTC signaling, relayed to the rig. The first message is `{"type":"hello","grant":{...}}`; the rig checks the grant and answers with its offer |

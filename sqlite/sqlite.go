@@ -77,7 +77,8 @@ CREATE TABLE IF NOT EXISTS devices (
 	kind      TEXT NOT NULL,
 	caps      TEXT NOT NULL,
 	key       TEXT NOT NULL DEFAULT '',
-	shortcuts TEXT NOT NULL DEFAULT '[]'
+	shortcuts TEXT NOT NULL DEFAULT '[]',
+	input     TEXT NOT NULL DEFAULT ''
 );
 CREATE TABLE IF NOT EXISTS lease_seq (
 	device_id TEXT PRIMARY KEY,
@@ -124,7 +125,42 @@ func (d *DB) migrate() error {
 	if _, err := d.db.Exec(schema); err != nil {
 		return fmt.Errorf("schema: %w", err)
 	}
+	// Columns added since the first release, for databases made before.
+	for _, c := range []struct{ table, column, def string }{
+		{"devices", "input", "TEXT NOT NULL DEFAULT ''"},
+	} {
+		has, err := d.hasColumn(c.table, c.column)
+		if err != nil {
+			return err
+		}
+		if !has {
+			if _, err := d.db.Exec(fmt.Sprintf("ALTER TABLE %s ADD COLUMN %s %s", c.table, c.column, c.def)); err != nil {
+				return fmt.Errorf("schema: add %s.%s: %w", c.table, c.column, err)
+			}
+		}
+	}
 	return nil
+}
+
+func (d *DB) hasColumn(table, column string) (bool, error) {
+	rows, err := d.db.Query("PRAGMA table_info(" + table + ")")
+	if err != nil {
+		return false, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var cid int
+		var name, typ string
+		var notnull, pk int
+		var def any
+		if err := rows.Scan(&cid, &name, &typ, &notnull, &def, &pk); err != nil {
+			return false, err
+		}
+		if name == column {
+			return true, nil
+		}
+	}
+	return false, rows.Err()
 }
 
 // tx runs fn in a transaction.

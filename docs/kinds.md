@@ -69,6 +69,7 @@ The rig's answer to the station's challenge: tags `p` (station) and
 ## Device announcement (37700)
 
 Addressable by `d` = device id. Tags `p` (station), `p` (device key, when
-the device has one), `kind`, one `cap` per capability. Binding a device key
+the device has one), `kind`, one `cap` per capability, and `input` (`touch`
+or `mouse`, how the device is best driven) when the rig says. Binding a device key
 to a rig is this event, signed by the rig; moving the device to another rig
 means a new announcement from the new rig.

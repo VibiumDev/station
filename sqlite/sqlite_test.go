@@ -158,11 +158,11 @@ func TestRigsAndDevices(t *testing.T) {
 	if err != nil || got.ID != "rig_1" || len(got.Devices) != 1 || got.Devices[0].Shortcuts[0].Keys != "GUI+h" {
 		t.Fatalf("by key: %+v %v", got, err)
 	}
-	if err := d.SetDevices(ctx, "rig_1", []station.Device{{ID: "rig_1/phone", Kind: "phone", Caps: []string{"video"}}, {ID: "rig_1/tablet", Kind: "phone", Caps: nil}}); err != nil {
+	if err := d.SetDevices(ctx, "rig_1", []station.Device{{ID: "rig_1/phone", Kind: "phone", Caps: []string{"video"}}, {ID: "rig_1/tablet", Kind: "phone", Caps: nil, Input: "touch"}}); err != nil {
 		t.Fatal(err)
 	}
 	dev, err := d.Device(ctx, "rig_1/tablet")
-	if err != nil || dev.Kind != "phone" {
+	if err != nil || dev.Kind != "phone" || dev.Input != "touch" {
 		t.Fatalf("device: %+v %v", dev, err)
 	}
 	rigs, _ := d.Rigs(ctx)

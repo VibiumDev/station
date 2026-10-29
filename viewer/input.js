@@ -74,10 +74,55 @@
       setInterval(function () { if (scrollDirty) { send({cmd: 'mouse_scroll', amount: scroll}); scroll = 0; scrollDirty = false; } }, 10)
     ];
 
+    // A press is held back for HOLD_MS: one that ends sooner goes out as a
+    // single tap or click, which the host performs whole, so a slow or
+    // lossy link cannot stretch a tap into a long press. A press that
+    // lasts, or moves more than SLOP, is sent as it is and streams from
+    // then on.
+    var HOLD_MS = 150, SLOP = 500;
+    var pending = null;  // {x, y, mode, button, timer}
+    function beginPress(p, m, b) {
+      if (pending) clearTimeout(pending.timer);
+      pending = {x: p.x, y: p.y, mode: m, button: b, timer: setTimeout(commitPress, HOLD_MS)};
+    }
+    function commitPress() {
+      if (!pending) return;
+      var q = pending;
+      pending = null;
+      clearTimeout(q.timer);
+      if (q.mode === 'mouse') send({cmd: 'mouse_press', buttons: q.button});
+      else { contacts = [{id: 0, tip: true, x: q.x, y: q.y}]; touchDirty = false; touch(contacts); }
+    }
+    function movedFar(p) { return pending && (Math.abs(p.x - pending.x) > SLOP || Math.abs(p.y - pending.y) > SLOP); }
+    // endPress ends the press: still pending, it becomes one tap or click
+    // where it began.
+    function endPress(p) {
+      pressed = false;
+      if (pending) {
+        var q = pending;
+        pending = null;
+        clearTimeout(q.timer);
+        if (q.mode === 'mouse') { move(q.x, q.y); moveDirty = false; send({cmd: 'mouse_click', buttons: q.button}); }
+        else send({cmd: 'tap', x: q.x, y: q.y, space: 'picture'});
+        button = 0;
+        return;
+      }
+      if (mode === 'mouse') {
+        if (moveDirty) { move(pendingX, pendingY); moveDirty = false; }
+        send({cmd: 'mouse_release', buttons: button || 1});
+        button = 0;
+      } else {
+        touchDirty = false;
+        touch(p ? [{id: 0, tip: false, x: p.x, y: p.y}] : []);
+        setTimeout(function () { touch([]); }, 20);
+      }
+    }
+
     function onMouseMove(e) {
       var p = pos(e);
+      if (pending && movedFar(p)) commitPress();
       if (mode === 'mouse') { pendingX = p.x; pendingY = p.y; moveDirty = true; }
-      else if (pressed) { contacts = [{id: 0, tip: true, x: p.x, y: p.y}]; touchDirty = true; }
+      else if (pressed && !pending) { contacts = [{id: 0, tip: true, x: p.x, y: p.y}]; touchDirty = true; }
     }
     function onMouseDown(e) {
       e.preventDefault();
@@ -87,25 +132,14 @@
         button = e.button === 2 ? 2 : e.button === 1 ? 4 : 1;
         pendingX = p.x; pendingY = p.y; moveDirty = false;
         move(p.x, p.y);
-        send({cmd: 'mouse_press', buttons: button});
+        beginPress(p, 'mouse', button);
       } else {
-        contacts = [{id: 0, tip: true, x: p.x, y: p.y}];
-        touch(contacts);
+        beginPress(p, 'touch', 0);
       }
     }
     function onMouseUp(e) {
       if (!pressed) return;
-      pressed = false;
-      if (mode === 'mouse') {
-        if (moveDirty) { move(pendingX, pendingY); moveDirty = false; }
-        send({cmd: 'mouse_release', buttons: button || 1});
-        button = 0;
-      } else {
-        var p = pos(e);
-        touchDirty = false;
-        touch([{id: 0, tip: false, x: p.x, y: p.y}]);
-        setTimeout(function () { touch([]); }, 20);
-      }
+      endPress(pos(e));
     }
     // A line is a notch, 25 pixels are one, a page twenty; what is left
     // over adds up so small steps scroll too.
@@ -130,13 +164,32 @@
     }
     function onTouchStart(e) {
       e.preventDefault();
-      if (mode === 'touch') touch(touchList(e));
-      else if (e.touches.length === 1) { var p = pos(e.touches[0]); pendingX = p.x; pendingY = p.y; moveDirty = true; }
+      if (mode === 'touch') {
+        if (e.touches.length === 1) { pressed = true; beginPress(pos(e.touches[0]), 'touch', 0); }
+        else { commitPress(); contacts = touchList(e); touchDirty = false; touch(contacts); }
+      } else if (e.touches.length === 1) {
+        // A finger in mouse mode: the pointer goes there and clicks.
+        var p = pos(e.touches[0]);
+        pressed = true;
+        button = 1;
+        pendingX = p.x; pendingY = p.y; moveDirty = false;
+        move(p.x, p.y);
+        beginPress(p, 'mouse', 1);
+      } else {
+        commitPress();
+      }
     }
     function onTouchMove(e) {
       e.preventDefault();
-      if (mode === 'touch') { contacts = touchList(e); touchDirty = true; return; }
+      if (mode === 'touch') {
+        if (e.touches.length >= 2) commitPress();
+        else if (pending && movedFar(pos(e.touches[0]))) commitPress();
+        if (pending) return;
+        contacts = touchList(e); touchDirty = true;
+        return;
+      }
       if (e.touches.length >= 2) {
+        commitPress();
         var y = (e.touches[0].clientY + e.touches[1].clientY) / 2;
         if (twoFingerY !== null) {
           scrollAccum += y - twoFingerY;
@@ -149,12 +202,19 @@
         twoFingerY = y;
       } else {
         twoFingerY = null; scrollAccum = 0;
-        var p = pos(e.touches[0]); pendingX = p.x; pendingY = p.y; moveDirty = true;
+        var p = pos(e.touches[0]);
+        if (pending && movedFar(p)) commitPress();
+        pendingX = p.x; pendingY = p.y; moveDirty = true;
       }
     }
     function onTouchEnd(e) {
       e.preventDefault();
-      if (mode === 'touch') touch(e.touches.length ? touchList(e) : []);
+      if (mode === 'touch') {
+        if (e.touches.length) { commitPress(); contacts = touchList(e); touchDirty = false; touch(contacts); }
+        else if (pressed) endPress(e.changedTouches && e.changedTouches[0] ? pos(e.changedTouches[0]) : null);
+      } else if (!e.touches.length && pressed) {
+        endPress(null);
+      }
       if (e.touches.length < 2) { twoFingerY = null; scrollAccum = 0; }
     }
     function inForm(e) {
@@ -179,6 +239,7 @@
       send({cmd: 'key_release', keycode: code});
     }
     function releaseAll() {
+      if (pending) { clearTimeout(pending.timer); pending = null; }
       send({cmd: 'mouse_release', buttons: 7});
       touch([]);
       pressed = false; contacts = []; touchDirty = false;

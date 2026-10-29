@@ -42,6 +42,7 @@ type Page struct {
 	DeviceID   string
 	DeviceName string
 	Shortcuts  []station.Shortcut
+	Input      string // the device's pointer mode, "touch" or "mouse", when it says
 	API        string // prefix of the station's API, usually empty
 	Assets     string // prefix the module files are served under, usually empty
 	CSRF       string // the session's CSRF token, sent back with API calls
