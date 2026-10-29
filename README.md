@@ -69,7 +69,10 @@ Then enroll a rig:
 
 Agents use API tokens from the Settings page or `station token create
 NAME`, sent as `Authorization: Bearer`. A read-only token may watch but
-never take control. See [API.md](API.md).
+never take control. See [API.md](API.md), and
+[docs/tutorials/agent-remote-phone.md](docs/tutorials/agent-remote-phone.md)
+for driving a phone from a laptop with Claude Code, Codex, the Vibium
+CLI or an SDK script, with a recording at the end.
 
 ## Commands and flags
 

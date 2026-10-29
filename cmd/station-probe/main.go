@@ -608,7 +608,7 @@ type bidiStep struct {
 
 // bidiRun opens a BiDi socket and runs the sequence, tapping at fx, fy
 // of the viewport when tap is set. It returns every reply.
-func (p *probe) bidiRun(ctx context.Context, wsURL, bearer string, tap string) ([]bidiStep, error) {
+func (p *probe) bidiRun(ctx context.Context, wsURL, bearer string, tap string, caps map[string]any) ([]bidiStep, error) {
 	header := http.Header{}
 	if bearer != "" {
 		header.Set("Authorization", "Bearer "+bearer)
@@ -656,7 +656,10 @@ func (p *probe) bidiRun(ctx context.Context, wsURL, bearer string, tap string) (
 	if err := add(call("session.status", nil)); err != nil {
 		return steps, err
 	}
-	if err := add(call("session.new", map[string]any{"capabilities": map[string]any{}})); err != nil {
+	if caps == nil {
+		caps = map[string]any{}
+	}
+	if err := add(call("session.new", map[string]any{"capabilities": caps})); err != nil {
 		return steps, err
 	}
 	var width, height float64
@@ -771,6 +774,11 @@ func (p *probe) runBiDi(devID, tap, direct, directToken, entry string) error {
 			break
 		}
 	}
+	if dev == nil && entry != "" && devID != "" {
+		// At the entry point the name goes to the station as asked, so a
+		// wrong one shows what the station says to it.
+		dev = &device{ID: devID}
+	}
 	if dev == nil {
 		return fmt.Errorf("no device to probe among %d listed", len(devices))
 	}
@@ -792,7 +800,13 @@ func (p *probe) runBiDi(devID, tap, direct, directToken, entry string) error {
 	defer p.api(context.Background(), "DELETE", "/v1/devices/"+dev.ID+"/hold", nil, nil)
 	wsURL := "ws" + strings.TrimPrefix(p.base, "http") + hold.BiDi
 	fmt.Printf("bidi through the station: %s\n", wsURL)
-	via, err := p.bidiRun(ctx, wsURL, p.token, tap)
+	// At the standard entry point the device is named by capability when
+	// one was asked for; with none, the station picks its default.
+	var caps map[string]any
+	if entry != "" && devID != "" {
+		caps = map[string]any{"alwaysMatch": map[string]any{"vibium:device": dev.ID}}
+	}
+	via, err := p.bidiRun(ctx, wsURL, p.token, tap, caps)
 	for _, st := range via {
 		fmt.Printf("   %-36s %6.0f ms  %s\n", st.Method, float64(st.Took)/float64(time.Millisecond), summarize(st))
 	}
@@ -825,7 +839,7 @@ func (p *probe) runBiDi(devID, tap, direct, directToken, entry string) error {
 		return nil
 	}
 	fmt.Printf("bidi straight at the rig: %s\n", direct)
-	raw, err := p.bidiRun(ctx, direct, directToken, tap)
+	raw, err := p.bidiRun(ctx, direct, directToken, tap, nil)
 	for _, st := range raw {
 		fmt.Printf("   %-36s %6.0f ms  %s\n", st.Method, float64(st.Took)/float64(time.Millisecond), summarize(st))
 	}

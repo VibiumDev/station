@@ -104,6 +104,7 @@ func (s *server) serveSession(w http.ResponseWriter, r *http.Request, p station.
 		HTTPClient: &http.Client{Transport: s.tunnel.Transport(rigID)}, HTTPHeader: header,
 	})
 	if err != nil {
+		fmt.Printf("session: %s: the rig's BiDi socket: %v\n", devID, err)
 		bidiError("session not created", "the rig did not answer: "+err.Error())
 		return
 	}
