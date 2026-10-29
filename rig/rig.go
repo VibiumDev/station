@@ -130,7 +130,7 @@ func (r *Rig) Reannounce() {
 func (r *Rig) announce(e *StationEntry, st nostr.PubKey) ([]nostr.Event, error) {
 	var devices []station.Device
 	for _, d := range r.Devices {
-		devices = append(devices, station.Device{ID: station.DeviceID(e.RigID, d.Name), Kind: d.Kind, Caps: d.Caps, Key: d.Key, Shortcuts: d.Shortcuts, Input: d.Input})
+		devices = append(devices, station.Device{ID: station.DeviceID(e.RigID, d.Name), Kind: d.Kind, Caps: d.Caps, Key: d.Key, Shortcuts: d.Shortcuts, Input: d.Input, Extras: d.Extras})
 	}
 	content, _ := json.Marshal(devices)
 	tags := nostr.Tags{{"p", st.Hex()}}
@@ -152,6 +152,9 @@ func (r *Rig) announce(e *StationEntry, st nostr.PubKey) ([]nostr.Event, error) 
 		}
 		if d.Input != "" {
 			tags = append(tags, nostr.Tag{"input", d.Input})
+		}
+		if d.Extras != "" {
+			tags = append(tags, nostr.Tag{"extras", d.Extras})
 		}
 		dev := nostr.Event{Kind: token.KindDeviceAnnounce, CreatedAt: ev.CreatedAt, Tags: tags}
 		if err := dev.Sign(r.Key); err != nil {

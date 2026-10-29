@@ -109,6 +109,9 @@ type Device struct {
 	// viewer's pointer mode until the person picks one. Empty leaves it
 	// to the viewer.
 	Input string `json:"input,omitempty"`
+	// Extras is the path on the rig of a script that adds the device's
+	// own buttons and panels to the shared viewer; empty when none.
+	Extras string `json:"extras,omitempty"`
 }
 
 // Name is the device's name inside its rig.

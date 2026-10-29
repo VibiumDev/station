@@ -19,6 +19,7 @@ appears in paths as two segments.
 | `wss /v1/devices/{rig}/{name}/bidi` | WebDriver BiDi, byte for byte: the socket is relayed to the rig's own `/session`, authenticated at the upgrade (the bearer token, or the page's cookie from the station's own origin) and authorized for the device, the `bidi` scope and a hold, which is taken on the spot when the device is free. Nothing is inserted or rewritten; the first message is the client's `session.new` |
 | `/v1/devices/{rig}/{name}/api/{path}` | The rig's REST under `/api`, relayed with a grant carrying the caller's hold scopes (a free device is taken with `input` when the caller may control). The rig's allowlist decides which scope each endpoint needs: HID input, status with `view`, settings and resets with `admin` |
 | `GET /v1/devices/{rig}/{name}/health` | The rig's health, with `view` |
+| `GET /v1/devices/{rig}/{name}/extras.js` | The device's viewer extras, relayed from the path it announced (`extras` on the device), with `view` |
 | `wss /v1/devices/{rig}/{name}/signal` | WebRTC signaling, relayed to the rig. The first message is `{"type":"hello","grant":{...}}`; the rig checks the grant and answers with its offer |
 | `GET /v1/devices/{rig}/{name}/stream` | The device's MJPEG stream, relayed from the rig at the rig's relay cap (a few frames a second); `?fps=` asks for less. The station signs a view grant for the caller: their own hold, or a seat watching the holder's |
 | `GET /v1/devices/{rig}/{name}/screenshot` | One JPEG from the rig (`?quality=30..95`), the same way |
@@ -144,12 +145,15 @@ refuses private peers.
 |---|---|
 | `/login` | Sign in with the password; in tailnet mode an allowed identity needs none |
 | `/` | The devices: rig, kind, online, who controls it, Open |
-| `/devices/{rig}/{name}/view` | The viewer: WebRTC picture, sound, touch and keyboard, the mic, the device's own buttons, stats, Hold and Release |
+| `/devices/{rig}/{name}/view` | The viewer: Roadie's shell with the WebRTC picture, sound, touch and keyboard, the mic, the settings panel, the on-screen keyboard, stats, the device's own buttons and panels from its extras, and Hold and Release. `?minimal=1`, `?input=`, `?transport=`, `?ice=relay`, `?toolbar=`, `?align=`, `?zoom=` and `?stats=1` as on a Roadie |
 | `/settings` | Enrollment codes, rigs, API tokens, the password, the network |
 
-The viewer's files are at `/viewer/webrtc.js`, `/viewer/input.js`,
-`/viewer/viewer.js` and `/viewer/viewer.css`; a Roadie serves the same
-`webrtc.js` from this module. The viewer takes `?ice=relay` (media
-through TURN only) and `?transport=mjpeg` (the MJPEG fallback through the
-station from the start, with input over the relayed HID WebSocket); the
-fallback also kicks in on its own when WebRTC cannot connect.
+The viewer's files are at `/viewer/shell.js`, `/viewer/shell.css`,
+`/viewer/webrtc.js` and the audio worklets; a Roadie serves the same
+files from this module, so its `/view` and the station's page are one.
+A device's extras (`GET /v1/devices/{rig}/{name}/extras.js`, relayed from
+the path the device announced) add its own buttons and settings rows.
+The viewer takes `?ice=relay` (media through TURN only) and
+`?transport=mjpeg` (the MJPEG fallback through the station from the
+start, with input over the relayed HID WebSocket); the fallback also
+kicks in on its own when WebRTC cannot connect.

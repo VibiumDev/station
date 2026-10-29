@@ -91,6 +91,15 @@ func (s *server) handler() http.Handler {
 	mux.Handle("GET /v1/devices/{rig}/{name}/bidi", s.api(station.ActionBidi, s.relayed("/session", station.ScopeBidi)))
 	mux.Handle("GET /session", s.api(station.ActionBidi, s.serveSession))
 	mux.Handle("GET /v1/devices/{rig}/{name}/health", s.api(station.ActionView, s.relayed("/health", station.ScopeView)))
+	// The device's own additions to the viewer, a script the rig serves.
+	mux.Handle("GET /v1/devices/{rig}/{name}/extras.js", s.api(station.ActionView, func(w http.ResponseWriter, r *http.Request, p station.Principal) {
+		dev, err := s.db.Device(r.Context(), deviceID(r))
+		if err != nil || dev.Extras == "" {
+			http.NotFound(w, r)
+			return
+		}
+		s.relayTo(w, r, p, dev.Extras, station.ScopeView)
+	}))
 	mux.Handle("/v1/devices/{rig}/{name}/api/{path...}", s.api(station.ActionView, func(w http.ResponseWriter, r *http.Request, p station.Principal) {
 		s.relayTo(w, r, p, "/api/"+r.PathValue("path"), "")
 	}))
@@ -104,7 +113,9 @@ func deviceID(r *http.Request) string { return r.PathValue("rig") + "/" + r.Path
 func secure(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		h := w.Header()
-		h.Set("Content-Security-Policy", "default-src 'self'; img-src 'self' data: blob:; media-src 'self' blob:; connect-src 'self' wss: ws:; frame-ancestors 'none'; base-uri 'none'; form-action 'self'; object-src 'none'")
+		// No inline script anywhere; inline style attributes are the
+		// viewer's layout (Roadie's markup), with no way to run code.
+		h.Set("Content-Security-Policy", "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' blob:; connect-src 'self' wss: ws:; frame-ancestors 'none'; base-uri 'none'; form-action 'self'; object-src 'none'")
 		h.Set("X-Content-Type-Options", "nosniff")
 		h.Set("X-Frame-Options", "DENY")
 		h.Set("Referrer-Policy", "same-origin")
@@ -247,6 +258,7 @@ type deviceView struct {
 	Caps      []string           `json:"caps"`
 	Shortcuts []station.Shortcut `json:"shortcuts,omitempty"`
 	Input     string             `json:"input,omitempty"`
+	Extras    string             `json:"extras,omitempty"`
 	Rig       rigView            `json:"rig"`
 	Online    bool               `json:"online"`
 	Hold      *holdView          `json:"hold"`
@@ -276,7 +288,7 @@ func (s *server) devices(ctx context.Context) ([]deviceView, error) {
 	for _, rg := range rigs {
 		online := s.tunnel.IsOnline(rg.ID)
 		for _, d := range rg.Devices {
-			v := deviceView{ID: d.ID, Name: d.Name(), Kind: d.Kind, Caps: d.Caps, Shortcuts: d.Shortcuts, Input: d.Input,
+			v := deviceView{ID: d.ID, Name: d.Name(), Kind: d.Kind, Caps: d.Caps, Shortcuts: d.Shortcuts, Input: d.Input, Extras: d.Extras,
 				Rig: rigView{ID: rg.ID, Name: rg.Name, Npub: npub(rg.PubKey)}, Online: online}
 			if l, err := s.db.Current(ctx, d.ID); err == nil {
 				v.Hold = &holdView{ID: l.ID, Seq: l.Seq, Subject: l.Subject, Scopes: station.ScopeStrings(l.Scopes), Since: l.CreatedAt, Expires: l.ExpiresAt}
@@ -566,8 +578,24 @@ func (s *server) viewPage(w http.ResponseWriter, r *http.Request, p station.Prin
 	}
 	rg, _ := s.db.Rig(r.Context(), r.PathValue("rig"))
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	viewer.Render(w, viewer.Page{Title: rg.Name + " / " + dev.Name() + " · " + s.cfg.Name, DeviceID: dev.ID, DeviceName: rg.Name + " / " + dev.Name(),
-		Shortcuts: dev.Shortcuts, Input: dev.Input, CSRF: s.auth.csrfToken(r)})
+	q := r.URL.Query()
+	cfg := viewer.Config{Mode: "station", Device: dev.ID, Name: rg.Name + " / " + dev.Name(), API: viewer.Relayed("", dev.ID),
+		InputMode: dev.Input, Shortcuts: dev.Shortcuts, CSRF: s.auth.csrfToken(r), WebRTC: true}
+	for _, c := range dev.Caps {
+		if c == station.CapVideo {
+			cfg.WebRTC = true
+		}
+	}
+	if m := q.Get("input"); m == "touch" || m == "mouse" {
+		cfg.InputMode = m
+	}
+	if t := q.Get("transport"); t == "webrtc" || t == "mjpeg" {
+		cfg.Transport = t
+	}
+	if dev.Extras != "" {
+		cfg.Extras = "/v1/devices/" + dev.ID + "/extras.js"
+	}
+	viewer.Render(w, viewer.Page{Title: rg.Name + " / " + dev.Name() + " · " + s.cfg.Name, Minimal: q.Get("minimal") == "1", Config: cfg})
 }
 
 func (s *server) settingsData(r *http.Request, p station.Principal, extra map[string]any) map[string]any {

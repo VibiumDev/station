@@ -140,7 +140,8 @@ type Offer struct {
 	Caps      []string           `json:"caps"`
 	Key       string             `json:"key,omitempty"`
 	Shortcuts []station.Shortcut `json:"shortcuts,omitempty"`
-	Input     string             `json:"input,omitempty"` // "touch" or "mouse"
+	Input     string             `json:"input,omitempty"`  // "touch" or "mouse"
+	Extras    string             `json:"extras,omitempty"` // the rig's viewer extras script path
 }
 
 func fail(w http.ResponseWriter, code int, msg string) {
@@ -208,7 +209,7 @@ func (h *Handler) ServeEnroll(w http.ResponseWriter, r *http.Request) {
 	}
 	rig := station.Rig{ID: rigID, Name: strings.TrimSpace(nameTag[1]), PubKey: ev.PubKey, EnrolledAt: time.Now()}
 	for _, d := range offers {
-		rig.Devices = append(rig.Devices, station.Device{ID: station.DeviceID(rigID, d.Name), Kind: d.Kind, Caps: d.Caps, Key: d.Key, Shortcuts: d.Shortcuts, Input: d.Input})
+		rig.Devices = append(rig.Devices, station.Device{ID: station.DeviceID(rigID, d.Name), Kind: d.Kind, Caps: d.Caps, Key: d.Key, Shortcuts: d.Shortcuts, Input: d.Input, Extras: d.Extras})
 	}
 	if err := h.Devices.PutRig(ctx, rig); err != nil {
 		fail(w, http.StatusInternalServerError, err.Error())

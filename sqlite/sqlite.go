@@ -78,7 +78,8 @@ CREATE TABLE IF NOT EXISTS devices (
 	caps      TEXT NOT NULL,
 	key       TEXT NOT NULL DEFAULT '',
 	shortcuts TEXT NOT NULL DEFAULT '[]',
-	input     TEXT NOT NULL DEFAULT ''
+	input     TEXT NOT NULL DEFAULT '',
+	extras    TEXT NOT NULL DEFAULT ''
 );
 CREATE TABLE IF NOT EXISTS hold_seq (
 	device_id TEXT PRIMARY KEY,
@@ -144,6 +145,7 @@ func (d *DB) migrate() error {
 	// Columns added since the first release, for databases made before.
 	for _, c := range []struct{ table, column, def string }{
 		{"devices", "input", "TEXT NOT NULL DEFAULT ''"},
+		{"devices", "extras", "TEXT NOT NULL DEFAULT ''"},
 	} {
 		has, err := d.hasColumn(c.table, c.column)
 		if err != nil {

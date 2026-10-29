@@ -49,7 +49,10 @@ password at start. [`Dockerfile`](Dockerfile) builds the image and
 TLS at Fly's edge, TURN bound to `fly-global-services` on the app's
 dedicated IPv4, the data directory on a volume.
 
-When WebRTC cannot connect, the viewer falls back to the MJPEG stream
+The viewer is Roadie's own, served from the `viewer` package by both: a
+rig that announces an `extras` script (Roadie does) gets its own buttons
+and panels added to the page through the relay, and the shell itself
+never names a phone. When WebRTC cannot connect, the viewer falls back to the MJPEG stream
 relayed through the station, capped at a few frames a second on the rig,
 with input over a relayed WebSocket. `?transport=mjpeg` on the viewer's
 URL picks that from the start and `?ice=relay` forces the media through
@@ -121,7 +124,7 @@ station starts, for hosts whose secrets are environment variables.
 | `rig` | The rig library: key, policy file, enrollment, the tunnel client, the gate and allowlist |
 | `turn` | The embedded TURN server (pion/turn): per-hold credentials, no relaying to private, loopback, link-local, shared or configured ranges |
 | `sqlite` | The one-file store, pure Go |
-| `viewer` | The shared browser code and the station's viewer page |
+| `viewer` | The shell: the one viewer page a station and a Roadie both serve (Roadie's toolbar, settings panel and on-screen keyboard, the MJPEG reader, sound and microphone, input in picture space, WebRTC), told its endpoints by a config and extended by a rig's own extras module |
 | `cmd/station` | The single-player binary |
 | `cmd/station-probe` | A headless check of any station: token, hold, WebRTC through TURN only, a tap and the screenshot it changes |
 

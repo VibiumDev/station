@@ -1,8 +1,9 @@
 // Package viewer is the browser side shared by a station and a Roadie
-// host: the WebRTC transport module, the input mapping, and the station's
-// device-neutral viewer page. A Roadie host serves its own page with the
-// phone's buttons and takes the transport module from here, so both run
-// the same code against the same host.
+// host: one shell, with Roadie's look and all of its viewer's features,
+// served by both, with the WebRTC transport module and the audio
+// worklets. The shell is device-neutral; a rig's own buttons and panels
+// come from an extras module the shell loads, straight from a Roadie or
+// through a station's relay.
 package viewer
 
 import (
@@ -17,7 +18,7 @@ import (
 	"github.com/VibiumDev/station"
 )
 
-//go:embed webrtc.js input.js viewer.js viewer.css page.html pcm-player.js pcm-sender.js
+//go:embed webrtc.js shell.js shell.css shell.html pcm-player.js pcm-sender.js
 var files embed.FS
 
 func mustRead(name string) []byte {
@@ -28,39 +29,83 @@ func mustRead(name string) []byte {
 	return data
 }
 
-// WebRTCJS is the transport module, for a host that serves its own page.
+// WebRTCJS is the transport module, for a host that serves it alone.
 var WebRTCJS = mustRead("webrtc.js")
 
-// InputJS is the input mapping module.
-var InputJS = mustRead("input.js")
+var page = template.Must(template.ParseFS(files, "shell.html"))
 
-var page = template.Must(template.ParseFS(files, "page.html"))
-
-// Page is what the station's viewer page is rendered with.
-type Page struct {
-	Title      string
-	DeviceID   string
-	DeviceName string
-	Shortcuts  []station.Shortcut
-	Input      string // the device's pointer mode, "touch" or "mouse", when it says
-	API        string // prefix of the station's API, usually empty
-	Assets     string // prefix the module files are served under, usually empty
-	CSRF       string // the session's CSRF token, sent back with API calls
-	Back       string // where the arrow goes
+// Endpoints is where the shell reaches the device: a Roadie's own paths,
+// or a station's relayed ones.
+type Endpoints struct {
+	Stream   string `json:"stream"`         // the MJPEG stream, read with ?as=bytes
+	Health   string `json:"health"`         // the host's health JSON
+	Snapshot string `json:"snapshot"`       // one JPEG, ?quality=
+	HID      string `json:"hid"`            // the input WebSocket
+	Audio    string `json:"audio"`          // the sound WebSocket
+	Mic      string `json:"mic"`            // the microphone WebSocket
+	Signal   string `json:"signal"`         // WebRTC signaling
+	API      string `json:"api"`            // the prefix of the host's /api, for extras
+	Hold     string `json:"hold,omitempty"` // a station's hold endpoint
 }
 
-// ShortcutsJSON is the device's shortcuts for the page's data attribute.
-func (p Page) ShortcutsJSON() string {
-	data, _ := json.Marshal(p.Shortcuts)
+// Config is what the shell is told about the page it runs on.
+type Config struct {
+	// Mode is "local" (a Roadie's own page: no holds) or "station".
+	Mode string `json:"mode"`
+	// Device is the device id on a station, empty on a Roadie.
+	Device string `json:"device,omitempty"`
+	// Name is shown in the title and screenshots.
+	Name string    `json:"name,omitempty"`
+	API  Endpoints `json:"api"`
+	// InputMode preselects mouse or touch for this load; empty leaves it
+	// to the browser's choice.
+	InputMode string `json:"inputMode,omitempty"`
+	// Transport preselects webrtc or mjpeg for this load.
+	Transport string `json:"transport,omitempty"`
+	// WebRTC says the host offers it.
+	WebRTC bool `json:"webrtc"`
+	// Shortcuts are the device's announced buttons, shown when there are
+	// no extras to provide better ones.
+	Shortcuts []station.Shortcut `json:"shortcuts,omitempty"`
+	// CSRF is a station session's token, sent back with API calls.
+	CSRF string `json:"csrf,omitempty"`
+	// Extras is the URL of the device's extras module, when it has one.
+	Extras string `json:"extras,omitempty"`
+	// Info is what the extras want to know about the host, opaque here.
+	Info map[string]any `json:"info,omitempty"`
+}
+
+// Page is what the shell page is rendered with.
+type Page struct {
+	Title  string
+	Assets string // prefix the module files are served under, usually empty
+	// Minimal hides the toolbar, for a page embedded in a frame.
+	Minimal bool
+	Config  Config
+}
+
+// ConfigJSON is the config for the page's data attribute.
+func (p Page) ConfigJSON() string {
+	data, _ := json.Marshal(p.Config)
 	return string(data)
 }
 
-// Render writes the viewer page.
+// Render writes the shell page.
 func Render(w io.Writer, p Page) error {
-	if p.Back == "" {
-		p.Back = "/"
-	}
 	return page.Execute(w, p)
+}
+
+// Local is the config for a Roadie's own page: its endpoints at the root.
+func Local() Endpoints {
+	return Endpoints{Stream: "/stream", Health: "/health", Snapshot: "/snapshot", HID: "/api/hid/ws",
+		Audio: "/audio", Mic: "/api/mic", Signal: "/api/webrtc/signal", API: "/api"}
+}
+
+// Relayed is the config for a device on a station, under its API prefix.
+func Relayed(prefix, deviceID string) Endpoints {
+	d := prefix + "/v1/devices/" + deviceID
+	return Endpoints{Stream: d + "/stream", Health: d + "/health", Snapshot: d + "/screenshot", HID: d + "/hid",
+		Audio: d + "/audio", Mic: d + "/mic", Signal: d + "/signal", API: d + "/api", Hold: d + "/hold"}
 }
 
 // Assets serves the module files; mount it at "<prefix>/viewer/" with the
