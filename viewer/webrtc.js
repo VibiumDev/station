@@ -8,7 +8,7 @@
 //
 // A page sets window.__roadieRTCConfig before loading this to say where
 // signaling is and what the hello carries: {signalURL, hello (an object, or
-// a function returning one or a promise of one, such as a fresh lease
+// a function returning one or a promise of one, such as a fresh hold
 // grant for each connection), iceServers, iceTransportPolicy, autostart:
 // false}. Without it, signaling is /api/webrtc/signal on the page's own
 // host.
@@ -170,7 +170,7 @@
       try { m = JSON.parse(ev.data); } catch (e) { return; }
       if (m.type === 'offer') {
         // The page may name STUN and TURN servers (a station's, with the
-        // lease's credentials) and force the relay path for a test.
+        // hold's credentials) and force the relay path for a test.
         var pcConfig = {iceServers: cfg.iceServers || []};
         if (cfg.iceTransportPolicy) pcConfig.iceTransportPolicy = cfg.iceTransportPolicy;
         pc = new RTCPeerConnection(pcConfig);
@@ -376,7 +376,7 @@
     statsShown: function () { return showStats; },
     requestKeyframe: function () { if (control && control.readyState === 'open') control.send(JSON.stringify({type: 'keyframe'})); },
     // Anything else for the host on the control channel, such as a
-    // refreshed lease grant; false when the channel is not open.
+    // refreshed hold grant; false when the channel is not open.
     sendControl: function (msg) {
       if (!control || control.readyState !== 'open') return false;
       control.send(JSON.stringify(msg));
@@ -415,7 +415,7 @@
   try { saved = JSON.parse(localStorage.getItem('roadie-settings')) || {}; } catch (e) {}
   if (!wanted) wanted = saved.transport || 'webrtc';
   showStats = /[?&]stats=1/.test(location.search) || !!saved.stats;
-  // A page that must do something first (take a lease) starts it itself.
+  // A page that must do something first (take a hold) starts it itself.
   if ((window.__roadieRTCConfig || {}).autostart === false) return;
   if (wanted === 'webrtc') start();
 })();

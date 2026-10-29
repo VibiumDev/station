@@ -1,7 +1,7 @@
 // Package rig is what a machine needs to be a rig: its key, the policy
 // file naming the stations it accepts, enrollment, the tunnel to each
 // station, and the gate every relayed request passes: the grant check with
-// the lease state, and the endpoint allowlist. Roadie imports it; any other
+// the hold state, and the endpoint allowlist. Roadie imports it; any other
 // device provider can.
 package rig
 

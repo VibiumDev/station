@@ -90,7 +90,7 @@ func (g *Gate) Middleware(allow Allowlist, next http.Handler) http.Handler {
 		}
 		h := r.Header.Get("Authorization")
 		if h == "" {
-			refuse(w, http.StatusUnauthorized, "a lease grant is required: Authorization: "+token.Scheme+" <grant>")
+			refuse(w, http.StatusUnauthorized, "a hold grant is required: Authorization: "+token.Scheme+" <grant>")
 			return
 		}
 		ev, err := token.FromHeader(h)

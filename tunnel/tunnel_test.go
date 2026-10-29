@@ -143,7 +143,7 @@ func TestTunnel(t *testing.T) {
 	// A revocation reaches the rig.
 	got := make(chan nostr.Event, 1)
 	c.OnRevoke = func(ev nostr.Event) { got <- ev }
-	rev, _ := token.SignRevocation(h.stationKey, token.Revocation{Rig: h.rigKey.Public(), LeaseID: "lse_1"})
+	rev, _ := token.SignRevocation(h.stationKey, token.Revocation{Rig: h.rigKey.Public(), HoldID: "hld_1"})
 	if err := h.server.Revoke("rig_1", rev); err != nil {
 		t.Fatal(err)
 	}

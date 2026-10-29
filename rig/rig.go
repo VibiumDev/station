@@ -24,7 +24,7 @@ type Rig struct {
 	Handler http.Handler   // the rig's own mux
 	Allow   Allowlist      // what the station may reach on it
 	Gate    *Gate          // made by Run when nil
-	// StatePath is where the gate keeps its lease state. Optional.
+	// StatePath is where the gate keeps its hold state. Optional.
 	StatePath string
 	Logf      func(format string, args ...any)
 

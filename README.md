@@ -4,7 +4,7 @@ Vibium Station brokers access to remote devices. Each machine with a device
 on it, a [Roadie](https://github.com/VibiumDev/roadie) Pi with a phone for
 now, enrolls as a rig and keeps one outbound tunnel to the station; people
 and agents reach the devices through the station's pages and API. The
-station signs every session as a lease grant that the rig checks itself, so
+station signs every session as a hold grant that the rig checks itself, so
 the rig stays the final gate.
 
 `station` is the single-player binary: one owner, their own rigs, a
@@ -13,7 +13,7 @@ from take an authenticator, an authorizer and stores as interfaces, so a
 hosted service can embed them instead of forking.
 
 Status: R4 of the [remote spec](docs/remote-spec.md). LAN, tailnet and
-public mode, enrollment, the tunnel, leases and grants, the viewer over
+public mode, enrollment, the tunnel, holds and grants, the viewer over
 WebRTC with the embedded TURN server behind it and the MJPEG fallback
 through the station work, and `station-probe` checks a station from
 outside. The REST and BiDi relay for agents (R5) and packaging (R6) are
@@ -40,7 +40,7 @@ at a Headscale server instead.
 Public mode turns the TURN server on, so browsers and rigs behind NATs
 still get a WebRTC path: UDP 3478 and the relay ports (`--turn-ports`,
 the ephemeral range by default) must be reachable on `--turn-public-ip`.
-TURN takes only the per-lease credentials the station hands out with each
+TURN takes only the per-hold credentials the station hands out with each
 grant and never relays to private, loopback, link-local, shared or
 unique-local addresses, nor to `--turn-deny` ranges. On a host where
 secrets are environment variables, `STATION_PASSWORD` sets the owner's
@@ -65,7 +65,7 @@ Then enroll a rig:
    mDNS. The rig checks the station's key against the code, sends its key
    and devices, and writes its policy file.
 3. Restart `roadie`. The device appears on the station's front page; Open
-   takes a lease and shows it over WebRTC.
+   takes a hold and shows it over WebRTC.
 
 Agents use API tokens from the Settings page or `station token create
 NAME`, sent as `Authorization: Bearer`. A read-only token may watch but
@@ -109,31 +109,31 @@ station starts, for hosts whose secrets are environment variables.
 
 | Package | Holds |
 |---|---|
-| root `station` | The model (rigs, devices, leases, principals, scopes) and the five interfaces an embedding application implements: `Authenticator`, `Authorizer`, `DeviceStore`, `LeaseStore`, `AuditSink`; `EventStore` is khatru's |
-| `token` | Lease grants and revocations as signed Nostr events; see [docs/kinds.md](docs/kinds.md) |
-| `lease` | One lease per device: sequence numbers, takeover by input scope, observers, idle and maximum time |
+| root `station` | The model (rigs, devices, holds, principals, scopes) and the five interfaces an embedding application implements: `Authenticator`, `Authorizer`, `DeviceStore`, `HoldStore`, `AuditSink`; `EventStore` is khatru's |
+| `token` | Hold grants and revocations as signed Nostr events; see [docs/kinds.md](docs/kinds.md) |
+| `hold` | One hold per device: sequence numbers, takeover by input scope, observers, idle and maximum time |
 | `tunnel` | The rig's outbound WebSocket, a signed challenge, then HTTP over yamux streams |
 | `signal`, `relay` | The viewer's signaling WebSocket and the reverse proxy to a rig |
 | `enroll` | Codes, the profile and enrollment endpoints, mDNS |
 | `rig` | The rig library: key, policy file, enrollment, the tunnel client, the gate and allowlist |
-| `turn` | The embedded TURN server (pion/turn): per-lease credentials, no relaying to private, loopback, link-local, shared or configured ranges |
+| `turn` | The embedded TURN server (pion/turn): per-hold credentials, no relaying to private, loopback, link-local, shared or configured ranges |
 | `sqlite` | The one-file store, pure Go |
 | `viewer` | The shared browser code and the station's viewer page |
 | `cmd/station` | The single-player binary |
-| `cmd/station-probe` | A headless check of any station: token, lease, WebRTC through TURN only, a tap and the screenshot it changes |
+| `cmd/station-probe` | A headless check of any station: token, hold, WebRTC through TURN only, a tap and the screenshot it changes |
 
 ## Security in short
 
-Every key is secp256k1 with BIP-340 Schnorr, shown as an npub. A lease
-grant is a signed event with the rig, device, lease id, sequence number,
+Every key is secp256k1 with BIP-340 Schnorr, shown as an npub. A hold
+grant is a signed event with the rig, device, hold id, sequence number,
 scopes and a ten-minute expiry; the rig refuses forged, expired,
-wrong-device and older-sequence grants, replays, revoked leases and
+wrong-device and older-sequence grants, replays, revoked holds and
 anything its policy file does not allow. Tokens travel in headers or the
 first WebSocket message, never in URLs. The station always serves TLS,
 itself or through the proxy in front of it. A rig pins the station's
 certificate at enrollment when no root signs it, and the station's key
-always. TURN credentials are per lease, derived from the station's key
-and good for the lease's maximum time; the relay refuses expired and
-ended leases, caps allocations per lease, and never sends to a private,
+always. TURN credentials are per hold, derived from the station's key
+and good for the hold's maximum time; the relay refuses expired and
+ended holds, caps allocations per hold, and never sends to a private,
 loopback, link-local, shared-address or unique-local destination, so it
 is not a proxy into anyone's network.

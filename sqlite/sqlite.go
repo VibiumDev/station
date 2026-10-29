@@ -1,5 +1,5 @@
 // Package sqlite is Station's storage: one SQLite file holding the event
-// store, rigs and devices, leases, API tokens, enrollment codes and the
+// store, rigs and devices, holds, API tokens, enrollment codes and the
 // audit log. Pure Go through modernc.org/sqlite.
 package sqlite
 
@@ -80,11 +80,11 @@ CREATE TABLE IF NOT EXISTS devices (
 	shortcuts TEXT NOT NULL DEFAULT '[]',
 	input     TEXT NOT NULL DEFAULT ''
 );
-CREATE TABLE IF NOT EXISTS lease_seq (
+CREATE TABLE IF NOT EXISTS hold_seq (
 	device_id TEXT PRIMARY KEY,
 	seq       INTEGER NOT NULL
 );
-CREATE TABLE IF NOT EXISTS leases (
+CREATE TABLE IF NOT EXISTS holds (
 	id          TEXT PRIMARY KEY,
 	device_id   TEXT NOT NULL,
 	rig_id      TEXT NOT NULL,
@@ -96,7 +96,7 @@ CREATE TABLE IF NOT EXISTS leases (
 	expires_at  INTEGER NOT NULL,
 	released_at INTEGER NOT NULL DEFAULT 0
 );
-CREATE INDEX IF NOT EXISTS leases_device ON leases(device_id, released_at, seq);
+CREATE INDEX IF NOT EXISTS holds_device ON holds(device_id, released_at, seq);
 CREATE TABLE IF NOT EXISTS api_tokens (
 	name       TEXT PRIMARY KEY,
 	hash       TEXT NOT NULL UNIQUE,
@@ -116,12 +116,28 @@ CREATE TABLE IF NOT EXISTS audit (
 	subject   TEXT NOT NULL,
 	action    TEXT NOT NULL,
 	device_id TEXT NOT NULL,
-	lease_id  TEXT NOT NULL,
+	hold_id  TEXT NOT NULL,
 	detail    TEXT NOT NULL
 );
 `
 
 func (d *DB) migrate() error {
+	// Leases became holds in R5: a database from before carries its rows
+	// over under the new names.
+	for _, r := range [][2]string{{"leases", "holds"}, {"lease_seq", "hold_seq"}} {
+		if has, err := d.hasTable(r[0]); err != nil {
+			return err
+		} else if has {
+			if _, err := d.db.Exec("ALTER TABLE " + r[0] + " RENAME TO " + r[1]); err != nil {
+				return fmt.Errorf("schema: rename %s: %w", r[0], err)
+			}
+		}
+	}
+	if has, err := d.hasColumn("audit", "lease_id"); err == nil && has {
+		if _, err := d.db.Exec("ALTER TABLE audit RENAME COLUMN lease_id TO hold_id"); err != nil {
+			return fmt.Errorf("schema: rename audit.lease_id: %w", err)
+		}
+	}
 	if _, err := d.db.Exec(schema); err != nil {
 		return fmt.Errorf("schema: %w", err)
 	}
@@ -140,6 +156,12 @@ func (d *DB) migrate() error {
 		}
 	}
 	return nil
+}
+
+func (d *DB) hasTable(table string) (bool, error) {
+	var n int
+	err := d.db.QueryRow("SELECT count(*) FROM sqlite_master WHERE type = 'table' AND name = ?", table).Scan(&n)
+	return n > 0, err
 }
 
 func (d *DB) hasColumn(table, column string) (bool, error) {

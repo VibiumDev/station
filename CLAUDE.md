@@ -28,12 +28,12 @@ device-neutral from the start.
   provider-only code. Multi-customer concerns belong to services that embed
   these packages.
 - Embeddable: hosted services embed the packages through five small, stable
-  interfaces: `Authenticator`, `Authorizer`, `DeviceStore`, `LeaseStore`,
+  interfaces: `Authenticator`, `Authorizer`, `DeviceStore`, `HoldStore`,
   `AuditSink`. Handlers must mount under any path prefix.
 - Device-neutral: rigs (enrolled machines) offer devices with a `kind`
   (`phone` now, `browser` later) and capabilities (`video`, `audio`, `hid`,
   `bidi`, `mjpeg`). Station's code never says "phone"; phone-specific code
-  lives in Roadie. Leases, tokens and API paths name the device; the tunnel
+  lives in Roadie. Holds, tokens and API paths name the device; the tunnel
   belongs to the rig.
 - Station owns the rig library: tunnel client, enrollment, session-token
   checks and the endpoint allowlist helper. Roadie imports it.
@@ -46,15 +46,15 @@ device-neutral from the start.
   relay yet. Store every signed or accepted event verbatim in an append-only
   `events` table behind an `EventStore` interface (save, query by NIP-01
   filter, delete) modelled on khatru's event store, with a SQLite
-  implementation. Refused or invalid events are not stored. Live lease state
-  stays in ordinary tables. Use NIP-01 kind ranges: regular for lease grants,
+  implementation. Refused or invalid events are not stored. Live hold state
+  stays in ordinary tables. Use NIP-01 kind ranges: regular for hold grants,
   revocations and enrollment requests; replaceable for rig announcements;
   addressable with a `d` tag per device; kind 0 for the station profile.
   Name every event's parties in `p` tags. Events are never edited: a
   correction is a new event.
 - Rig policy is the operator's consent: a file on the rig lists accepted
   stations by npub and, per station, allowed scopes, whether admin grants
-  are accepted, and maximum session length. One active lease across all
+  are accepted, and maximum session length. One active hold across all
   stations; the rig arbitrates. No station can exceed what the operator
   allowed.
 
@@ -71,11 +71,11 @@ device-neutral from the start.
 - Enrollment codes are single-use, expire in 15 minutes, and carry the
   station key's fingerprint. The station advertises `_vibium-station._tcp`
   over mDNS on the LAN. Removing a rig refuses its key from then on.
-- TURN is locked down: per-lease short-lived credentials only; refuse
+- TURN is locked down: per-hold short-lived credentials only; refuse
   relaying to private, loopback and link-local addresses plus configured
   extra ranges (for example Fly.io's `fdaa::/16`); listen address,
   advertised IP and MTU configurable. Off by default in tailnet mode.
-- The relay is dumb: forward REST and BiDi bytes for an authorized lease and
+- The relay is dumb: forward REST and BiDi bytes for an authorized hold and
   never interpret HID commands. The Pi validates everything again.
 - Secrets come from env vars or files outside the repo. Never commit keys.
 
@@ -84,11 +84,11 @@ device-neutral from the start.
 - Prefer the standard library and small dependencies; no cgo (pure-Go
   SQLite); never GStreamer. `govulncheck` runs in CI. CI builds linux/arm64,
   linux/amd64 and darwin/arm64.
-- Packages as the spec names them: `tunnel`, `signal`, `relay`, `lease`,
+- Packages as the spec names them: `tunnel`, `signal`, `relay`, `hold`,
   `token`, `turn`, `viewer`, plus `rig`, `cmd/station` and
   `cmd/station-probe`.
-- Leases: per-device seq, takeover by input scope, one view-only observer,
-  release after 5 idle minutes or 8 hours. Lease grants live 10 minutes and
+- Holds: per-device seq, takeover by input scope, one view-only observer,
+  release after 5 idle minutes or 8 hours. Hold grants live 10 minutes and
   are refreshed over the data channel or tunnel.
 - Pages are extremely minimal, like exe.dev and Roadie's pages:
   server-rendered HTML, system fonts, monochrome plus one accent colour, no

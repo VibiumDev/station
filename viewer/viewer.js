@@ -1,6 +1,6 @@
-// The station's viewer page: takes a lease on the device, starts the
+// The station's viewer page: takes a hold on the device, starts the
 // WebRTC transport with the grant in its hello and the station's ICE
-// servers, keeps the lease fresh, falls back to the MJPEG stream through
+// servers, keeps the hold fresh, falls back to the MJPEG stream through
 // the station when WebRTC cannot connect, and wires the toolbar.
 // Everything it knows about the device comes from the page's data
 // attributes and the device's own announcement. ?ice=relay forces the
@@ -16,7 +16,7 @@
   function $(id) { return document.getElementById(id); }
   var img = $('feed'), note = $('note'), status = $('status');
 
-  var grant = null, grantUsed = false, lease = null, observer = false, released = false;
+  var grant = null, grantUsed = false, hold = null, observer = false, released = false;
   var proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
   var params = new URLSearchParams(location.search);
   var relayOnly = params.get('ice') === 'relay';
@@ -28,7 +28,7 @@
     // fresh one; the first connection uses the grant the page just took.
     hello: function () {
       if (grant && !grantUsed) { grantUsed = true; return {grant: grant}; }
-      return takeLease(observer ? ['view'] : ['view', 'input'], true).then(function () {
+      return takeHold(observer ? ['view'] : ['view', 'input'], true).then(function () {
         grantUsed = true;
         return grant ? {grant: grant} : {};
       });
@@ -301,8 +301,8 @@
     note.style.display = text ? 'flex' : 'none';
   }
   function showStatus() {
-    if (!lease) { status.textContent = ''; return; }
-    status.textContent = observer ? 'Watching ' + lease.subject + "'s session" : 'You control this device (lease ' + lease.seq + ')';
+    if (!hold) { status.textContent = ''; return; }
+    status.textContent = observer ? 'Watching ' + hold.subject : 'You hold this device';
     $('takeBtn').style.display = observer ? '' : 'none';
     $('releaseBtn').style.display = observer ? 'none' : '';
   }
@@ -318,14 +318,14 @@
     });
   }
 
-  // takeLease asks for the device; the answer is a grant on a lease, ours
+  // takeHold asks for the device; the answer is a grant on a hold, ours
   // or, as an observer, the holder's. With quiet, it only refreshes the
   // grant for a connection being made.
-  function takeLease(scopes, quiet) {
-    return request('POST', '/v1/devices/' + device + '/lease', {scopes: scopes}).then(function (res) {
+  function takeHold(scopes, quiet) {
+    return request('POST', '/v1/devices/' + device + '/hold', {scopes: scopes}).then(function (res) {
       grant = res.grant;
       grantUsed = false;
-      lease = res.lease;
+      hold = res.hold;
       observer = !!res.observer;
       released = false;
       window.__roadieRTCConfig.iceServers = res.ice || [];
@@ -346,18 +346,18 @@
     stopStream();
     stopAudio();
     stopMicSocket();
-    if (lease && !observer) request('DELETE', '/v1/devices/' + device + '/lease').catch(function () {});
-    lease = null; grant = null;
+    if (hold && !observer) request('DELETE', '/v1/devices/' + device + '/hold').catch(function () {});
+    hold = null; grant = null;
     showStatus();
     say('Released. Reload the page to take the device again.');
   }
 
-  // Grants last ten minutes; a fresh one every three keeps the lease from
+  // Grants last ten minutes; a fresh one every three keeps the hold from
   // going idle and reaches the host over the control channel.
-  setInterval(function () { if (lease && !released) takeLease(observer ? ['view'] : ['view', 'input']); }, 3 * 60 * 1000);
+  setInterval(function () { if (hold && !released) takeHold(observer ? ['view'] : ['view', 'input']); }, 3 * 60 * 1000);
   window.addEventListener('pagehide', function () {
-    if (lease && !observer && !released) {
-      try { navigator.sendBeacon(api + '/v1/devices/' + device + '/lease/release', new Blob([JSON.stringify({csrf: csrf})], {type: 'application/json'})); } catch (e) {}
+    if (hold && !observer && !released) {
+      try { navigator.sendBeacon(api + '/v1/devices/' + device + '/hold/release', new Blob([JSON.stringify({csrf: csrf})], {type: 'application/json'})); } catch (e) {}
     }
   });
 
@@ -422,7 +422,7 @@
     window.__roadieRTC.showStats(!window.__roadieRTC.statsShown());
     this.classList.toggle('on', window.__roadieRTC.statsShown());
   };
-  $('takeBtn').onclick = function () { takeLease(['view', 'input']); };
+  $('takeBtn').onclick = function () { takeHold(['view', 'input']); };
   $('releaseBtn').onclick = release;
   var bar = $('shortcuts');
   shortcuts.forEach(function (s) {
@@ -435,5 +435,5 @@
     bar.appendChild(b);
   });
 
-  takeLease(['view', 'input']);
+  takeHold(['view', 'input']);
 })();

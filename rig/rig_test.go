@@ -92,17 +92,17 @@ func newGate(t *testing.T, statePath string) *gateFixture {
 	f.gate = &Gate{Policy: &Policy{Stations: []*StationEntry{f.entry}}, Key: f.rigKey.Public(),
 		Devices: func() []string { return []string{"rig_1/phone"} }, StatePath: statePath,
 		Now:   func() time.Time { return f.clock },
-		OnEnd: func(device, lease string) { f.ended <- device + ":" + lease }, Logf: t.Logf}
+		OnEnd: func(device, hold string) { f.ended <- device + ":" + hold }, Logf: t.Logf}
 	return f
 }
 
-func (f *gateFixture) grant(t *testing.T, sk nostr.SecretKey, lease string, seq uint64, scopes ...station.Scope) nostr.Event {
+func (f *gateFixture) grant(t *testing.T, sk nostr.SecretKey, hold string, seq uint64, scopes ...station.Scope) nostr.Event {
 	t.Helper()
 	if len(scopes) == 0 {
 		scopes = []station.Scope{station.ScopeView, station.ScopeInput}
 	}
 	ev, err := token.SignGrant(sk, token.Grant{Rig: f.rigKey.Public(), RigID: "rig_1", DeviceID: "rig_1/phone", Subject: "owner",
-		LeaseID: lease, Seq: seq, Scopes: scopes, IssuedAt: f.clock})
+		HoldID: hold, Seq: seq, Scopes: scopes, IssuedAt: f.clock})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -125,19 +125,19 @@ func TestGate(t *testing.T) {
 	statePath := filepath.Join(t.TempDir(), "state.json")
 	f := newGate(t, statePath)
 	g := f.gate
-	ok := f.grant(t, f.stationKey, "lse_1", 1)
+	ok := f.grant(t, f.stationKey, "hld_1", 1)
 	if _, err := g.Check(ok, station.ScopeInput); err != nil {
 		t.Fatalf("valid: %v", err)
 	}
 	if _, err := g.Check(ok, station.ScopeInput); !errors.Is(err, ErrReplay) {
 		t.Errorf("replayed: %v", err)
 	}
-	if lease, held := g.Current("rig_1/phone"); !held || lease != "lse_1" {
-		t.Errorf("current: %q %v", lease, held)
+	if hold, held := g.Current("rig_1/phone"); !held || hold != "hld_1" {
+		t.Errorf("current: %q %v", hold, held)
 	}
-	// A refresh of the same lease is a new event.
+	// A refresh of the same hold is a new event.
 	f.clock = f.clock.Add(time.Minute)
-	if _, err := g.Check(f.grant(t, f.stationKey, "lse_1", 1), station.ScopeView); err != nil {
+	if _, err := g.Check(f.grant(t, f.stationKey, "hld_1", 1), station.ScopeView); err != nil {
 		t.Errorf("refresh: %v", err)
 	}
 	cases := []struct {
@@ -146,19 +146,19 @@ func TestGate(t *testing.T) {
 		need station.Scope
 		want error
 	}{
-		{"missing scope", f.grant(t, f.stationKey, "lse_1", 1, station.ScopeView), station.ScopeInput, ErrScope},
-		{"outside the policy", f.grant(t, f.stationKey, "lse_1", 1, station.ScopeView, station.ScopeBidi), station.ScopeView, ErrPolicy},
-		{"admin not allowed", f.grant(t, f.stationKey, "lse_1", 1, station.ScopeView, station.ScopeAdmin), station.ScopeView, ErrPolicy},
-		{"station not in the policy", f.grant(t, nostr.Generate(), "lse_1", 1), station.ScopeView, token.ErrStation},
-		{"older seq", f.grant(t, f.stationKey, "lse_0", 0), station.ScopeView, ErrOlderLease},
+		{"missing scope", f.grant(t, f.stationKey, "hld_1", 1, station.ScopeView), station.ScopeInput, ErrScope},
+		{"outside the policy", f.grant(t, f.stationKey, "hld_1", 1, station.ScopeView, station.ScopeBidi), station.ScopeView, ErrPolicy},
+		{"admin not allowed", f.grant(t, f.stationKey, "hld_1", 1, station.ScopeView, station.ScopeAdmin), station.ScopeView, ErrPolicy},
+		{"station not in the policy", f.grant(t, nostr.Generate(), "hld_1", 1), station.ScopeView, token.ErrStation},
+		{"older seq", f.grant(t, f.stationKey, "hld_0", 0), station.ScopeView, ErrOlderHold},
 		{"expired", func() nostr.Event {
 			ev, _ := token.SignGrant(f.stationKey, token.Grant{Rig: f.rigKey.Public(), RigID: "rig_1", DeviceID: "rig_1/phone", Subject: "owner",
-				LeaseID: "lse_1", Seq: 1, Scopes: []station.Scope{station.ScopeView}, IssuedAt: f.clock.Add(-time.Hour)})
+				HoldID: "hld_1", Seq: 1, Scopes: []station.Scope{station.ScopeView}, IssuedAt: f.clock.Add(-time.Hour)})
 			return ev
 		}(), station.ScopeView, token.ErrExpired},
 		{"wrong device", func() nostr.Event {
 			ev, _ := token.SignGrant(f.stationKey, token.Grant{Rig: f.rigKey.Public(), RigID: "rig_1", DeviceID: "rig_1/tablet", Subject: "owner",
-				LeaseID: "lse_1", Seq: 1, Scopes: []station.Scope{station.ScopeView}, IssuedAt: f.clock})
+				HoldID: "hld_1", Seq: 1, Scopes: []station.Scope{station.ScopeView}, IssuedAt: f.clock})
 			return ev
 		}(), station.ScopeView, token.ErrDevice},
 	}
@@ -167,48 +167,48 @@ func TestGate(t *testing.T) {
 			t.Errorf("%s: got %v, want %v", c.name, err, c.want)
 		}
 	}
-	// A newer lease ends the old one.
-	if _, err := g.Check(f.grant(t, f.stationKey, "lse_2", 2), station.ScopeInput); err != nil {
-		t.Fatalf("newer lease: %v", err)
+	// A newer hold ends the old one.
+	if _, err := g.Check(f.grant(t, f.stationKey, "hld_2", 2), station.ScopeInput); err != nil {
+		t.Fatalf("newer hold: %v", err)
 	}
-	f.wantEnded(t, "rig_1/phone:lse_1")
-	if _, err := g.Check(f.grant(t, f.stationKey, "lse_1", 1), station.ScopeView); !errors.Is(err, ErrOlderLease) {
-		t.Errorf("old lease after the new one: %v", err)
+	f.wantEnded(t, "rig_1/phone:hld_1")
+	if _, err := g.Check(f.grant(t, f.stationKey, "hld_1", 1), station.ScopeView); !errors.Is(err, ErrOlderHold) {
+		t.Errorf("old hold after the new one: %v", err)
 	}
 	// A restart keeps the state.
 	g2 := newGate(t, statePath)
 	g2.stationKey, g2.rigKey, g2.clock = f.stationKey, f.rigKey, f.clock
 	g2.gate.Policy, g2.gate.Key = g.Policy, g.Key
-	if _, err := g2.gate.Check(f.grant(t, f.stationKey, "lse_1", 1), station.ScopeView); !errors.Is(err, ErrOlderLease) {
-		t.Errorf("older lease after restart: %v", err)
+	if _, err := g2.gate.Check(f.grant(t, f.stationKey, "hld_1", 1), station.ScopeView); !errors.Is(err, ErrOlderHold) {
+		t.Errorf("older hold after restart: %v", err)
 	}
-	// Revocation ends the lease and refuses later grants on it.
-	rev, _ := token.SignRevocation(f.stationKey, token.Revocation{Rig: f.rigKey.Public(), LeaseID: "lse_2", IssuedAt: f.clock})
+	// Revocation ends the hold and refuses later grants on it.
+	rev, _ := token.SignRevocation(f.stationKey, token.Revocation{Rig: f.rigKey.Public(), HoldID: "hld_2", IssuedAt: f.clock})
 	if err := g.Revoke(rev); err != nil {
 		t.Fatal(err)
 	}
-	f.wantEnded(t, "rig_1/phone:lse_2")
+	f.wantEnded(t, "rig_1/phone:hld_2")
 	if _, held := g.Current("rig_1/phone"); held {
 		t.Error("held after revocation")
 	}
-	if _, err := g.Check(f.grant(t, f.stationKey, "lse_2", 2), station.ScopeView); !errors.Is(err, ErrRevoked) {
-		t.Errorf("grant on a revoked lease: %v", err)
+	if _, err := g.Check(f.grant(t, f.stationKey, "hld_2", 2), station.ScopeView); !errors.Is(err, ErrRevoked) {
+		t.Errorf("grant on a revoked hold: %v", err)
 	}
-	strangerRev, _ := token.SignRevocation(nostr.Generate(), token.Revocation{Rig: f.rigKey.Public(), LeaseID: "lse_3"})
+	strangerRev, _ := token.SignRevocation(nostr.Generate(), token.Revocation{Rig: f.rigKey.Public(), HoldID: "hld_3"})
 	if err := g.Revoke(strangerRev); !errors.Is(err, token.ErrStation) {
 		t.Errorf("stranger's revocation: %v", err)
 	}
 	// Session length: the policy says one hour.
-	if _, err := g.Check(f.grant(t, f.stationKey, "lse_3", 3), station.ScopeView); err != nil {
+	if _, err := g.Check(f.grant(t, f.stationKey, "hld_3", 3), station.ScopeView); err != nil {
 		t.Fatal(err)
 	}
 	f.clock = f.clock.Add(61 * time.Minute)
-	if _, err := g.Check(f.grant(t, f.stationKey, "lse_3", 3), station.ScopeView); !errors.Is(err, ErrSessionLength) {
+	if _, err := g.Check(f.grant(t, f.stationKey, "hld_3", 3), station.ScopeView); !errors.Is(err, ErrSessionLength) {
 		t.Errorf("long session: %v", err)
 	}
 	// Hours.
 	f.entry.Hours = "00:00-01:00"
-	if _, err := g.Check(f.grant(t, f.stationKey, "lse_4", 4), station.ScopeView); !errors.Is(err, ErrHours) {
+	if _, err := g.Check(f.grant(t, f.stationKey, "hld_4", 4), station.ScopeView); !errors.Is(err, ErrHours) {
 		t.Errorf("outside hours: %v", err)
 	}
 	f.entry.Hours = ""
@@ -218,19 +218,19 @@ func TestGateTwoStations(t *testing.T) {
 	f := newGate(t, "")
 	other := nostr.Generate()
 	f.gate.Policy.Set(&StationEntry{Name: "hosted", Npub: Npub(other.Public()), RigID: "rig_1", Scopes: []string{"view", "input"}})
-	if _, err := f.gate.Check(f.grant(t, f.stationKey, "lse_1", 1), station.ScopeInput); err != nil {
+	if _, err := f.gate.Check(f.grant(t, f.stationKey, "hld_1", 1), station.ScopeInput); err != nil {
 		t.Fatal(err)
 	}
-	// The other station's lease must wait for this one to run out.
-	if _, err := f.gate.Check(f.grant(t, other, "lse_x", 1), station.ScopeInput); !errors.Is(err, ErrBusy) {
+	// The other station's hold must wait for this one to run out.
+	if _, err := f.gate.Check(f.grant(t, other, "hld_x", 1), station.ScopeInput); !errors.Is(err, ErrBusy) {
 		t.Errorf("busy: %v", err)
 	}
 	f.clock = f.clock.Add(token.GrantLifetime + time.Minute)
-	if _, err := f.gate.Check(f.grant(t, other, "lse_x", 1), station.ScopeInput); err != nil {
-		t.Errorf("after the lease ran out: %v", err)
+	if _, err := f.gate.Check(f.grant(t, other, "hld_x", 1), station.ScopeInput); err != nil {
+		t.Errorf("after the hold ran out: %v", err)
 	}
-	if lease, _ := f.gate.Current("rig_1/phone"); lease != "lse_x" {
-		t.Errorf("current %q", lease)
+	if hold, _ := f.gate.Current("rig_1/phone"); hold != "hld_x" {
+		t.Errorf("current %q", hold)
 	}
 }
 
@@ -262,7 +262,7 @@ func TestAllowlistAndMiddleware(t *testing.T) {
 		resp.Body.Close()
 		return resp.StatusCode
 	}
-	grant := f.grant(t, f.stationKey, "lse_1", 1)
+	grant := f.grant(t, f.stationKey, "hld_1", 1)
 	if c := do("GET", "/health", ""); c != 401 {
 		t.Errorf("no header: %d", c)
 	}
@@ -275,23 +275,23 @@ func TestAllowlistAndMiddleware(t *testing.T) {
 	if c := do("GET", "/api/hid/type", token.Header(grant)); c != 403 {
 		t.Errorf("wrong method: %d", c)
 	}
-	if c := do("GET", "/health", token.Header(grant)); c != 200 || seen.LeaseID != "lse_1" {
+	if c := do("GET", "/health", token.Header(grant)); c != 200 || seen.HoldID != "hld_1" {
 		t.Errorf("allowed: %d %+v", c, seen)
 	}
 	if c := do("GET", "/health", token.Header(grant)); c != 403 {
 		t.Errorf("replayed header: %d", c)
 	}
-	viewOnly := f.grant(t, f.stationKey, "lse_1", 1, station.ScopeView)
+	viewOnly := f.grant(t, f.stationKey, "hld_1", 1, station.ScopeView)
 	if c := do("POST", "/api/hid/type", token.Header(viewOnly)); c != 403 {
 		t.Errorf("view-only on input: %d", c)
 	}
-	if c := do("POST", "/api/hid/type", token.Header(f.grant(t, f.stationKey, "lse_1", 1))); c != 200 {
+	if c := do("POST", "/api/hid/type", token.Header(f.grant(t, f.stationKey, "hld_1", 1))); c != 200 {
 		t.Errorf("input: %d", c)
 	}
 	if c := do("GET", "/api/webrtc/signal", ""); c != 200 || check == nil {
 		t.Errorf("first-message endpoint: %d, check %v", c, check != nil)
 	}
-	if _, err := check(f.grant(t, f.stationKey, "lse_1", 1)); err != nil {
+	if _, err := check(f.grant(t, f.stationKey, "hld_1", 1)); err != nil {
 		t.Errorf("first-message check: %v", err)
 	}
 }
@@ -398,7 +398,7 @@ func TestEnrollAndRun(t *testing.T) {
 	r := &Rig{Key: rigKey, Policy: policy, Devices: offers, Logf: t.Logf,
 		Handler: http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { io.WriteString(w, "pong") }),
 		Allow:   Allowlist{{Path: "/health", Scope: station.ScopeView}},
-		Gate:    &Gate{OnEnd: func(device, lease string) { ended <- device + ":" + lease }}}
+		Gate:    &Gate{OnEnd: func(device, hold string) { ended <- device + ":" + hold }}}
 	r.Gate.Policy, r.Gate.Key = policy, rigKey.Public()
 	rctx, cancel := context.WithCancel(ctx)
 	defer cancel()
@@ -424,7 +424,7 @@ func TestEnrollAndRun(t *testing.T) {
 		t.Errorf("announced device: %+v %v", dev, err)
 	}
 	grant, _ := token.SignGrant(s.key, token.Grant{Rig: rigKey.Public(), RigID: entry.RigID, DeviceID: entry.RigID + "/phone", Subject: "owner",
-		LeaseID: "lse_1", Seq: 1, Scopes: []station.Scope{station.ScopeView}})
+		HoldID: "hld_1", Seq: 1, Scopes: []station.Scope{station.ScopeView}})
 	hc = &http.Client{Transport: s.tunnel.Transport(entry.RigID)}
 	req, _ := http.NewRequest("GET", "http://rig/health", nil)
 	req.Header.Set("Authorization", token.Header(grant))
@@ -441,16 +441,16 @@ func TestEnrollAndRun(t *testing.T) {
 	if resp, err := hc.Do(req); err != nil || resp.StatusCode != 401 {
 		t.Errorf("relayed without a grant: %v %v", resp, err)
 	}
-	rev, _ := token.SignRevocation(s.key, token.Revocation{Rig: rigKey.Public(), LeaseID: "lse_1"})
+	rev, _ := token.SignRevocation(s.key, token.Revocation{Rig: rigKey.Public(), HoldID: "hld_1"})
 	if err := s.tunnel.Revoke(entry.RigID, rev); err != nil {
 		t.Fatal(err)
 	}
 	select {
 	case got := <-ended:
-		if got != entry.RigID+"/phone:lse_1" {
+		if got != entry.RigID+"/phone:hld_1" {
 			t.Errorf("ended %q", got)
 		}
 	case <-time.After(5 * time.Second):
-		t.Error("revocation did not end the lease")
+		t.Error("revocation did not end the hold")
 	}
 }

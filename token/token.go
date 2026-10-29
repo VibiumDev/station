@@ -1,4 +1,4 @@
-// Package token builds and checks Station's signed events: lease grants,
+// Package token builds and checks Station's signed events: hold grants,
 // revocations and the handshake events, in the Nostr event format with the
 // kinds in docs/kinds.md. The station signs; both the station and the rig
 // check, because the rig is the final gate.
@@ -34,7 +34,7 @@ const (
 
 const (
 	// GrantLifetime is how long a grant is valid; the station refreshes
-	// held leases well before.
+	// held holds well before.
 	GrantLifetime = 10 * time.Minute
 	// Skew is the clock difference the checks forgive.
 	Skew = 30 * time.Second
@@ -42,7 +42,7 @@ const (
 
 // Errors a check can return. Verify wraps them with detail.
 var (
-	ErrKind        = errors.New("not a lease grant")
+	ErrKind        = errors.New("not a hold grant")
 	ErrSignature   = errors.New("bad signature")
 	ErrMalformed   = errors.New("malformed grant")
 	ErrExpired     = errors.New("grant expired")
@@ -52,7 +52,7 @@ var (
 	ErrDevice      = errors.New("grant names no device of this rig")
 )
 
-// Grant is a lease grant: the session token.
+// Grant is a hold grant: the session token.
 type Grant struct {
 	ID        nostr.ID
 	Station   nostr.PubKey
@@ -61,20 +61,20 @@ type Grant struct {
 	RigID     string
 	DeviceID  string
 	Subject   string
-	LeaseID   string
+	HoldID    string
 	Seq       uint64
 	Scopes    []station.Scope
 	IssuedAt  time.Time
 	ExpiresAt time.Time
 	// ICE lists the STUN and TURN servers the session's media may use,
-	// with the lease's own TURN credentials; empty when the station runs
+	// with the hold's own TURN credentials; empty when the station runs
 	// none.
 	ICE []ICEServer
 }
 
 // ICEServer is a STUN or TURN server a grant names, shaped like the
-// browser's RTCIceServer. A TURN credential is the lease's own and lasts
-// the lease's maximum time.
+// browser's RTCIceServer. A TURN credential is the hold's own and lasts
+// the hold's maximum time.
 type ICEServer struct {
 	URLs       []string `json:"urls"`
 	Username   string   `json:"username,omitempty"`
@@ -93,7 +93,7 @@ func (g Grant) event() nostr.Event {
 		nostr.Tag{"rig", g.RigID},
 		nostr.Tag{"dev", g.DeviceID},
 		nostr.Tag{"sub", g.Subject},
-		nostr.Tag{"lease", g.LeaseID},
+		nostr.Tag{"hold", g.HoldID},
 		nostr.Tag{"seq", strconv.FormatUint(g.Seq, 10)},
 	)
 	for _, s := range g.Scopes {
@@ -118,8 +118,8 @@ func (g Grant) event() nostr.Event {
 // SignGrant signs g with the station's key. IssuedAt defaults to now and
 // ExpiresAt to IssuedAt plus GrantLifetime.
 func SignGrant(sk nostr.SecretKey, g Grant) (nostr.Event, error) {
-	if g.RigID == "" || g.DeviceID == "" || g.LeaseID == "" || g.Subject == "" || len(g.Scopes) == 0 || g.Rig == nostr.ZeroPK {
-		return nostr.Event{}, fmt.Errorf("%w: rig, device, subject, lease and scopes are required", ErrMalformed)
+	if g.RigID == "" || g.DeviceID == "" || g.HoldID == "" || g.Subject == "" || len(g.Scopes) == 0 || g.Rig == nostr.ZeroPK {
+		return nostr.Event{}, fmt.Errorf("%w: rig, device, subject, hold and scopes are required", ErrMalformed)
 	}
 	if g.IssuedAt.IsZero() {
 		g.IssuedAt = time.Now()
@@ -163,8 +163,8 @@ func ParseGrant(ev nostr.Event) (Grant, error) {
 			g.DeviceID = t[1]
 		case "sub":
 			g.Subject = t[1]
-		case "lease":
-			g.LeaseID = t[1]
+		case "hold":
+			g.HoldID = t[1]
 		case "seq":
 			n, err := strconv.ParseUint(t[1], 10, 64)
 			if err != nil {
@@ -199,8 +199,8 @@ func ParseGrant(ev nostr.Event) (Grant, error) {
 	if len(parties) == 2 {
 		g.Device = parties[1]
 	}
-	if g.RigID == "" || g.DeviceID == "" || g.LeaseID == "" || len(g.Scopes) == 0 || g.ExpiresAt.IsZero() {
-		return Grant{}, fmt.Errorf("%w: rig, dev, lease, scope and expiration tags are required", ErrMalformed)
+	if g.RigID == "" || g.DeviceID == "" || g.HoldID == "" || len(g.Scopes) == 0 || g.ExpiresAt.IsZero() {
+		return Grant{}, fmt.Errorf("%w: rig, dev, hold, scope and expiration tags are required", ErrMalformed)
 	}
 	if _, _, ok := station.SplitDeviceID(g.DeviceID); !ok {
 		return Grant{}, fmt.Errorf("%w: device id %q", ErrMalformed, g.DeviceID)
@@ -219,7 +219,7 @@ type Verifier struct {
 
 // Verify parses ev and checks it against v: signed by an accepted station,
 // for this rig and one of its devices, inside its lifetime with Skew. The
-// lease order and replays are state the rig package keeps.
+// hold order and replays are state the rig package keeps.
 func Verify(ev nostr.Event, v Verifier) (Grant, error) {
 	g, err := ParseGrant(ev)
 	if err != nil {
@@ -253,25 +253,25 @@ func Verify(ev nostr.Event, v Verifier) (Grant, error) {
 	return g, nil
 }
 
-// Revocation ends a lease before its grants expire.
+// Revocation ends a hold before its grants expire.
 type Revocation struct {
 	ID       nostr.ID
 	Station  nostr.PubKey
 	Rig      nostr.PubKey
-	LeaseID  string
+	HoldID   string
 	IssuedAt time.Time
 }
 
-// SignRevocation signs a revocation of the lease with the station's key.
+// SignRevocation signs a revocation of the hold with the station's key.
 func SignRevocation(sk nostr.SecretKey, r Revocation) (nostr.Event, error) {
-	if r.LeaseID == "" || r.Rig == nostr.ZeroPK {
-		return nostr.Event{}, fmt.Errorf("%w: rig and lease are required", ErrMalformed)
+	if r.HoldID == "" || r.Rig == nostr.ZeroPK {
+		return nostr.Event{}, fmt.Errorf("%w: rig and hold are required", ErrMalformed)
 	}
 	if r.IssuedAt.IsZero() {
 		r.IssuedAt = time.Now()
 	}
 	ev := nostr.Event{Kind: KindRevocation, CreatedAt: nostr.Timestamp(r.IssuedAt.Unix()),
-		Tags: nostr.Tags{{"p", r.Rig.Hex()}, {"lease", r.LeaseID}}}
+		Tags: nostr.Tags{{"p", r.Rig.Hex()}, {"hold", r.HoldID}}}
 	if err := ev.Sign(sk); err != nil {
 		return nostr.Event{}, err
 	}
@@ -299,19 +299,19 @@ func ParseRevocation(ev nostr.Event) (Revocation, error) {
 				return Revocation{}, fmt.Errorf("%w: p tag: %v", ErrMalformed, err)
 			}
 			r.Rig = pk
-		case "lease":
-			r.LeaseID = t[1]
+		case "hold":
+			r.HoldID = t[1]
 		}
 	}
-	if r.Rig == nostr.ZeroPK || r.LeaseID == "" {
-		return Revocation{}, fmt.Errorf("%w: p and lease tags are required", ErrMalformed)
+	if r.Rig == nostr.ZeroPK || r.HoldID == "" {
+		return Revocation{}, fmt.Errorf("%w: p and hold tags are required", ErrMalformed)
 	}
 	return r, nil
 }
 
 // Scheme is the Authorization scheme a relayed request carries its grant
-// with: "Authorization: Lease <base64url event JSON>".
-const Scheme = "Lease"
+// with: "Authorization: Hold <base64url event JSON>".
+const Scheme = "Hold"
 
 // Header encodes ev for the Authorization header.
 func Header(ev nostr.Event) string {

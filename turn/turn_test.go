@@ -48,15 +48,15 @@ func TestAllowed(t *testing.T) {
 
 func TestCredentials(t *testing.T) {
 	exp := time.Now().Add(time.Hour).Truncate(time.Second)
-	u := Username("lse_1", exp)
-	lease, got, err := ParseUsername(u)
-	if err != nil || lease != "lse_1" || !got.Equal(exp) {
-		t.Fatalf("ParseUsername(%q) = %q %v %v", u, lease, got, err)
+	u := Username("hld_1", exp)
+	hold, got, err := ParseUsername(u)
+	if err != nil || hold != "hld_1" || !got.Equal(exp) {
+		t.Fatalf("ParseUsername(%q) = %q %v %v", u, hold, got, err)
 	}
-	if _, _, err := ParseUsername("lse_1"); err == nil {
+	if _, _, err := ParseUsername("hld_1"); err == nil {
 		t.Error("no expiry parsed")
 	}
-	if _, _, err := ParseUsername("x:lse_1"); err == nil {
+	if _, _, err := ParseUsername("x:hld_1"); err == nil {
 		t.Error("bad expiry parsed")
 	}
 	if Password([]byte("a"), u) == Password([]byte("b"), u) {
@@ -98,8 +98,8 @@ func client(t *testing.T, s *Server, username, password string) *pion.Client {
 
 func TestServer(t *testing.T) {
 	ended := map[string]bool{}
-	s := start(t, func(lease string) bool { return !ended[lease] }, 1)
-	creds := s.Credentials("lse_ok", time.Now().Add(time.Hour))
+	s := start(t, func(hold string) bool { return !ended[hold] }, 1)
+	creds := s.Credentials("hld_ok", time.Now().Add(time.Hour))
 	if len(creds) != 1 || len(creds[0].URLs) != 2 || !strings.HasPrefix(creds[0].URLs[1], "turn:127.0.0.1:") {
 		t.Fatalf("credentials: %+v", creds)
 	}
@@ -133,8 +133,8 @@ func TestServer(t *testing.T) {
 		t.Error("quota not enforced")
 	}
 
-	// Expired, wrong password, unknown shape, ended lease.
-	old := s.Credentials("lse_old", time.Now().Add(-time.Minute))
+	// Expired, wrong password, unknown shape, ended hold.
+	old := s.Credentials("hld_old", time.Now().Add(-time.Minute))
 	if r, err := client(t, s, old[0].Username, old[0].Credential).Allocate(); err == nil {
 		r.Close()
 		t.Error("an expired credential was accepted")
@@ -147,10 +147,10 @@ func TestServer(t *testing.T) {
 		r.Close()
 		t.Error("a malformed username was accepted")
 	}
-	ended["lse_gone"] = true
-	gone := s.Credentials("lse_gone", time.Now().Add(time.Hour))
+	ended["hld_gone"] = true
+	gone := s.Credentials("hld_gone", time.Now().Add(time.Hour))
 	if r, err := client(t, s, gone[0].Username, gone[0].Credential).Allocate(); err == nil {
 		r.Close()
-		t.Error("an ended lease's credential was accepted")
+		t.Error("an ended hold's credential was accepted")
 	}
 }

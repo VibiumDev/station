@@ -1,7 +1,7 @@
 // Package signal is the viewer's signaling endpoint on the station,
 // /v1/devices/{id}/signal: a WebSocket relayed over the rig's tunnel to
 // the rig's own signaling handler. The viewer's first message carries its
-// lease grant and the rig checks it; the station only checks that the
+// hold grant and the rig checks it; the station only checks that the
 // caller is signed in and the device exists.
 package signal
 
@@ -21,7 +21,7 @@ type Handler struct {
 	Relay   *relay.Relay
 	Devices station.DeviceStore
 	// Touch is called with the device id when a signaling session starts
-	// and ends, so the lease counts as active. Optional.
+	// and ends, so the hold counts as active. Optional.
 	Touch func(ctx context.Context, deviceID string)
 }
 

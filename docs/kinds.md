@@ -10,8 +10,8 @@ treat each one correctly if the store ever backs one.
 | Kind | Range | Event | Signed by | Stored |
 |---|---|---|---|---|
 | 0 | metadata | Station profile: `{"name":...}` | Station | Replaced |
-| 7700 | regular | Lease grant (the session token) | Station | Kept |
-| 7701 | regular | Lease revocation | Station | Kept |
+| 7700 | regular | Hold grant (the session token) | Station | Kept |
+| 7701 | regular | Hold revocation | Station | Kept |
 | 7702 | regular | Enrollment request | Rig | Kept |
 | 7703 | regular | Operator attestation ("this rig is mine") | Operator | Kept |
 | 17700 | replaceable | Rig announcement: name, devices | Rig | Newest per rig |
@@ -21,7 +21,7 @@ treat each one correctly if the store ever backs one.
 Every event names its parties in `p` tags: the station, the rig and, when
 the device has a key, the device. Station's own tags are single words.
 
-## Lease grant (7700)
+## Hold grant (7700)
 
 | Tag | Value | The rig checks |
 |---|---|---|
@@ -29,22 +29,22 @@ the device has a key, the device. Station's own tags are single words.
 | `p` | the device's key, when it has one | |
 | `rig` | the rig id the station assigned | Matches what enrollment returned |
 | `dev` | the device id, `<rig id>/<device name>` | One of this rig's devices |
-| `sub` | who holds the lease: `owner`, `token:<name>` or a login | Logged |
-| `lease` | the lease id, `lse_<hex>` | The current lease, or a higher `seq` |
-| `seq` | the device's lease counter | Never lower than the one it has |
+| `sub` | who holds the hold: `owner`, `token:<name>` or a login | Logged |
+| `hold` | the hold id, `hld_<hex>` | The current hold, or a higher `seq` |
+| `seq` | the device's hold counter | Never lower than the one it has |
 | `scope` | one per tag: `view`, `input`, `bidi`, `admin` | Each operation's scope, and the rig policy allows it |
 | `stun` | STUN URLs, when the station has them | Nothing; the rig gathers candidates with them |
-| `turn` | the lease's TURN username (`<expiry>:<lease id>`), its credential, then the TURN URLs | Nothing; the rig gathers relay candidates with them. The credential lasts the lease's maximum time |
+| `turn` | the hold's TURN username (`<expiry>:<hold id>`), its credential, then the TURN URLs | Nothing; the rig gathers relay candidates with them. The credential lasts the hold's maximum time |
 | `expiration` | NIP-40, 10 minutes after `created_at` | Not expired, 30 s skew |
 | `nonce` | 8 random bytes, hex | Nothing; it keeps every grant's id distinct |
 
 `content` is empty. The event `id` is the replay nonce: a grant is accepted
-once per connection. Refreshed grants carry the same `lease` and `seq`.
+once per connection. Refreshed grants carry the same `hold` and `seq`.
 
-## Lease revocation (7701)
+## Hold revocation (7701)
 
-Tags `p` (rig), `lease`, `e` (the grant's id). The rig ends every session on
-that lease within a second.
+Tags `p` (rig), `hold`, `e` (the grant's id). The rig ends every session on
+that hold within a second.
 
 ## Enrollment request (7702)
 

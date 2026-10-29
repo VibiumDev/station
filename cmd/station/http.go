@@ -16,7 +16,7 @@ import (
 
 	"github.com/VibiumDev/station"
 	"github.com/VibiumDev/station/enroll"
-	"github.com/VibiumDev/station/lease"
+	"github.com/VibiumDev/station/hold"
 	"github.com/VibiumDev/station/relay"
 	"github.com/VibiumDev/station/signal"
 	"github.com/VibiumDev/station/sqlite"
@@ -33,7 +33,7 @@ type server struct {
 	db        *sqlite.DB
 	key       nostr.SecretKey
 	auth      *auth
-	leases    *lease.Manager
+	holds     *hold.Manager
 	tunnel    *tunnel.Server
 	enroll    *enroll.Handler
 	signal    *signal.Handler
@@ -70,9 +70,9 @@ func (s *server) handler() http.Handler {
 	mux.Handle("POST /settings/rigs/remove", s.page(station.ActionManage, s.removeRig))
 	// The API.
 	mux.Handle("GET /v1/devices", s.api(station.ActionView, s.listDevices))
-	mux.Handle("POST /v1/devices/{rig}/{name}/lease", s.api(station.ActionView, s.takeLease))
-	mux.Handle("DELETE /v1/devices/{rig}/{name}/lease", s.api(station.ActionView, s.releaseLease))
-	mux.Handle("POST /v1/devices/{rig}/{name}/lease/release", s.api(station.ActionView, s.releaseLease))
+	mux.Handle("POST /v1/devices/{rig}/{name}/hold", s.api(station.ActionView, s.takeHold))
+	mux.Handle("DELETE /v1/devices/{rig}/{name}/hold", s.api(station.ActionView, s.releaseHold))
+	mux.Handle("POST /v1/devices/{rig}/{name}/hold/release", s.api(station.ActionView, s.releaseHold))
 	mux.Handle("GET /v1/devices/{rig}/{name}/signal", s.api(station.ActionView, func(w http.ResponseWriter, r *http.Request, _ station.Principal) {
 		s.signal.ServeDevice(w, r, deviceID(r))
 	}))
@@ -237,7 +237,7 @@ type deviceView struct {
 	Input     string             `json:"input,omitempty"`
 	Rig       rigView            `json:"rig"`
 	Online    bool               `json:"online"`
-	Lease     *leaseView         `json:"lease"`
+	Hold      *holdView          `json:"hold"`
 }
 
 type rigView struct {
@@ -246,7 +246,7 @@ type rigView struct {
 	Npub string `json:"npub"`
 }
 
-type leaseView struct {
+type holdView struct {
 	ID      string    `json:"id"`
 	Seq     uint64    `json:"seq"`
 	Subject string    `json:"subject"`
@@ -267,7 +267,7 @@ func (s *server) devices(ctx context.Context) ([]deviceView, error) {
 			v := deviceView{ID: d.ID, Name: d.Name(), Kind: d.Kind, Caps: d.Caps, Shortcuts: d.Shortcuts, Input: d.Input,
 				Rig: rigView{ID: rg.ID, Name: rg.Name, Npub: npub(rg.PubKey)}, Online: online}
 			if l, err := s.db.Current(ctx, d.ID); err == nil {
-				v.Lease = &leaseView{ID: l.ID, Seq: l.Seq, Subject: l.Subject, Scopes: station.ScopeStrings(l.Scopes), Since: l.CreatedAt, Expires: l.ExpiresAt}
+				v.Hold = &holdView{ID: l.ID, Seq: l.Seq, Subject: l.Subject, Scopes: station.ScopeStrings(l.Scopes), Since: l.CreatedAt, Expires: l.ExpiresAt}
 			}
 			out = append(out, v)
 		}
@@ -290,9 +290,9 @@ func (s *server) listDevices(w http.ResponseWriter, r *http.Request, _ station.P
 	apiJSON(w, devs)
 }
 
-// takeLease is POST /v1/devices/{rig}/{name}/lease: {"scopes": [...]}
-// gives a grant on a lease, the caller's own or, watching, the holder's.
-func (s *server) takeLease(w http.ResponseWriter, r *http.Request, p station.Principal) {
+// takeHold is POST /v1/devices/{rig}/{name}/hold: {"scopes": [...]}
+// gives a grant on a hold, the caller's own or, watching, the holder's.
+func (s *server) takeHold(w http.ResponseWriter, r *http.Request, p station.Principal) {
 	var body struct {
 		Scopes []string `json:"scopes"`
 	}
@@ -320,7 +320,7 @@ func (s *server) takeLease(w http.ResponseWriter, r *http.Request, p station.Pri
 		apiError(w, http.StatusForbidden, "this token may only view")
 		return
 	}
-	res, err := s.leases.Take(r.Context(), lease.Request{DeviceID: id, Subject: p.Subject, Scopes: scopes})
+	res, err := s.holds.Take(r.Context(), hold.Request{DeviceID: id, Subject: p.Subject, Scopes: scopes})
 	if errors.Is(err, station.ErrNotFound) {
 		apiError(w, http.StatusNotFound, "no such device")
 		return
@@ -337,18 +337,18 @@ func (s *server) takeLease(w http.ResponseWriter, r *http.Request, p station.Pri
 		"grant":    res.Event,
 		"ice":      ice,
 		"observer": res.Observer,
-		"lease": leaseView{ID: res.Lease.ID, Seq: res.Lease.Seq, Subject: res.Lease.Subject, Scopes: station.ScopeStrings(res.Grant.Scopes),
-			Since: res.Lease.CreatedAt, Expires: res.Grant.ExpiresAt},
+		"hold": holdView{ID: res.Hold.ID, Seq: res.Hold.Seq, Subject: res.Hold.Subject, Scopes: station.ScopeStrings(res.Grant.Scopes),
+			Since: res.Hold.CreatedAt, Expires: res.Grant.ExpiresAt},
 		"signal": "/v1/devices/" + id + "/signal",
-		"online": s.tunnel.IsOnline(res.Lease.RigID),
+		"online": s.tunnel.IsOnline(res.Hold.RigID),
 	})
 }
 
 // relayed forwards a request to one of the rig's own endpoints with a
-// grant the station signs for the caller: a seat on the device's lease
-// with the scope the endpoint needs. Viewing gets the caller's own lease
+// grant the station signs for the caller: a seat on the device's hold
+// with the scope the endpoint needs. Viewing gets the caller's own hold
 // or a seat watching the holder's; input needs the caller to hold the
-// lease already, taken through the lease endpoint. The rig checks the
+// hold already, taken through the hold endpoint. The rig checks the
 // grant like any other, and the stream it serves is capped on its side.
 func (s *server) relayed(rigPath string, scope station.Scope) handlerWithPrincipal {
 	return func(w http.ResponseWriter, r *http.Request, p station.Principal) {
@@ -362,7 +362,7 @@ func (s *server) relayed(rigPath string, scope station.Scope) handlerWithPrincip
 			}
 			scopes = append(scopes, scope)
 		}
-		res, err := s.leases.Take(r.Context(), lease.Request{DeviceID: id, Subject: p.Subject, Scopes: scopes})
+		res, err := s.holds.Take(r.Context(), hold.Request{DeviceID: id, Subject: p.Subject, Scopes: scopes})
 		if errors.Is(err, station.ErrNotFound) {
 			apiError(w, http.StatusNotFound, "no such device")
 			return
@@ -377,10 +377,10 @@ func (s *server) relayed(rigPath string, scope station.Scope) handlerWithPrincip
 	}
 }
 
-func (s *server) releaseLease(w http.ResponseWriter, r *http.Request, p station.Principal) {
+func (s *server) releaseHold(w http.ResponseWriter, r *http.Request, p station.Principal) {
 	id := deviceID(r)
 	cur, err := s.db.Current(r.Context(), id)
-	if errors.Is(err, station.ErrNoLease) {
+	if errors.Is(err, station.ErrNoHold) {
 		apiJSON(w, map[string]any{"released": false})
 		return
 	}
@@ -388,8 +388,8 @@ func (s *server) releaseLease(w http.ResponseWriter, r *http.Request, p station.
 		apiError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
-	if err := s.leases.Release(r.Context(), cur.ID, p.Subject); err != nil {
-		if errors.Is(err, lease.ErrNotHolder) {
+	if err := s.holds.Release(r.Context(), cur.ID, p.Subject); err != nil {
+		if errors.Is(err, hold.ErrNotHolder) {
 			apiError(w, http.StatusForbidden, "someone else holds this device")
 			return
 		}

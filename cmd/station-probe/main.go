@@ -1,8 +1,8 @@
 // Command station-probe checks a station from outside, the way a browser
-// would: it signs in with an API token, leases a device, connects over
+// would: it signs in with an API token, holds a device, connects over
 // WebRTC through TURN only (unless told otherwise), measures what arrives,
 // taps the screen and confirms the screenshot changed, and releases the
-// lease. It exits non-zero on any failure, so it doubles as a smoke test
+// hold. It exits non-zero on any failure, so it doubles as a smoke test
 // for any station, including a hosted one.
 //
 //	station-probe -station https://host -token stk_... [-device rig_x/phone] [-t 10s] [-ice relay|all] [-tap 0.5,0.5] [-insecure]
@@ -39,17 +39,17 @@ type iceServer struct {
 	Credential string   `json:"credential,omitempty"`
 }
 
-type leaseResponse struct {
+type holdResponse struct {
 	Grant    json.RawMessage `json:"grant"`
 	ICE      []iceServer     `json:"ice"`
 	Observer bool            `json:"observer"`
 	Signal   string          `json:"signal"`
 	Online   bool            `json:"online"`
-	Lease    struct {
+	Hold     struct {
 		ID      string `json:"id"`
 		Seq     uint64 `json:"seq"`
 		Subject string `json:"subject"`
-	} `json:"lease"`
+	} `json:"hold"`
 }
 
 type device struct {
@@ -188,23 +188,23 @@ func (p *probe) run(devID string, dur time.Duration, icePolicy, tap string) erro
 		return errors.New("the device is offline")
 	}
 
-	var lease leaseResponse
-	if err := p.api(ctx, "POST", "/v1/devices/"+dev.ID+"/lease", map[string]any{"scopes": []string{"view", "input"}}, &lease); err != nil {
+	var hold holdResponse
+	if err := p.api(ctx, "POST", "/v1/devices/"+dev.ID+"/hold", map[string]any{"scopes": []string{"view", "input"}}, &hold); err != nil {
 		return err
 	}
 	defer func() {
 		var out map[string]any
-		if err := p.api(context.Background(), "DELETE", "/v1/devices/"+dev.ID+"/lease", nil, &out); err != nil {
+		if err := p.api(context.Background(), "DELETE", "/v1/devices/"+dev.ID+"/hold", nil, &out); err != nil {
 			p.fail("release: " + err.Error())
 		} else if out["released"] != true {
-			p.fail("the lease was not released")
+			p.fail("the hold was not released")
 		} else {
-			fmt.Println("lease released")
+			fmt.Println("hold released")
 		}
 	}()
 	var servers []webrtc.ICEServer
 	hasTURN := false
-	for _, s := range lease.ICE {
+	for _, s := range hold.ICE {
 		servers = append(servers, webrtc.ICEServer{URLs: s.URLs, Username: s.Username, Credential: s.Credential})
 		for _, u := range s.URLs {
 			if strings.HasPrefix(u, "turn") {
@@ -212,8 +212,8 @@ func (p *probe) run(devID string, dur time.Duration, icePolicy, tap string) erro
 			}
 		}
 	}
-	fmt.Printf("lease %s seq %d as %s, observer=%v, ICE servers: %v\n", lease.Lease.ID, lease.Lease.Seq, lease.Lease.Subject, lease.Observer, urls(lease.ICE))
-	if lease.Observer {
+	fmt.Printf("hold %s seq %d as %s, observer=%v, ICE servers: %v\n", hold.Hold.ID, hold.Hold.Seq, hold.Hold.Subject, hold.Observer, urls(hold.ICE))
+	if hold.Observer {
 		return errors.New("got an observer seat, not control")
 	}
 	if icePolicy == "relay" && !hasTURN {
@@ -221,7 +221,7 @@ func (p *probe) run(devID string, dur time.Duration, icePolicy, tap string) erro
 	}
 
 	// Signaling through the station, the grant in the hello.
-	wsURL := "ws" + strings.TrimPrefix(p.base, "http") + lease.Signal
+	wsURL := "ws" + strings.TrimPrefix(p.base, "http") + hold.Signal
 	conn, _, err := websocket.Dial(ctx, wsURL, &websocket.DialOptions{HTTPClient: p.client, HTTPHeader: http.Header{"Authorization": {"Bearer " + p.token}}})
 	if err != nil {
 		return fmt.Errorf("signaling: %w", err)
@@ -338,7 +338,7 @@ func (p *probe) run(devID string, dur time.Duration, icePolicy, tap string) erro
 	})
 	pc.OnConnectionStateChange(func(s webrtc.PeerConnectionState) { fmt.Printf("connection: %s\n", s) })
 
-	if err := send(message{Type: "hello", Grant: lease.Grant}); err != nil {
+	if err := send(message{Type: "hello", Grant: hold.Grant}); err != nil {
 		return err
 	}
 	go func() {

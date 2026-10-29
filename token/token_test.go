@@ -21,7 +21,7 @@ var (
 func grant() Grant {
 	return Grant{
 		Rig: rigKey.Public(), RigID: "rig_0007", DeviceID: "rig_0007/phone", Subject: "owner",
-		LeaseID: "lse_9f3c", Seq: 42, Scopes: []station.Scope{station.ScopeView, station.ScopeInput},
+		HoldID: "hld_9f3c", Seq: 42, Scopes: []station.Scope{station.ScopeView, station.ScopeInput},
 		IssuedAt: now,
 	}
 }
@@ -47,7 +47,7 @@ func TestGrantRoundTrip(t *testing.T) {
 		t.Fatal(err)
 	}
 	if g.Station != stationKey.Public() || g.Rig != rigKey.Public() || g.RigID != "rig_0007" || g.DeviceID != "rig_0007/phone" ||
-		g.Subject != "owner" || g.LeaseID != "lse_9f3c" || g.Seq != 42 || !g.HasScope(station.ScopeInput) || g.HasScope(station.ScopeBidi) {
+		g.Subject != "owner" || g.HoldID != "hld_9f3c" || g.Seq != 42 || !g.HasScope(station.ScopeInput) || g.HasScope(station.ScopeBidi) {
 		t.Errorf("fields lost: %+v", g)
 	}
 	if !g.ExpiresAt.Equal(now.Add(GrantLifetime)) {
@@ -153,13 +153,13 @@ func TestGrantNeedsItsFields(t *testing.T) {
 	if _, err := SignGrant(stationKey, g); !errors.Is(err, ErrMalformed) {
 		t.Errorf("no scopes: %v", err)
 	}
-	// A signed event missing the lease tag parses as malformed, not as a
+	// A signed event missing the hold tag parses as malformed, not as a
 	// signature error.
 	e := nostr.Event{Kind: KindGrant, CreatedAt: nostr.Timestamp(now.Unix()),
 		Tags: nostr.Tags{{"p", rigKey.Public().Hex()}, {"rig", "rig_0007"}, {"dev", "rig_0007/phone"}, {"scope", "view"}, {"expiration", "1"}}}
 	e.Sign(stationKey)
 	if _, err := ParseGrant(e); !errors.Is(err, ErrMalformed) {
-		t.Errorf("missing lease: %v", err)
+		t.Errorf("missing hold: %v", err)
 	}
 }
 
@@ -179,7 +179,7 @@ func TestHeader(t *testing.T) {
 }
 
 func TestRevocation(t *testing.T) {
-	ev, err := SignRevocation(stationKey, Revocation{Rig: rigKey.Public(), LeaseID: "lse_9f3c", IssuedAt: now})
+	ev, err := SignRevocation(stationKey, Revocation{Rig: rigKey.Public(), HoldID: "hld_9f3c", IssuedAt: now})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -187,10 +187,10 @@ func TestRevocation(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if r.Station != stationKey.Public() || r.Rig != rigKey.Public() || r.LeaseID != "lse_9f3c" {
+	if r.Station != stationKey.Public() || r.Rig != rigKey.Public() || r.HoldID != "hld_9f3c" {
 		t.Errorf("fields lost: %+v", r)
 	}
-	ev.Tags[1][1] = "lse_0000"
+	ev.Tags[1][1] = "hld_0000"
 	if _, err := ParseRevocation(ev); !errors.Is(err, ErrSignature) {
 		t.Errorf("tampered: %v", err)
 	}
@@ -198,9 +198,9 @@ func TestRevocation(t *testing.T) {
 
 func TestGrantICE(t *testing.T) {
 	sk := nostr.Generate()
-	g := Grant{Rig: nostr.Generate().Public(), RigID: "rig_1", DeviceID: "rig_1/phone", Subject: "owner", LeaseID: "lse_1", Seq: 1,
+	g := Grant{Rig: nostr.Generate().Public(), RigID: "rig_1", DeviceID: "rig_1/phone", Subject: "owner", HoldID: "hld_1", Seq: 1,
 		Scopes: []station.Scope{station.ScopeView},
-		ICE:    []ICEServer{{URLs: []string{"stun:203.0.113.1:3478"}}, {URLs: []string{"turn:203.0.113.1:3478?transport=udp"}, Username: "1:lse_1", Credential: "secret"}}}
+		ICE:    []ICEServer{{URLs: []string{"stun:203.0.113.1:3478"}}, {URLs: []string{"turn:203.0.113.1:3478?transport=udp"}, Username: "1:hld_1", Credential: "secret"}}}
 	ev, err := SignGrant(sk, g)
 	if err != nil {
 		t.Fatal(err)
@@ -209,7 +209,7 @@ func TestGrantICE(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(got.ICE) != 2 || got.ICE[0].URLs[0] != "stun:203.0.113.1:3478" || got.ICE[1].Username != "1:lse_1" || got.ICE[1].Credential != "secret" || got.ICE[1].URLs[0] != "turn:203.0.113.1:3478?transport=udp" {
+	if len(got.ICE) != 2 || got.ICE[0].URLs[0] != "stun:203.0.113.1:3478" || got.ICE[1].Username != "1:hld_1" || got.ICE[1].Credential != "secret" || got.ICE[1].URLs[0] != "turn:203.0.113.1:3478?transport=udp" {
 		t.Errorf("ICE servers: %+v", got.ICE)
 	}
 	bad := ev

@@ -1,5 +1,5 @@
 // Package station is the model Vibium Station's packages share: rigs,
-// devices, leases, principals and scopes, and the five interfaces an
+// devices, holds, principals and scopes, and the five interfaces an
 // embedding application implements. Station's code never names a kind of
 // device; what a rig offers is data.
 package station
@@ -23,7 +23,7 @@ import (
 // later without a migration.
 type EventStore = eventstore.Store
 
-// Scope is what a lease grant allows on a device.
+// Scope is what a hold grant allows on a device.
 type Scope string
 
 const (
@@ -155,9 +155,9 @@ type Principal struct {
 	Admin    bool   // may enroll and remove rigs, make codes and tokens
 }
 
-// Lease is control of one device by one subject, numbered per device so
-// a newer lease always wins on the rig.
-type Lease struct {
+// Hold is control of one device by one subject, numbered per device so
+// a newer hold always wins on the rig.
+type Hold struct {
 	ID         string
 	DeviceID   string
 	RigID      string
@@ -170,8 +170,8 @@ type Lease struct {
 	ReleasedAt time.Time // zero while held
 }
 
-// Held says whether the lease is still in force at t.
-func (l Lease) Held(t time.Time) bool {
+// Held says whether the hold is still in force at t.
+func (l Hold) Held(t time.Time) bool {
 	return l.ReleasedAt.IsZero() && t.Before(l.ExpiresAt)
 }
 
@@ -180,7 +180,7 @@ type Action string
 
 const (
 	ActionView    Action = "view"    // open the viewer, screenshots, status
-	ActionControl Action = "control" // take a lease with input
+	ActionControl Action = "control" // take a hold with input
 	ActionBidi    Action = "bidi"    // drive the device with an agent
 	ActionAdmin   Action = "admin"   // the device's admin endpoints
 	ActionManage  Action = "manage"  // enroll and remove rigs, codes, tokens
@@ -191,7 +191,7 @@ var (
 	ErrUnauthenticated = errors.New("not signed in")
 	ErrForbidden       = errors.New("not allowed")
 	ErrNotFound        = errors.New("not found")
-	ErrNoLease         = errors.New("no lease")
+	ErrNoHold          = errors.New("no hold")
 )
 
 // Authenticator says who a request comes from.
@@ -217,18 +217,18 @@ type DeviceStore interface {
 	Device(ctx context.Context, id string) (Device, error)
 }
 
-// LeaseStore holds leases and each device's sequence counter.
-type LeaseStore interface {
-	// Current is the lease held on a device, or ErrNoLease.
-	Current(ctx context.Context, deviceID string) (Lease, error)
-	// Create stores a new lease with the device's next sequence number and
+// HoldStore holds holds and each device's sequence counter.
+type HoldStore interface {
+	// Current is the hold held on a device, or ErrNoHold.
+	Current(ctx context.Context, deviceID string) (Hold, error)
+	// Create stores a new hold with the device's next sequence number and
 	// returns it with Seq set.
-	Create(ctx context.Context, lease Lease) (Lease, error)
-	Lease(ctx context.Context, id string) (Lease, error)
+	Create(ctx context.Context, hold Hold) (Hold, error)
+	Hold(ctx context.Context, id string) (Hold, error)
 	Touch(ctx context.Context, id string, at time.Time) error
 	Release(ctx context.Context, id string, at time.Time) error
-	// Held lists every lease still held.
-	Held(ctx context.Context) ([]Lease, error)
+	// Held lists every hold still held.
+	Held(ctx context.Context) ([]Hold, error)
 }
 
 // AuditEntry is one thing that happened.
@@ -237,7 +237,7 @@ type AuditEntry struct {
 	Subject  string
 	Action   string
 	DeviceID string
-	LeaseID  string
+	HoldID   string
 	Detail   string
 }
 

@@ -26,7 +26,7 @@ func open(t *testing.T) *DB {
 var (
 	_ station.EventStore  = (*DB)(nil)
 	_ station.DeviceStore = (*DB)(nil)
-	_ station.LeaseStore  = (*DB)(nil)
+	_ station.HoldStore   = (*DB)(nil)
 	_ station.AuditSink   = (*DB)(nil)
 )
 
@@ -49,8 +49,8 @@ func TestEvents(t *testing.T) {
 	d := open(t)
 	sk, other := nostr.Generate(), nostr.Generate()
 	rig := nostr.Generate().Public()
-	a := signed(t, sk, token.KindGrant, 100, nostr.Tags{{"p", rig.Hex()}, {"lease", "lse_1"}}, "")
-	b := signed(t, sk, token.KindGrant, 200, nostr.Tags{{"p", rig.Hex()}, {"lease", "lse_2"}}, "")
+	a := signed(t, sk, token.KindGrant, 100, nostr.Tags{{"p", rig.Hex()}, {"hold", "hld_1"}}, "")
+	b := signed(t, sk, token.KindGrant, 200, nostr.Tags{{"p", rig.Hex()}, {"hold", "hld_2"}}, "")
 	c := signed(t, other, token.KindRevocation, 300, nostr.Tags{{"p", rig.Hex()}}, "")
 	for _, ev := range []nostr.Event{a, b, c} {
 		if err := d.SaveEvent(ev); err != nil {
@@ -74,7 +74,7 @@ func TestEvents(t *testing.T) {
 		{"by kind", nostr.Filter{Kinds: []nostr.Kind{token.KindGrant}}, []nostr.ID{b.ID, a.ID}},
 		{"by author", nostr.Filter{Authors: []nostr.PubKey{other.Public()}}, []nostr.ID{c.ID}},
 		{"by p tag", nostr.Filter{Tags: nostr.TagMap{"p": {rig.Hex()}}}, []nostr.ID{c.ID, b.ID, a.ID}},
-		{"by lease tag", nostr.Filter{Tags: nostr.TagMap{"lease": {"lse_2"}}}, nil}, // multi-letter tags are not indexed
+		{"by hold tag", nostr.Filter{Tags: nostr.TagMap{"hold": {"hld_2"}}}, nil}, // multi-letter tags are not indexed
 		{"since", nostr.Filter{Since: 200}, []nostr.ID{c.ID, b.ID}},
 		{"until", nostr.Filter{Until: 200}, []nostr.ID{b.ID, a.ID}},
 		{"limit", nostr.Filter{Limit: 1}, []nostr.ID{c.ID}},
@@ -183,62 +183,62 @@ func TestRigsAndDevices(t *testing.T) {
 	}
 }
 
-func TestLeases(t *testing.T) {
+func TestHolds(t *testing.T) {
 	d := open(t)
 	ctx := context.Background()
 	now := time.Now()
-	mk := func(id string) station.Lease {
-		return station.Lease{ID: id, DeviceID: "rig_1/phone", RigID: "rig_1", Subject: "owner", Scopes: []station.Scope{station.ScopeView, station.ScopeInput},
+	mk := func(id string) station.Hold {
+		return station.Hold{ID: id, DeviceID: "rig_1/phone", RigID: "rig_1", Subject: "owner", Scopes: []station.Scope{station.ScopeView, station.ScopeInput},
 			CreatedAt: now, ActiveAt: now, ExpiresAt: now.Add(8 * time.Hour)}
 	}
-	if _, err := d.Current(ctx, "rig_1/phone"); !errors.Is(err, station.ErrNoLease) {
+	if _, err := d.Current(ctx, "rig_1/phone"); !errors.Is(err, station.ErrNoHold) {
 		t.Errorf("empty: %v", err)
 	}
-	l1, err := d.Create(ctx, mk("lse_1"))
+	l1, err := d.Create(ctx, mk("hld_1"))
 	if err != nil || l1.Seq != 1 {
 		t.Fatalf("first: %+v %v", l1, err)
 	}
-	l2, err := d.Create(ctx, mk("lse_2"))
+	l2, err := d.Create(ctx, mk("hld_2"))
 	if err != nil || l2.Seq != 2 {
 		t.Fatalf("second: %+v %v", l2, err)
 	}
 	cur, err := d.Current(ctx, "rig_1/phone")
-	if err != nil || cur.ID != "lse_2" {
+	if err != nil || cur.ID != "hld_2" {
 		t.Fatalf("current: %+v %v", cur, err)
 	}
-	if err := d.Release(ctx, "lse_2", now); err != nil {
+	if err := d.Release(ctx, "hld_2", now); err != nil {
 		t.Fatal(err)
 	}
-	if err := d.Release(ctx, "lse_2", now); !errors.Is(err, station.ErrNotFound) {
+	if err := d.Release(ctx, "hld_2", now); !errors.Is(err, station.ErrNotFound) {
 		t.Errorf("released twice: %v", err)
 	}
 	cur, err = d.Current(ctx, "rig_1/phone")
-	if err != nil || cur.ID != "lse_1" {
+	if err != nil || cur.ID != "hld_1" {
 		t.Fatalf("after release: %+v %v", cur, err)
 	}
-	if err := d.Touch(ctx, "lse_1", now.Add(time.Minute)); err != nil {
+	if err := d.Touch(ctx, "hld_1", now.Add(time.Minute)); err != nil {
 		t.Fatal(err)
 	}
-	got, _ := d.Lease(ctx, "lse_1")
+	got, _ := d.Hold(ctx, "hld_1")
 	if !got.ActiveAt.Equal(now.Add(time.Minute)) {
 		t.Errorf("touch not kept: %v", got.ActiveAt)
 	}
 	held, _ := d.Held(ctx)
-	if len(held) != 1 || held[0].ID != "lse_1" {
+	if len(held) != 1 || held[0].ID != "hld_1" {
 		t.Errorf("held: %+v", held)
 	}
-	// An expired lease is not current.
-	short := mk("lse_3")
+	// An expired hold is not current.
+	short := mk("hld_3")
 	short.ExpiresAt = now.Add(-time.Second)
 	if _, err := d.Create(ctx, short); err != nil {
 		t.Fatal(err)
 	}
 	cur, _ = d.Current(ctx, "rig_1/phone")
-	if cur.ID != "lse_1" {
-		t.Errorf("expired lease is current: %+v", cur)
+	if cur.ID != "hld_1" {
+		t.Errorf("expired hold is current: %+v", cur)
 	}
 	// The counter keeps going after a device is re-announced.
-	l4, _ := d.Create(ctx, mk("lse_4"))
+	l4, _ := d.Create(ctx, mk("hld_4"))
 	if l4.Seq != 4 {
 		t.Errorf("seq %d, want 4", l4.Seq)
 	}
@@ -284,9 +284,9 @@ func TestTokensAndCodes(t *testing.T) {
 	if err := d.UseCode(ctx, "NOPE-0000-7F3A", now); !errors.Is(err, ErrCode) {
 		t.Errorf("unknown: %v", err)
 	}
-	d.Audit(ctx, station.AuditEntry{Subject: "owner", Action: "lease", DeviceID: "rig_1/phone", LeaseID: "lse_1"})
+	d.Audit(ctx, station.AuditEntry{Subject: "owner", Action: "hold", DeviceID: "rig_1/phone", HoldID: "hld_1"})
 	entries, _ := d.AuditEntries(ctx, 10)
-	if len(entries) != 1 || entries[0].Action != "lease" {
+	if len(entries) != 1 || entries[0].Action != "hold" {
 		t.Errorf("audit: %+v", entries)
 	}
 }

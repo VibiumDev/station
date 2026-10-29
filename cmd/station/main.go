@@ -26,7 +26,7 @@ import (
 
 	"github.com/VibiumDev/station"
 	"github.com/VibiumDev/station/enroll"
-	"github.com/VibiumDev/station/lease"
+	"github.com/VibiumDev/station/hold"
 	"github.com/VibiumDev/station/relay"
 	"github.com/VibiumDev/station/signal"
 	"github.com/VibiumDev/station/sqlite"
@@ -356,7 +356,7 @@ func serve(args []string) int {
 	tunnelURL := "wss" + strings.TrimPrefix(base, "https") + "/v1/tunnel"
 
 	ts := &tunnel.Server{Key: key.Public(), Devices: db, Events: db}
-	mgr := &lease.Manager{Leases: db, Devices: db, Events: db, Audit: db, Key: key,
+	mgr := &hold.Manager{Holds: db, Devices: db, Events: db, Audit: db, Key: key,
 		OnRevoke: func(_ context.Context, rigID string, ev nostr.Event) {
 			if err := ts.Revoke(rigID, ev); err != nil && !errors.Is(err, tunnel.ErrOffline) {
 				fmt.Fprintln(os.Stderr, "revoke:", err)
@@ -405,8 +405,8 @@ func serve(args []string) int {
 		secret := sha256.Sum256([]byte("vibium station turn " + key.Hex()))
 		turnSrv = &turn.Server{Listen: *turnListen, PublicIP: pub, RelayAddress: *turnRelay, MinPort: lo, MaxPort: hi,
 			Secret: secret[:], Deny: deny, MTU: *turnMTU,
-			Valid: func(leaseID string) bool {
-				l, err := db.Lease(context.Background(), leaseID)
+			Valid: func(holdID string) bool {
+				l, err := db.Hold(context.Background(), holdID)
 				return err == nil && l.Held(time.Now())
 			},
 			Logf: func(format string, args ...any) { fmt.Printf(format+"\n", args...) }}
@@ -415,14 +415,14 @@ func serve(args []string) int {
 			return 1
 		}
 		defer turnSrv.Close()
-		mgr.ICE = func(l station.Lease) []token.ICEServer { return turnSrv.Credentials(l.ID, l.ExpiresAt) }
+		mgr.ICE = func(l station.Hold) []token.ICEServer { return turnSrv.Credentials(l.ID, l.ExpiresAt) }
 		turnInfo = fmt.Sprintf("on: %s, relay ports %d-%d", strings.Join(turnSrv.URLs(), " "), lo, hi)
 	}
 	rl := &relay.Relay{Tunnel: ts, Logf: func(format string, args ...any) { fmt.Printf(format+"\n", args...) }}
 	s := &server{
 		cfg: cfg, dir: dir, db: db, key: key, mode: mode, publicURL: base,
 		auth:     newAuth(cfg, db, who, strings.HasPrefix(base, "https"), proxied),
-		leases:   mgr,
+		holds:    mgr,
 		tunnel:   ts,
 		relay:    rl,
 		turn:     turnSrv,
@@ -446,7 +446,7 @@ func serve(args []string) int {
 			fmt.Fprintln(os.Stderr, "mdns:", err)
 		}
 	}
-	// Leases nobody refreshes end on their own.
+	// Holds nobody refreshes end on their own.
 	go func() {
 		t := time.NewTicker(30 * time.Second)
 		defer t.Stop()
@@ -457,7 +457,7 @@ func serve(args []string) int {
 			case <-t.C:
 				if ended, err := mgr.Expire(context.Background()); err == nil {
 					for _, l := range ended {
-						fmt.Printf("lease %s on %s ended\n", l.ID, l.DeviceID)
+						fmt.Printf("hold %s on %s ended\n", l.ID, l.DeviceID)
 					}
 				}
 			}

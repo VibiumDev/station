@@ -15,7 +15,7 @@ import (
 	"github.com/VibiumDev/station"
 )
 
-// DefaultMaxSession is the longest lease a station may hold unless the
+// DefaultMaxSession is the longest hold a station may hold unless the
 // policy says otherwise.
 const DefaultMaxSession = 8 * time.Hour
 
@@ -37,7 +37,7 @@ type StationEntry struct {
 	Scopes     []string `json:"scopes"`                // view, input, bidi: what grants may carry
 	Admin      bool     `json:"admin"`                 // whether admin grants are accepted
 	MaxSession string   `json:"max_session,omitempty"` // a duration such as "8h"
-	Hours      string   `json:"hours,omitempty"`       // "09:00-18:00", local time, when leases are allowed
+	Hours      string   `json:"hours,omitempty"`       // "09:00-18:00", local time, when holds are allowed
 }
 
 // PubKey decodes the entry's npub.

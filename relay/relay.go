@@ -1,7 +1,7 @@
 // Package relay forwards HTTP to a rig over its tunnel: the station's
 // reverse proxy for signaling now, and for REST, BiDi, MJPEG and the
 // fallback WebSockets later. It is dumb on purpose: bytes in, bytes out,
-// the lease grant passed along for the rig to check.
+// the hold grant passed along for the rig to check.
 package relay
 
 import (

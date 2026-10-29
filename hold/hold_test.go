@@ -1,4 +1,4 @@
-package lease
+package hold
 
 import (
 	"context"
@@ -34,14 +34,14 @@ func setup(t *testing.T) *fixture {
 		Devices: []station.Device{{ID: "rig_1/phone", Kind: "phone", Caps: []string{"video", "hid"}}}}); err != nil {
 		t.Fatal(err)
 	}
-	f.m = &Manager{Leases: db, Devices: db, Events: db, Audit: db, Key: nostr.Generate(),
+	f.m = &Manager{Holds: db, Devices: db, Events: db, Audit: db, Key: nostr.Generate(),
 		Now: func() time.Time { return f.clock },
 		OnRevoke: func(_ context.Context, rigID string, ev nostr.Event) {
 			r, err := token.ParseRevocation(ev)
 			if err != nil || rigID != "rig_1" {
 				t.Errorf("revocation: %v %s", err, rigID)
 			}
-			f.revoked = append(f.revoked, r.LeaseID)
+			f.revoked = append(f.revoked, r.HoldID)
 		}}
 	return f
 }
@@ -57,47 +57,47 @@ func TestTakeRefreshAndRelease(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if res.Observer || res.Lease.Seq != 1 || res.Lease.Subject != "owner" || !station.HasScope(res.Lease.Scopes, station.ScopeView) {
-		t.Fatalf("first lease: %+v", res)
+	if res.Observer || res.Hold.Seq != 1 || res.Hold.Subject != "owner" || !station.HasScope(res.Hold.Scopes, station.ScopeView) {
+		t.Fatalf("first hold: %+v", res)
 	}
 	g, err := token.Verify(res.Event, f.verifier())
 	if err != nil {
 		t.Fatal(err)
 	}
-	if g.LeaseID != res.Lease.ID || g.Seq != 1 || !g.HasScope(station.ScopeInput) || !g.HasScope(station.ScopeView) {
+	if g.HoldID != res.Hold.ID || g.Seq != 1 || !g.HasScope(station.ScopeInput) || !g.HasScope(station.ScopeView) {
 		t.Errorf("grant: %+v", g)
 	}
 	// The grant is in the event store.
 	if n, _ := f.db.CountEvents(nostr.Filter{Kinds: []nostr.Kind{token.KindGrant}}); n != 1 {
 		t.Errorf("stored grants: %d", n)
 	}
-	// The same subject again: the same lease, refreshed.
+	// The same subject again: the same hold, refreshed.
 	f.clock = f.clock.Add(3 * time.Minute)
 	again, err := f.m.Take(ctx, Request{DeviceID: "rig_1/phone", Subject: "owner", Scopes: []station.Scope{station.ScopeInput}})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if again.Lease.ID != res.Lease.ID || again.Lease.Seq != 1 || !again.Lease.ActiveAt.Equal(f.clock) || again.Event.ID == res.Event.ID {
+	if again.Hold.ID != res.Hold.ID || again.Hold.Seq != 1 || !again.Hold.ActiveAt.Equal(f.clock) || again.Event.ID == res.Event.ID {
 		t.Errorf("refresh: %+v", again)
 	}
 	// Only the holder releases.
-	if err := f.m.Release(ctx, res.Lease.ID, "token:ci"); !errors.Is(err, ErrNotHolder) {
+	if err := f.m.Release(ctx, res.Hold.ID, "token:ci"); !errors.Is(err, ErrNotHolder) {
 		t.Errorf("stranger released: %v", err)
 	}
-	if err := f.m.Release(ctx, res.Lease.ID, "owner"); err != nil {
+	if err := f.m.Release(ctx, res.Hold.ID, "owner"); err != nil {
 		t.Fatal(err)
 	}
-	if len(f.revoked) != 1 || f.revoked[0] != res.Lease.ID {
+	if len(f.revoked) != 1 || f.revoked[0] != res.Hold.ID {
 		t.Errorf("revocations: %v", f.revoked)
 	}
-	if _, err := f.db.Current(ctx, "rig_1/phone"); !errors.Is(err, station.ErrNoLease) {
+	if _, err := f.db.Current(ctx, "rig_1/phone"); !errors.Is(err, station.ErrNoHold) {
 		t.Errorf("still held: %v", err)
 	}
 	if n, _ := f.db.CountEvents(nostr.Filter{Kinds: []nostr.Kind{token.KindRevocation}}); n != 1 {
 		t.Errorf("stored revocations: %d", n)
 	}
 	// A second release is quiet.
-	if err := f.m.Release(ctx, res.Lease.ID, "owner"); err != nil || len(f.revoked) != 1 {
+	if err := f.m.Release(ctx, res.Hold.ID, "owner"); err != nil || len(f.revoked) != 1 {
 		t.Errorf("second release: %v %v", err, f.revoked)
 	}
 }
@@ -106,39 +106,39 @@ func TestObserverAndTakeover(t *testing.T) {
 	f := setup(t)
 	ctx := context.Background()
 	holder, _ := f.m.Take(ctx, Request{DeviceID: "rig_1/phone", Subject: "owner", Scopes: []station.Scope{station.ScopeInput}})
-	// View only from someone else: an observer on the holder's lease.
+	// View only from someone else: an observer on the holder's hold.
 	obs, err := f.m.Take(ctx, Request{DeviceID: "rig_1/phone", Subject: "token:ci"})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !obs.Observer || obs.Lease.ID != holder.Lease.ID || obs.Grant.Seq != 1 || obs.Grant.HasScope(station.ScopeInput) || !obs.Grant.HasScope(station.ScopeView) {
+	if !obs.Observer || obs.Hold.ID != holder.Hold.ID || obs.Grant.Seq != 1 || obs.Grant.HasScope(station.ScopeInput) || !obs.Grant.HasScope(station.ScopeView) {
 		t.Errorf("observer: %+v", obs)
 	}
 	if obs.Grant.Subject != "owner" {
-		t.Errorf("observer grant subject %q: the lease's holder is the subject", obs.Grant.Subject)
+		t.Errorf("observer grant subject %q: the hold's holder is the subject", obs.Grant.Subject)
 	}
 	if len(f.revoked) != 0 {
-		t.Errorf("observer ended the lease: %v", f.revoked)
+		t.Errorf("observer ended the hold: %v", f.revoked)
 	}
-	// Input from someone else: takeover with a new lease.
+	// Input from someone else: takeover with a new hold.
 	take, err := f.m.Take(ctx, Request{DeviceID: "rig_1/phone", Subject: "token:ci", Scopes: []station.Scope{station.ScopeBidi}})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if take.Observer || take.Lease.ID == holder.Lease.ID || take.Lease.Seq != 2 || take.Lease.Subject != "token:ci" {
+	if take.Observer || take.Hold.ID == holder.Hold.ID || take.Hold.Seq != 2 || take.Hold.Subject != "token:ci" {
 		t.Errorf("takeover: %+v", take)
 	}
-	if len(f.revoked) != 1 || f.revoked[0] != holder.Lease.ID {
-		t.Errorf("old lease not revoked: %v", f.revoked)
+	if len(f.revoked) != 1 || f.revoked[0] != holder.Hold.ID {
+		t.Errorf("old hold not revoked: %v", f.revoked)
 	}
 	cur, _ := f.db.Current(ctx, "rig_1/phone")
-	if cur.ID != take.Lease.ID {
-		t.Errorf("current %s, want %s", cur.ID, take.Lease.ID)
+	if cur.ID != take.Hold.ID {
+		t.Errorf("current %s, want %s", cur.ID, take.Hold.ID)
 	}
-	// The holder asking for more scopes gets a new lease too.
+	// The holder asking for more scopes gets a new hold too.
 	more, _ := f.m.Take(ctx, Request{DeviceID: "rig_1/phone", Subject: "token:ci", Scopes: []station.Scope{station.ScopeBidi, station.ScopeInput}})
-	if more.Lease.Seq != 3 || len(f.revoked) != 2 {
-		t.Errorf("more scopes: seq %d, revoked %v", more.Lease.Seq, f.revoked)
+	if more.Hold.Seq != 3 || len(f.revoked) != 2 {
+		t.Errorf("more scopes: seq %d, revoked %v", more.Hold.Seq, f.revoked)
 	}
 }
 
@@ -150,32 +150,32 @@ func TestExpire(t *testing.T) {
 	if ended, _ := f.m.Expire(ctx); len(ended) != 0 {
 		t.Errorf("ended early: %v", ended)
 	}
-	f.m.Touch(ctx, res.Lease.ID)
+	f.m.Touch(ctx, res.Hold.ID)
 	f.clock = f.clock.Add(4 * time.Minute)
 	if ended, _ := f.m.Expire(ctx); len(ended) != 0 {
 		t.Errorf("ended after a touch: %v", ended)
 	}
 	f.clock = f.clock.Add(IdleTimeout)
 	ended, err := f.m.Expire(ctx)
-	if err != nil || len(ended) != 1 || ended[0].ID != res.Lease.ID || len(f.revoked) != 1 {
+	if err != nil || len(ended) != 1 || ended[0].ID != res.Hold.ID || len(f.revoked) != 1 {
 		t.Errorf("idle: %v %v %v", ended, err, f.revoked)
 	}
-	// Maximum time, with the lease kept active.
+	// Maximum time, with the hold kept active.
 	res, _ = f.m.Take(ctx, Request{DeviceID: "rig_1/phone", Subject: "owner", Scopes: []station.Scope{station.ScopeInput}})
 	for i := 0; i < 8*60/4; i++ {
 		f.clock = f.clock.Add(4 * time.Minute)
-		f.m.Touch(ctx, res.Lease.ID)
+		f.m.Touch(ctx, res.Hold.ID)
 	}
 	ended, _ = f.m.Expire(ctx)
-	if len(ended) != 1 || ended[0].ID != res.Lease.ID {
+	if len(ended) != 1 || ended[0].ID != res.Hold.ID {
 		t.Errorf("maximum time: %v", ended)
 	}
-	// A grant near the end is cut to the lease's end.
+	// A grant near the end is cut to the hold's end.
 	res, _ = f.m.Take(ctx, Request{DeviceID: "rig_1/phone", Subject: "owner"})
 	f.clock = f.clock.Add(MaxDuration - time.Minute)
 	near, _ := f.m.Take(ctx, Request{DeviceID: "rig_1/phone", Subject: "owner"})
-	if !near.Grant.ExpiresAt.Equal(res.Lease.ExpiresAt) {
-		t.Errorf("grant expiry %v, lease end %v", near.Grant.ExpiresAt, res.Lease.ExpiresAt)
+	if !near.Grant.ExpiresAt.Equal(res.Hold.ExpiresAt) {
+		t.Errorf("grant expiry %v, hold end %v", near.Grant.ExpiresAt, res.Hold.ExpiresAt)
 	}
 }
 

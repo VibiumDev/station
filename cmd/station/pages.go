@@ -62,13 +62,13 @@ var pages = template.Must(template.New("").Funcs(template.FuncMap{"npub": npub, 
 {{define "index"}}{{template "head" (dict "Title" .Name)}}{{template "header" .}}
 <main><h1>Devices</h1>
 {{if not .Devices}}<p class="muted">No rigs yet. Make an enrollment code on <a href="/settings">Settings</a>, then on the rig run <code>roadie enroll --code …</code>.</p>{{end}}
-{{if .Devices}}<table><tr><th>Device</th><th>Rig</th><th>Kind</th><th>Status</th><th>Controller</th><th></th></tr>
+{{if .Devices}}<table><tr><th>Device</th><th>Rig</th><th>Kind</th><th>Status</th><th>Held by</th><th></th></tr>
 {{range .Devices}}<tr>
 <td>{{if .ID}}{{.Name}}{{else}}<span class="muted">no devices announced</span>{{end}}</td>
 <td>{{.Rig.Name}} <span class="muted">{{.Rig.ID}}</span></td>
 <td>{{.Kind}}</td>
 <td>{{if .Online}}<span class="ok">online</span>{{else}}<span class="muted">offline</span>{{end}}</td>
-<td>{{if .Lease}}{{.Lease.Subject}} <span class="muted">lease {{.Lease.Seq}}</span>{{else}}<span class="muted">free</span>{{end}}</td>
+<td>{{if .Hold}}{{.Hold.Subject}}{{else}}<span class="muted">free</span>{{end}}</td>
 <td>{{if .ID}}<a href="/devices/{{.ID}}/view">Open</a>{{end}}</td>
 </tr>{{end}}</table>{{end}}
 </main></body></html>{{end}}

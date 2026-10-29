@@ -16,18 +16,18 @@ import (
 )
 
 // Gate checks every grant a relayed request presents, with the state that
-// makes the rig the final gate: the current lease per device, the highest
-// sequence seen per station, grants already used, and leases revoked.
+// makes the rig the final gate: the current hold per device, the highest
+// sequence seen per station, grants already used, and holds revoked.
 type Gate struct {
 	Policy  *Policy
 	Key     nostr.PubKey    // the rig's key
 	Devices func() []string // this rig's device ids, under every station's rig id
-	// StatePath persists the lease state, so a restart cannot be made to
-	// accept an older lease. Optional.
+	// StatePath persists the hold state, so a restart cannot be made to
+	// accept an older hold. Optional.
 	StatePath string
-	// OnEnd is told when a device's lease ends: a newer lease arrived or a
-	// revocation did. The rig ends that lease's sessions. Optional.
-	OnEnd func(deviceID, leaseID string)
+	// OnEnd is told when a device's hold ends: a newer hold arrived or a
+	// revocation did. The rig ends that hold's sessions. Optional.
+	OnEnd func(deviceID, holdID string)
 	Now   func() time.Time
 	Logf  func(format string, args ...any)
 
@@ -39,28 +39,28 @@ type Gate struct {
 
 // Errors the gate returns, besides the token package's.
 var (
-	ErrOlderLease    = errors.New("an older lease than the one this device has")
+	ErrOlderHold     = errors.New("an older hold than the one this device has")
 	ErrReplay        = errors.New("grant already used")
-	ErrRevoked       = errors.New("lease revoked")
+	ErrRevoked       = errors.New("hold revoked")
 	ErrScope         = errors.New("grant lacks the scope this needs")
 	ErrPolicy        = errors.New("the rig policy does not allow this station that scope")
-	ErrBusy          = errors.New("another station's lease holds this device")
+	ErrBusy          = errors.New("another station's hold holds this device")
 	ErrHours         = errors.New("outside the hours the rig policy allows")
-	ErrSessionLength = errors.New("the lease is longer than the rig policy allows")
+	ErrSessionLength = errors.New("the hold is longer than the rig policy allows")
 )
 
-type leaseState struct {
+type holdState struct {
 	Station string    `json:"station"` // hex key of the station that granted it
-	Lease   string    `json:"lease"`
+	Hold    string    `json:"hold"`
 	Seq     uint64    `json:"seq"`
 	Since   time.Time `json:"since"` // the first grant seen
 	Until   time.Time `json:"until"` // the latest grant's end
 }
 
 type state struct {
-	Devices map[string]*leaseState `json:"devices"` // by device id
-	Seqs    map[string]uint64      `json:"seqs"`    // by device id + "|" + station hex: the highest seq seen
-	Revoked map[string]time.Time   `json:"revoked"` // lease id: when
+	Devices map[string]*holdState `json:"devices"` // by device id
+	Seqs    map[string]uint64     `json:"seqs"`    // by device id + "|" + station hex: the highest seq seen
+	Revoked map[string]time.Time  `json:"revoked"` // hold id: when
 }
 
 func (g *Gate) now() time.Time {
@@ -84,7 +84,7 @@ func (g *Gate) load() {
 	}
 	g.loaded = true
 	g.seen = map[nostr.ID]time.Time{}
-	g.st = state{Devices: map[string]*leaseState{}, Seqs: map[string]uint64{}, Revoked: map[string]time.Time{}}
+	g.st = state{Devices: map[string]*holdState{}, Seqs: map[string]uint64{}, Revoked: map[string]time.Time{}}
 	if g.StatePath == "" {
 		return
 	}
@@ -122,7 +122,7 @@ func (g *Gate) save() {
 }
 
 // Check verifies a grant and that it allows need, and takes it into the
-// lease state. On success the grant is spent: presenting it again is a
+// hold state. On success the grant is spent: presenting it again is a
 // replay.
 func (g *Gate) Check(ev nostr.Event, need station.Scope) (token.Grant, error) {
 	g.mu.Lock()
@@ -155,31 +155,31 @@ func (g *Gate) Check(ev nostr.Event, need station.Scope) (token.Grant, error) {
 	if _, ok := g.seen[ev.ID]; ok {
 		return token.Grant{}, ErrReplay
 	}
-	if _, ok := g.st.Revoked[grant.LeaseID]; ok {
+	if _, ok := g.st.Revoked[grant.HoldID]; ok {
 		return token.Grant{}, ErrRevoked
 	}
 	key := grant.DeviceID + "|" + grant.Station.Hex()
 	if grant.Seq < g.st.Seqs[key] {
-		return token.Grant{}, ErrOlderLease
+		return token.Grant{}, ErrOlderHold
 	}
 	cur := g.st.Devices[grant.DeviceID]
 	ended := ""
 	switch {
 	case cur == nil:
-		cur = &leaseState{Station: grant.Station.Hex(), Lease: grant.LeaseID, Seq: grant.Seq, Since: now}
-	case cur.Lease == grant.LeaseID:
-		// The lease it has, refreshed.
+		cur = &holdState{Station: grant.Station.Hex(), Hold: grant.HoldID, Seq: grant.Seq, Since: now}
+	case cur.Hold == grant.HoldID:
+		// The hold it has, refreshed.
 	case cur.Station != grant.Station.Hex() && now.Before(cur.Until):
 		return token.Grant{}, ErrBusy
 	case cur.Station == grant.Station.Hex() && grant.Seq <= cur.Seq:
-		return token.Grant{}, ErrOlderLease
+		return token.Grant{}, ErrOlderHold
 	default:
-		// A newer lease from the same station, or another station's once
-		// the old lease ran out.
+		// A newer hold from the same station, or another station's once
+		// the old hold ran out.
 		if now.Before(cur.Until) {
-			ended = cur.Lease
+			ended = cur.Hold
 		}
-		cur = &leaseState{Station: grant.Station.Hex(), Lease: grant.LeaseID, Seq: grant.Seq, Since: now}
+		cur = &holdState{Station: grant.Station.Hex(), Hold: grant.HoldID, Seq: grant.Seq, Since: now}
 	}
 	if now.Sub(cur.Since) > entry.MaxSessionDuration() {
 		return token.Grant{}, ErrSessionLength
@@ -208,7 +208,7 @@ func (g *Gate) Check(ev nostr.Event, need station.Scope) (token.Grant, error) {
 }
 
 // Revoke takes a revocation from a station in the policy and ends the
-// lease it names.
+// hold it names.
 func (g *Gate) Revoke(ev nostr.Event) error {
 	r, err := token.ParseRevocation(ev)
 	if err != nil {
@@ -220,12 +220,12 @@ func (g *Gate) Revoke(ev nostr.Event) error {
 	if g.Policy.Station(r.Station) == nil {
 		return token.ErrStation
 	}
-	g.st.Revoked[r.LeaseID] = g.now()
+	g.st.Revoked[r.HoldID] = g.now()
 	for device, cur := range g.st.Devices {
-		if cur.Lease == r.LeaseID && cur.Station == r.Station.Hex() {
+		if cur.Hold == r.HoldID && cur.Station == r.Station.Hex() {
 			delete(g.st.Devices, device)
 			if g.OnEnd != nil {
-				go g.OnEnd(device, r.LeaseID)
+				go g.OnEnd(device, r.HoldID)
 			}
 		}
 	}
@@ -233,8 +233,8 @@ func (g *Gate) Revoke(ev nostr.Event) error {
 	return nil
 }
 
-// Current says which lease holds a device, if one does.
-func (g *Gate) Current(deviceID string) (leaseID string, ok bool) {
+// Current says which hold holds a device, if one does.
+func (g *Gate) Current(deviceID string) (holdID string, ok bool) {
 	g.mu.Lock()
 	defer g.mu.Unlock()
 	g.load()
@@ -242,5 +242,5 @@ func (g *Gate) Current(deviceID string) (leaseID string, ok bool) {
 	if cur == nil || !g.now().Before(cur.Until) {
 		return "", false
 	}
-	return cur.Lease, true
+	return cur.Hold, true
 }

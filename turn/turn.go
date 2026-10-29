@@ -1,7 +1,7 @@
 // Package turn is the station's embedded TURN server: pion/turn with one
 // job, carrying a session's media when the browser and the rig cannot
-// reach each other directly. Credentials are per lease and last the
-// lease's maximum time; relaying to private, loopback, link-local,
+// reach each other directly. Credentials are per hold and last the
+// hold's maximum time; relaying to private, loopback, link-local,
 // shared-address and provider-internal destinations is refused, so the
 // server is not a proxy into anyone's network.
 package turn
@@ -67,10 +67,10 @@ type Server struct {
 	// Quota is the allocations one credential may hold, DefaultQuota when
 	// zero.
 	Quota int
-	// Valid says whether a lease may still allocate and refresh; nil
-	// accepts any credential inside its time. A revoked lease's
+	// Valid says whether a hold may still allocate and refresh; nil
+	// accepts any credential inside its time. A revoked hold's
 	// allocations die at their next refresh, ten minutes at most.
-	Valid func(leaseID string) bool
+	Valid func(holdID string) bool
 	Now   func() time.Time
 	Logf  func(format string, args ...any)
 
@@ -152,7 +152,7 @@ func (s *Server) Start() error {
 				s.mu.Lock()
 				s.held[username]++
 				s.mu.Unlock()
-				s.logf("turn: allocation for %s from %s at %s", leaseOf(username), src, relayAddr)
+				s.logf("turn: allocation for %s from %s at %s", holdOf(username), src, relayAddr)
 			},
 			OnAllocationDeleted: func(_, _ net.Addr, _, username, _ string) {
 				s.mu.Lock()
@@ -195,23 +195,23 @@ func (s *Server) Allocations() int {
 	return s.srv.AllocationCount()
 }
 
-func leaseOf(username string) string {
+func holdOf(username string) string {
 	_, rest, _ := strings.Cut(username, ":")
 	return rest
 }
 
 func (s *Server) auth(username, realm string, src net.Addr) ([]byte, bool) {
-	leaseID, expires, err := ParseUsername(username)
+	holdID, expires, err := ParseUsername(username)
 	if err != nil {
 		s.logf("turn: %s: refused a malformed credential", src)
 		return nil, false
 	}
 	if !s.now().Before(expires) {
-		s.logf("turn: %s: refused an expired credential for %s", src, leaseID)
+		s.logf("turn: %s: refused an expired credential for %s", src, holdID)
 		return nil, false
 	}
-	if s.Valid != nil && !s.Valid(leaseID) {
-		s.logf("turn: %s: refused a credential for the ended lease %s", src, leaseID)
+	if s.Valid != nil && !s.Valid(holdID) {
+		s.logf("turn: %s: refused a credential for the ended hold %s", src, holdID)
 		return nil, false
 	}
 	return pion.GenerateAuthKey(username, realm, Password(s.Secret, username)), true
@@ -226,7 +226,7 @@ func (s *Server) quota(username, _ string, src net.Addr) bool {
 	n := s.held[username]
 	s.mu.Unlock()
 	if n >= quota {
-		s.logf("turn: %s: %s has %d allocations already", src, leaseOf(username), n)
+		s.logf("turn: %s: %s has %d allocations already", src, holdOf(username), n)
 		return false
 	}
 	return true
@@ -280,25 +280,25 @@ func (s *Server) URLs() []string {
 	return []string{"stun:" + hp, "turn:" + hp + "?transport=udp"}
 }
 
-// Credentials makes the ICE server entry a lease's peers use until
+// Credentials makes the ICE server entry a hold's peers use until
 // expires: the same username and password for the browser and the rig,
-// since they share the lease.
-func (s *Server) Credentials(leaseID string, expires time.Time) []token.ICEServer {
-	u := Username(leaseID, expires)
+// since they share the hold.
+func (s *Server) Credentials(holdID string, expires time.Time) []token.ICEServer {
+	u := Username(holdID, expires)
 	return []token.ICEServer{{URLs: s.URLs(), Username: u, Credential: Password(s.Secret, u)}}
 }
 
-// Username is "<expiry unix>:<lease id>", the TURN REST convention, so
+// Username is "<expiry unix>:<hold id>", the TURN REST convention, so
 // the server can read the expiry without state.
-func Username(leaseID string, expires time.Time) string {
-	return strconv.FormatInt(expires.Unix(), 10) + ":" + leaseID
+func Username(holdID string, expires time.Time) string {
+	return strconv.FormatInt(expires.Unix(), 10) + ":" + holdID
 }
 
 // ParseUsername reads a Username back.
-func ParseUsername(u string) (leaseID string, expires time.Time, err error) {
+func ParseUsername(u string) (holdID string, expires time.Time, err error) {
 	exp, rest, ok := strings.Cut(u, ":")
 	if !ok || rest == "" {
-		return "", time.Time{}, errors.New("turn: not an expiry:lease username")
+		return "", time.Time{}, errors.New("turn: not an expiry:hold username")
 	}
 	n, err := strconv.ParseInt(exp, 10, 64)
 	if err != nil {

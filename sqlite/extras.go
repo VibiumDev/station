@@ -19,13 +19,13 @@ func (d *DB) Audit(ctx context.Context, e station.AuditEntry) {
 	if e.At.IsZero() {
 		e.At = time.Now()
 	}
-	d.db.ExecContext(ctx, `INSERT INTO audit (at, subject, action, device_id, lease_id, detail) VALUES (?, ?, ?, ?, ?, ?)`,
-		e.At.UnixNano(), e.Subject, e.Action, e.DeviceID, e.LeaseID, e.Detail)
+	d.db.ExecContext(ctx, `INSERT INTO audit (at, subject, action, device_id, hold_id, detail) VALUES (?, ?, ?, ?, ?, ?)`,
+		e.At.UnixNano(), e.Subject, e.Action, e.DeviceID, e.HoldID, e.Detail)
 }
 
 // AuditEntries lists the newest entries.
 func (d *DB) AuditEntries(ctx context.Context, limit int) ([]station.AuditEntry, error) {
-	rows, err := d.db.QueryContext(ctx, `SELECT at, subject, action, device_id, lease_id, detail FROM audit ORDER BY id DESC LIMIT ?`, limit)
+	rows, err := d.db.QueryContext(ctx, `SELECT at, subject, action, device_id, hold_id, detail FROM audit ORDER BY id DESC LIMIT ?`, limit)
 	if err != nil {
 		return nil, err
 	}
@@ -34,7 +34,7 @@ func (d *DB) AuditEntries(ctx context.Context, limit int) ([]station.AuditEntry,
 	for rows.Next() {
 		var e station.AuditEntry
 		var at int64
-		if err := rows.Scan(&at, &e.Subject, &e.Action, &e.DeviceID, &e.LeaseID, &e.Detail); err != nil {
+		if err := rows.Scan(&at, &e.Subject, &e.Action, &e.DeviceID, &e.HoldID, &e.Detail); err != nil {
 			return nil, err
 		}
 		e.At = time.Unix(0, at)
