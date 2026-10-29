@@ -1,7 +1,11 @@
 // The station's viewer page: takes a lease on the device, starts the
-// WebRTC transport with the grant in its hello, keeps the lease fresh, and
-// wires the toolbar. Everything it knows about the device comes from the
-// page's data attributes and the device's own announcement.
+// WebRTC transport with the grant in its hello and the station's ICE
+// servers, keeps the lease fresh, falls back to the MJPEG stream through
+// the station when WebRTC cannot connect, and wires the toolbar.
+// Everything it knows about the device comes from the page's data
+// attributes and the device's own announcement. ?ice=relay forces the
+// media through TURN, for a check of the relay path; ?transport=mjpeg
+// skips WebRTC and uses the fallback from the start.
 (function () {
   var body = document.body;
   var device = body.dataset.device;
@@ -12,12 +16,61 @@
   function $(id) { return document.getElementById(id); }
   var img = $('feed'), note = $('note'), status = $('status');
 
-  var grant = null, lease = null, observer = false, released = false;
+  var grant = null, grantUsed = false, lease = null, observer = false, released = false;
   var proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
+  var params = new URLSearchParams(location.search);
+  var relayOnly = params.get('ice') === 'relay';
+  var mjpegOnly = params.get('transport') === 'mjpeg';
   window.__roadieRTCConfig = {
     autostart: false,
     signalURL: proto + '//' + location.host + api + '/v1/devices/' + device + '/signal',
-    hello: function () { return grant ? {grant: grant} : {}; }
+    // The rig takes a grant once per connection, so a reconnect gets a
+    // fresh one; the first connection uses the grant the page just took.
+    hello: function () {
+      if (grant && !grantUsed) { grantUsed = true; return {grant: grant}; }
+      return takeLease(observer ? ['view'] : ['view', 'input'], true).then(function () {
+        grantUsed = true;
+        return grant ? {grant: grant} : {};
+      });
+    },
+    iceServers: [],
+    iceTransportPolicy: relayOnly ? 'relay' : undefined
+  };
+
+  // The MJPEG fallback: the picture as the capped stream relayed through
+  // the station, input over a relayed WebSocket. webrtc.js starts it when
+  // WebRTC gives up.
+  var fallen = false, hidSock = null;
+  var streamURL = api + '/v1/devices/' + device + '/stream';
+  function openHID() {
+    closeHID();
+    if (observer || released) return;
+    var sock = new WebSocket(proto + '//' + location.host + api + '/v1/devices/' + device + '/hid');
+    sock.onclose = function () {
+      if (hidSock !== sock) return;
+      hidSock = null;
+      if (fallen && !released) setTimeout(openHID, 2000);
+    };
+    hidSock = sock;
+  }
+  function closeHID() {
+    if (!hidSock) return;
+    var sock = hidSock;
+    hidSock = null;
+    try { sock.close(); } catch (e) {}
+  }
+  window.__roadieFeed = {
+    start: function () {
+      if (fallen || released) return;
+      fallen = true;
+      img.src = streamURL + '?ts=' + Date.now();
+      openHID();
+    },
+    stop: function () {
+      if (!fallen) return;
+      fallen = false;
+      closeHID();
+    }
   };
 
   var input = window.__roadieInput.attach({
@@ -25,6 +78,10 @@
     mode: localStorage.getItem('station-input-mode') === 'touch' ? 'touch' : 'mouse',
     send: function (msg) {
       if (observer || released) return;
+      if (fallen) {
+        if (hidSock && hidSock.readyState === 1) hidSock.send(JSON.stringify(msg));
+        return;
+      }
       if (window.__roadieRTC) window.__roadieRTC.sendHID(msg);
     }
   });
@@ -53,14 +110,19 @@
   }
 
   // takeLease asks for the device; the answer is a grant on a lease, ours
-  // or, as an observer, the holder's.
-  function takeLease(scopes) {
+  // or, as an observer, the holder's. With quiet, it only refreshes the
+  // grant for a connection being made.
+  function takeLease(scopes, quiet) {
     return request('POST', '/v1/devices/' + device + '/lease', {scopes: scopes}).then(function (res) {
       grant = res.grant;
+      grantUsed = false;
       lease = res.lease;
       observer = !!res.observer;
       released = false;
+      window.__roadieRTCConfig.iceServers = res.ice || [];
       showStatus();
+      if (quiet || fallen) return;
+      if (mjpegOnly) { window.__roadieFeed.start(); return; }
       var rtc = window.__roadieRTC;
       if (!rtc) { say('This browser cannot do WebRTC.', 'error'); return; }
       if (!rtc.active()) { say('Connecting…'); rtc.start(); }
@@ -71,6 +133,8 @@
     released = true;
     input.releaseAll();
     if (window.__roadieRTC) window.__roadieRTC.stop();
+    closeHID();
+    if (fallen) img.src = '';
     if (lease && !observer) request('DELETE', '/v1/devices/' + device + '/lease').catch(function () {});
     lease = null; grant = null;
     showStatus();
@@ -88,7 +152,8 @@
 
   window.addEventListener('roadie-transport', function (e) {
     var reason = e.detail && e.detail.reason;
-    say('No WebRTC picture: ' + reason + '. The MJPEG fallback through the station is not there yet; reload to try again.', 'error');
+    say('No WebRTC connection (' + reason + '). Showing the MJPEG stream through the station instead, a few frames a second; reload to try WebRTC again.');
+    setTimeout(function () { if (fallen) say(''); }, 6000);
   });
   window.__roadieTransportChanged = function () {
     if (window.__roadieRTC && window.__roadieRTC.isPlaying()) say('');

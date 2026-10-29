@@ -28,7 +28,7 @@ func setup(t *testing.T) *fixture {
 		t.Fatal(err)
 	}
 	t.Cleanup(db.Close)
-	f := &fixture{db: db, rigKey: nostr.Generate(), clock: time.Date(2026, 10, 28, 9, 0, 0, 0, time.UTC)}
+	f := &fixture{db: db, rigKey: nostr.Generate(), clock: time.Date(2030, 1, 1, 9, 0, 0, 0, time.UTC)}
 	ctx := context.Background()
 	if err := db.PutRig(ctx, station.Rig{ID: "rig_1", Name: "pi", PubKey: f.rigKey.Public(), EnrolledAt: f.clock,
 		Devices: []station.Device{{ID: "rig_1/phone", Kind: "phone", Caps: []string{"video", "hid"}}}}); err != nil {

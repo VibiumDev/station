@@ -9,11 +9,15 @@ import (
 	"crypto/x509/pkix"
 	"encoding/pem"
 	"errors"
+	"fmt"
 	"math/big"
 	"net"
+	"net/http"
 	"os"
 	"path/filepath"
 	"time"
+
+	"golang.org/x/crypto/acme/autocert"
 )
 
 // selfSigned loads or makes the station's own certificate for LAN mode:
@@ -94,4 +98,30 @@ func localIPv4() string {
 		}
 	}
 	return ""
+}
+
+// acme serves public mode on :443 with a Let's Encrypt certificate for
+// host, kept in dir/acme, and answers the HTTP-01 challenge on :80, where
+// everything else is redirected to HTTPS. httpAddr and httpsAddr may be
+// changed for a machine that cannot bind the usual ports.
+func acme(dir, host, httpAddr, httpsAddr string) (net.Listener, func(), error) {
+	m := &autocert.Manager{
+		Prompt:     autocert.AcceptTOS,
+		HostPolicy: autocert.HostWhitelist(host),
+		Cache:      autocert.DirCache(filepath.Join(dir, "acme")),
+	}
+	plain, err := net.Listen("tcp", httpAddr)
+	if err != nil {
+		return nil, nil, fmt.Errorf("acme: listen %s for the HTTP-01 challenge: %w", httpAddr, err)
+	}
+	challenge := &http.Server{Handler: m.HTTPHandler(nil), ReadHeaderTimeout: 10 * time.Second}
+	go challenge.Serve(plain)
+	ln, err := net.Listen("tcp", httpsAddr)
+	if err != nil {
+		plain.Close()
+		return nil, nil, err
+	}
+	cfg := m.TLSConfig()
+	cfg.MinVersion = tls.VersionTLS12
+	return tls.NewListener(ln, cfg), func() { challenge.Close(); plain.Close() }, nil
 }

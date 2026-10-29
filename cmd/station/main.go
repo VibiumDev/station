@@ -6,12 +6,14 @@ package main
 
 import (
 	"context"
+	"crypto/sha256"
 	"crypto/tls"
 	"errors"
 	"flag"
 	"fmt"
 	"net"
 	"net/http"
+	"net/netip"
 	"os"
 	ossignal "os/signal"
 	"path/filepath"
@@ -22,12 +24,15 @@ import (
 	"fiatjaf.com/nostr"
 	"golang.org/x/term"
 
+	"github.com/VibiumDev/station"
 	"github.com/VibiumDev/station/enroll"
 	"github.com/VibiumDev/station/lease"
 	"github.com/VibiumDev/station/relay"
 	"github.com/VibiumDev/station/signal"
 	"github.com/VibiumDev/station/sqlite"
+	"github.com/VibiumDev/station/token"
 	"github.com/VibiumDev/station/tunnel"
+	"github.com/VibiumDev/station/turn"
 )
 
 func main() {
@@ -201,11 +206,20 @@ func passwd(dir string) int {
 func serve(args []string) int {
 	fs := flag.NewFlagSet("station", flag.ExitOnError)
 	dirFlag := fs.String("data-dir", "", "where the station keeps its files (default $STATION_DIR or the user config dir)")
-	listen := fs.String("listen", ":8443", "address to serve HTTPS on (LAN mode)")
+	listen := fs.String("listen", "", "address to serve HTTPS on (LAN mode: :8443; with --acme: :443)")
 	tailnetMode := fs.Bool("tailnet", false, "join the tailnet as a node with tsnet and serve there only")
 	hostname := fs.String("hostname", "station", "the node's name on the tailnet")
 	controlURL := fs.String("control-url", "", "a Headscale or other control server, with --tailnet")
+	acmeHost := fs.String("acme", "", "public mode: HTTPS with a Let's Encrypt certificate for this host name, on :443, the HTTP-01 challenge on :80")
+	httpAddr := fs.String("http", "", "public mode behind your own TLS proxy: plain HTTP on this address, such as :8080; needs --public-url")
 	publicURL := fs.String("public-url", "", "how rigs and browsers reach this station (default: derived)")
+	turnMode := fs.String("turn", "auto", "run the TURN server: on, off, or auto (on in public mode)")
+	turnListen := fs.String("turn-listen", turn.DefaultListen, "TURN's UDP address; on Fly.io, fly-global-services:3478")
+	turnPublicIP := fs.String("turn-public-ip", "", "the public address TURN is reached at (default: the --acme host's)")
+	turnRelay := fs.String("turn-relay-addr", "", "the address relay sockets bind (default: the listen address's host); on Fly.io, fly-global-services")
+	turnPorts := fs.String("turn-ports", fmt.Sprintf("%d-%d", turn.DefaultMinPort, turn.DefaultMaxPort), "the relay port range, reachable from outside")
+	turnDeny := fs.String("turn-deny", "", "more destinations TURN refuses, comma-separated CIDRs, besides private, loopback, link-local and shared ranges")
+	turnMTU := fs.Int("turn-mtu", 0, "TURN's inbound MTU (default: 1600)")
 	name := fs.String("name", "", "the station's name (saved)")
 	allow := fs.String("allow", "", "tailnet logins and tags that may sign in by identity, comma-separated (saved)")
 	noMDNS := fs.Bool("no-mdns", false, "do not advertise on the LAN")
@@ -228,6 +242,20 @@ func serve(args []string) int {
 	}
 	if *allow != "" {
 		cfg.Allow, changed = strings.Split(*allow, ","), true
+	}
+	// A password from the environment, for a host where secrets are
+	// environment variables, such as Fly.io.
+	if pw := os.Getenv("STATION_PASSWORD"); pw != "" && !checkPassword(cfg.PasswordHash, pw) {
+		if len(pw) < 8 {
+			fmt.Fprintln(os.Stderr, "STATION_PASSWORD needs at least 8 characters")
+			return 1
+		}
+		if cfg.PasswordHash, err = hashPassword(pw); err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			return 1
+		}
+		changed = true
+		fmt.Println("Password set from STATION_PASSWORD")
 	}
 	if changed {
 		if err := saveConfig(dir, cfg); err != nil {
@@ -255,7 +283,9 @@ func serve(args []string) int {
 	var closeNet func()
 	mode := "lan"
 	base := *publicURL
-	if *tailnetMode {
+	proxied := false
+	switch {
+	case *tailnetMode:
 		mode = "tailnet"
 		fmt.Println("Joining the tailnet (a login link appears below if this node is new)...")
 		var tsURL string
@@ -268,7 +298,38 @@ func serve(args []string) int {
 		if base == "" {
 			base = tsURL
 		}
-	} else {
+	case *acmeHost != "":
+		mode = "public"
+		addr := *listen
+		if addr == "" {
+			addr = ":443"
+		}
+		ln, closeNet, err = acme(dir, *acmeHost, ":80", addr)
+		if err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			return 1
+		}
+		defer closeNet()
+		if base == "" {
+			base = "https://" + *acmeHost
+		}
+	case *httpAddr != "":
+		mode = "public"
+		proxied = true
+		if base == "" {
+			fmt.Fprintln(os.Stderr, "--http needs --public-url, the https address your proxy serves")
+			return 1
+		}
+		ln, err = net.Listen("tcp", *httpAddr)
+		if err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			return 1
+		}
+	default:
+		addr := *listen
+		if addr == "" {
+			addr = ":8443"
+		}
 		cert, created, err := selfSigned(dir)
 		if err != nil {
 			fmt.Fprintln(os.Stderr, err)
@@ -277,7 +338,7 @@ func serve(args []string) int {
 		if created {
 			fmt.Println("Made a self-signed certificate in", dir)
 		}
-		ln, err = tls.Listen("tcp", *listen, &tls.Config{Certificates: []tls.Certificate{cert}, MinVersion: tls.VersionTLS12})
+		ln, err = tls.Listen("tcp", addr, &tls.Config{Certificates: []tls.Certificate{cert}, MinVersion: tls.VersionTLS12})
 		if err != nil {
 			fmt.Fprintln(os.Stderr, err)
 			return 1
@@ -301,13 +362,73 @@ func serve(args []string) int {
 				fmt.Fprintln(os.Stderr, "revoke:", err)
 			}
 		}}
+	// TURN: on in public mode unless told otherwise, with credentials
+	// derived from the station's key, so nothing more is kept.
+	var turnSrv *turn.Server
+	turnInfo := ""
+	if *turnMode == "on" || (*turnMode == "auto" && mode == "public") {
+		pub := net.ParseIP(*turnPublicIP)
+		if pub == nil && *turnPublicIP != "" {
+			fmt.Fprintf(os.Stderr, "--turn-public-ip %q is not an address\n", *turnPublicIP)
+			return 1
+		}
+		if pub == nil && *acmeHost != "" {
+			if ips, err := net.LookupIP(*acmeHost); err == nil {
+				for _, ip := range ips {
+					if ip.To4() != nil {
+						pub = ip
+						break
+					}
+				}
+			}
+		}
+		if pub == nil {
+			fmt.Fprintln(os.Stderr, "TURN needs --turn-public-ip, the address it is reached at from outside")
+			return 1
+		}
+		var lo, hi uint16
+		if _, err := fmt.Sscanf(*turnPorts, "%d-%d", &lo, &hi); err != nil || hi < lo {
+			fmt.Fprintf(os.Stderr, "--turn-ports %q: want low-high\n", *turnPorts)
+			return 1
+		}
+		var deny []netip.Prefix
+		for _, c := range strings.Split(*turnDeny, ",") {
+			if c = strings.TrimSpace(c); c != "" {
+				p, err := netip.ParsePrefix(c)
+				if err != nil {
+					fmt.Fprintf(os.Stderr, "--turn-deny %q: %v\n", c, err)
+					return 1
+				}
+				deny = append(deny, p)
+			}
+		}
+		secret := sha256.Sum256([]byte("vibium station turn " + key.Hex()))
+		turnSrv = &turn.Server{Listen: *turnListen, PublicIP: pub, RelayAddress: *turnRelay, MinPort: lo, MaxPort: hi,
+			Secret: secret[:], Deny: deny, MTU: *turnMTU,
+			Valid: func(leaseID string) bool {
+				l, err := db.Lease(context.Background(), leaseID)
+				return err == nil && l.Held(time.Now())
+			},
+			Logf: func(format string, args ...any) { fmt.Printf(format+"\n", args...) }}
+		if err := turnSrv.Start(); err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			return 1
+		}
+		defer turnSrv.Close()
+		mgr.ICE = func(l station.Lease) []token.ICEServer { return turnSrv.Credentials(l.ID, l.ExpiresAt) }
+		turnInfo = fmt.Sprintf("on: %s, relay ports %d-%d", strings.Join(turnSrv.URLs(), " "), lo, hi)
+	}
+	rl := &relay.Relay{Tunnel: ts, Logf: func(format string, args ...any) { fmt.Printf(format+"\n", args...) }}
 	s := &server{
 		cfg: cfg, dir: dir, db: db, key: key, mode: mode, publicURL: base,
-		auth:   newAuth(cfg, db, who, true),
-		leases: mgr,
-		tunnel: ts,
-		enroll: &enroll.Handler{Key: key, Name: cfg.Name, TunnelURL: tunnelURL, Devices: db, Events: db, Codes: db, Audit: db},
-		signal: &signal.Handler{Relay: &relay.Relay{Tunnel: ts}, Devices: db,
+		auth:     newAuth(cfg, db, who, strings.HasPrefix(base, "https"), proxied),
+		leases:   mgr,
+		tunnel:   ts,
+		relay:    rl,
+		turn:     turnSrv,
+		turnInfo: turnInfo,
+		enroll:   &enroll.Handler{Key: key, Name: cfg.Name, TunnelURL: tunnelURL, Devices: db, Events: db, Codes: db, Audit: db},
+		signal: &signal.Handler{Relay: rl, Devices: db,
 			Touch: func(ctx context.Context, deviceID string) {
 				if l, err := db.Current(ctx, deviceID); err == nil {
 					mgr.Touch(ctx, l.ID)
@@ -352,6 +473,9 @@ func serve(args []string) int {
 	}()
 	fmt.Printf("%s: %s mode at %s\n", cfg.Name, mode, base)
 	fmt.Printf("   key %s, rigs enroll at %s\n", npub(key.Public()), tunnelURL)
+	if turnInfo != "" {
+		fmt.Println("   TURN " + turnInfo)
+	}
 	if cfg.PasswordHash == "" {
 		fmt.Println("   no password yet: run `station passwd` to sign in by password")
 	}

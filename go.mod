@@ -7,6 +7,12 @@ require (
 	github.com/coder/websocket v1.8.15
 	github.com/hashicorp/mdns v1.0.7
 	github.com/hashicorp/yamux v0.1.2
+	github.com/pion/interceptor v0.1.42
+	github.com/pion/logging v0.2.4
+	github.com/pion/rtcp v1.2.16
+	github.com/pion/rtp v1.8.26
+	github.com/pion/turn/v4 v4.1.3
+	github.com/pion/webrtc/v4 v4.1.8
 	golang.org/x/crypto v0.58.0
 	golang.org/x/term v0.47.0
 	modernc.org/sqlite v1.60.1
@@ -49,6 +55,16 @@ require (
 	github.com/modern-go/concurrent v0.0.0-20180306012644-bacd9c7ef1dd // indirect
 	github.com/modern-go/reflect2 v1.0.3-0.20250322232337-35a7c28c31ee // indirect
 	github.com/ncruces/go-strftime v1.1.0 // indirect
+	github.com/pion/datachannel v1.5.10 // indirect
+	github.com/pion/dtls/v3 v3.0.8 // indirect
+	github.com/pion/ice/v4 v4.0.13 // indirect
+	github.com/pion/mdns/v2 v2.1.0 // indirect
+	github.com/pion/randutil v0.1.0 // indirect
+	github.com/pion/sctp v1.8.41 // indirect
+	github.com/pion/sdp/v3 v3.0.16 // indirect
+	github.com/pion/srtp/v3 v3.0.9 // indirect
+	github.com/pion/stun/v3 v3.0.2 // indirect
+	github.com/pion/transport/v3 v3.1.1 // indirect
 	github.com/pires/go-proxyproto v0.15.0 // indirect
 	github.com/puzpuzpuz/xsync/v3 v3.5.1 // indirect
 	github.com/remyoudompheng/bigfft v0.0.0-20230129092748-24d4a6f8daec // indirect
@@ -64,6 +80,7 @@ require (
 	github.com/tidwall/gjson v1.18.0 // indirect
 	github.com/tidwall/match v1.1.1 // indirect
 	github.com/tidwall/pretty v1.2.1 // indirect
+	github.com/wlynxg/anet v0.0.5 // indirect
 	github.com/x448/float16 v0.8.4 // indirect
 	go4.org/mem v0.0.0-20240501181205-ae6ca9944745 // indirect
 	go4.org/netipx v0.0.0-20260823151212-3075585bcbeb // indirect

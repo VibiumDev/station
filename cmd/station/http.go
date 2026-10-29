@@ -17,9 +17,12 @@ import (
 	"github.com/VibiumDev/station"
 	"github.com/VibiumDev/station/enroll"
 	"github.com/VibiumDev/station/lease"
+	"github.com/VibiumDev/station/relay"
 	"github.com/VibiumDev/station/signal"
 	"github.com/VibiumDev/station/sqlite"
+	"github.com/VibiumDev/station/token"
 	"github.com/VibiumDev/station/tunnel"
+	"github.com/VibiumDev/station/turn"
 	"github.com/VibiumDev/station/viewer"
 )
 
@@ -34,6 +37,9 @@ type server struct {
 	tunnel    *tunnel.Server
 	enroll    *enroll.Handler
 	signal    *signal.Handler
+	relay     *relay.Relay
+	turn      *turn.Server // nil when off
+	turnInfo  string
 	publicURL string
 	mode      string
 	mdns      bool
@@ -70,6 +76,11 @@ func (s *server) handler() http.Handler {
 	mux.Handle("GET /v1/devices/{rig}/{name}/signal", s.api(station.ActionView, func(w http.ResponseWriter, r *http.Request, _ station.Principal) {
 		s.signal.ServeDevice(w, r, deviceID(r))
 	}))
+	// Relayed to the rig's own endpoints, with a grant the station signs
+	// for the caller: the MJPEG fallback and its input, and screenshots.
+	mux.Handle("GET /v1/devices/{rig}/{name}/stream", s.api(station.ActionView, s.relayed("/stream", station.ScopeView)))
+	mux.Handle("GET /v1/devices/{rig}/{name}/screenshot", s.api(station.ActionView, s.relayed("/snapshot", station.ScopeView)))
+	mux.Handle("GET /v1/devices/{rig}/{name}/hid", s.api(station.ActionControl, s.relayed("/api/hid/ws", station.ScopeInput)))
 	return secure(mux)
 }
 
@@ -298,14 +309,52 @@ func (s *server) takeLease(w http.ResponseWriter, r *http.Request, p station.Pri
 		apiError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
+	ice := res.Grant.ICE
+	if ice == nil {
+		ice = []token.ICEServer{}
+	}
 	apiJSON(w, map[string]any{
 		"grant":    res.Event,
+		"ice":      ice,
 		"observer": res.Observer,
 		"lease": leaseView{ID: res.Lease.ID, Seq: res.Lease.Seq, Subject: res.Lease.Subject, Scopes: station.ScopeStrings(res.Grant.Scopes),
 			Since: res.Lease.CreatedAt, Expires: res.Grant.ExpiresAt},
 		"signal": "/v1/devices/" + id + "/signal",
 		"online": s.tunnel.IsOnline(res.Lease.RigID),
 	})
+}
+
+// relayed forwards a request to one of the rig's own endpoints with a
+// grant the station signs for the caller: a seat on the device's lease
+// with the scope the endpoint needs. Viewing gets the caller's own lease
+// or a seat watching the holder's; input needs the caller to hold the
+// lease already, taken through the lease endpoint. The rig checks the
+// grant like any other, and the stream it serves is capped on its side.
+func (s *server) relayed(rigPath string, scope station.Scope) handlerWithPrincipal {
+	return func(w http.ResponseWriter, r *http.Request, p station.Principal) {
+		id := deviceID(r)
+		scopes := []station.Scope{station.ScopeView}
+		if scope != station.ScopeView {
+			cur, err := s.db.Current(r.Context(), id)
+			if err != nil || cur.Subject != p.Subject {
+				apiError(w, http.StatusConflict, "take the device first")
+				return
+			}
+			scopes = append(scopes, scope)
+		}
+		res, err := s.leases.Take(r.Context(), lease.Request{DeviceID: id, Subject: p.Subject, Scopes: scopes})
+		if errors.Is(err, station.ErrNotFound) {
+			apiError(w, http.StatusNotFound, "no such device")
+			return
+		}
+		if err != nil {
+			apiError(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+		r.Header.Set("Authorization", token.Header(res.Event))
+		rigID, _, _ := station.SplitDeviceID(id)
+		s.relay.Serve(w, r, rigID, rigPath)
+	}
 }
 
 func (s *server) releaseLease(w http.ResponseWriter, r *http.Request, p station.Principal) {
@@ -363,7 +412,7 @@ func (s *server) settingsData(r *http.Request, p station.Principal, extra map[st
 		"Principal": p, "CSRF": s.auth.csrfToken(r), "Name": s.cfg.Name, "Tokens": tokens, "Rigs": rigs, "OpenCodes": codes,
 		"Mode": s.mode, "PublicURL": s.publicURL, "TunnelURL": s.enroll.TunnelURL, "MDNS": s.mdns,
 		"Npub": npub(s.key.Public()), "Fingerprint": enroll.Fingerprint(s.key.Public()), "Allow": s.cfg.Allow,
-		"NoPassword": s.cfg.PasswordHash == "",
+		"NoPassword": s.cfg.PasswordHash == "", "TURN": s.turnInfo,
 	}
 	for k, v := range extra {
 		data[k] = v

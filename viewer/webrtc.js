@@ -7,9 +7,11 @@
 // (window.__roadieRTC).
 //
 // A page sets window.__roadieRTCConfig before loading this to say where
-// signaling is and what the hello carries: {signalURL, hello (an object or
-// a function returning one, such as the lease grant), autostart: false}.
-// Without it, signaling is /api/webrtc/signal on the page's own host.
+// signaling is and what the hello carries: {signalURL, hello (an object, or
+// a function returning one or a promise of one, such as a fresh lease
+// grant for each connection), iceServers, iceTransportPolicy, autostart:
+// false}. Without it, signaling is /api/webrtc/signal on the page's own
+// host.
 //
 // The page maps pointer input against the #feed image's size and position,
 // so #feed stays: see-through, sized like the video, on top of it. The
@@ -138,10 +140,15 @@
     ws = sock;
     var pending = [];
     sock.onopen = function () {
-      var hello = {type: 'hello'};
       var extra = typeof cfg.hello === 'function' ? cfg.hello() : cfg.hello;
-      if (extra) for (var k in extra) hello[k] = extra[k];
-      sock.send(JSON.stringify(hello));
+      // The page may answer with a promise: a grant is good for one
+      // connection, so a reconnect needs a fresh one.
+      Promise.resolve(extra).then(function (fields) {
+        if (ws !== sock || sock.readyState !== 1) return;
+        var hello = {type: 'hello'};
+        if (fields) for (var k in fields) hello[k] = fields[k];
+        sock.send(JSON.stringify(hello));
+      }, function () { sock.close(); });
     };
     sock.onerror = function () { log('signaling error'); };
     sock.onclose = function () {
@@ -162,7 +169,11 @@
       var m;
       try { m = JSON.parse(ev.data); } catch (e) { return; }
       if (m.type === 'offer') {
-        pc = new RTCPeerConnection({});
+        // The page may name STUN and TURN servers (a station's, with the
+        // lease's credentials) and force the relay path for a test.
+        var pcConfig = {iceServers: cfg.iceServers || []};
+        if (cfg.iceTransportPolicy) pcConfig.iceTransportPolicy = cfg.iceTransportPolicy;
+        pc = new RTCPeerConnection(pcConfig);
         pc.ontrack = function (e) {
           if (e.track.kind === 'audio') {
             // The phone's sound, on an audio element the page mutes or not.
@@ -278,7 +289,9 @@
     if (!pc || !pc.getStats) return;
     pc.getStats().then(function (report) {
       var out = {};
+      var cands = {};
       report.forEach(function (st) {
+        if (st.type === 'local-candidate' || st.type === 'remote-candidate') cands[st.id] = st.candidateType;
         if (st.type === 'inbound-rtp' && st.kind === 'video') {
           out.framesDecoded = st.framesDecoded;
           out.fps = st.framesPerSecond;
@@ -293,8 +306,12 @@
           out.audioBytes = st.bytesReceived;
         } else if (st.type === 'candidate-pair' && st.nominated && st.currentRoundTripTime !== undefined) {
           out.rttMs = Math.round(st.currentRoundTripTime * 1000 * 10) / 10;
+          out.pairLocal = st.localCandidateId;
+          out.pairRemote = st.remoteCandidateId;
         }
       });
+      // The path the media takes: relay means through TURN.
+      if (out.pairLocal) out.path = (cands[out.pairLocal] || '?') + ' to ' + (cands[out.pairRemote] || '?');
       var prev = window.__roadieRTCStats;
       if (prev && out.bytes !== undefined && prev.bytes !== undefined) {
         out.kbps = Math.round((out.bytes - prev.bytes) * 8 / 1000);
@@ -309,7 +326,8 @@
         var lines = [
           'video    WebRTC, H.264',
           'picture  ' + (out.width || '?') + 'x' + (out.height || '?') + ', ' + (out.fps || 0) + ' fps, ' + (out.kbps || 0) + ' kbps',
-          'delay    round trip ' + ms(out.rttMs) + ', buffer ' + ms(out.jitterBufferMs) + ', decode ' + ms(out.decodeMs)
+          'delay    round trip ' + ms(out.rttMs) + ', buffer ' + ms(out.jitterBufferMs) + ', decode ' + ms(out.decodeMs),
+          'path     ' + (out.path || '?')
         ];
         if (lastStatus && lastStatus.status) {
           lines.push('encoder  ' + lastStatus.status.encoder + ', ' + (lastStatus.status.fps || 0) + ' fps, ' + (lastStatus.kbps || 0) + ' kbps sent, target ' + Math.round((lastStatus.status.bitrate || 0) / 1000) + ' kbps');
@@ -348,6 +366,8 @@
     active: function () { return active && !fallen; },
     isPlaying: function () { return playing && !fallen; },
     fellBack: function () { return fallen; },
+    // The peer connection itself, for tests and tools; null when none.
+    pc: function () { return pc; },
     showStats: function (on) {
       showStats = !!on;
       lastMJPEG = null;

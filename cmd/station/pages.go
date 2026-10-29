@@ -116,7 +116,7 @@ var pages = template.Must(template.New("").Funcs(template.FuncMap{"npub": npub, 
 <tr><th>mDNS</th><td>{{if .MDNS}}advertised on the LAN as _vibium-station._tcp{{else}}off{{end}}</td></tr>
 <tr><th>Station key</th><td><code>{{.Npub}}</code> <span class="muted">fingerprint {{.Fingerprint}}</span></td></tr>
 <tr><th>Tailnet identities</th><td>{{if .Allow}}{{range .Allow}}{{.}} {{end}}{{else}}<span class="muted">none (--allow)</span>{{end}}</td></tr>
-<tr><th>TURN</th><td><span class="muted">not yet (R4)</span></td></tr>
+<tr><th>TURN</th><td>{{if .TURN}}{{.TURN}}{{else}}<span class="muted">off (--turn on)</span>{{end}}</td></tr>
 </table>
 </main></body></html>{{end}}
 `))

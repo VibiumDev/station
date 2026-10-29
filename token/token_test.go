@@ -195,3 +195,27 @@ func TestRevocation(t *testing.T) {
 		t.Errorf("tampered: %v", err)
 	}
 }
+
+func TestGrantICE(t *testing.T) {
+	sk := nostr.Generate()
+	g := Grant{Rig: nostr.Generate().Public(), RigID: "rig_1", DeviceID: "rig_1/phone", Subject: "owner", LeaseID: "lse_1", Seq: 1,
+		Scopes: []station.Scope{station.ScopeView},
+		ICE:    []ICEServer{{URLs: []string{"stun:203.0.113.1:3478"}}, {URLs: []string{"turn:203.0.113.1:3478?transport=udp"}, Username: "1:lse_1", Credential: "secret"}}}
+	ev, err := SignGrant(sk, g)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, err := ParseGrant(ev)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got.ICE) != 2 || got.ICE[0].URLs[0] != "stun:203.0.113.1:3478" || got.ICE[1].Username != "1:lse_1" || got.ICE[1].Credential != "secret" || got.ICE[1].URLs[0] != "turn:203.0.113.1:3478?transport=udp" {
+		t.Errorf("ICE servers: %+v", got.ICE)
+	}
+	bad := ev
+	bad.Tags = append(nostr.Tags{{"turn", "u"}}, ev.Tags...)
+	bad.Sign(sk)
+	if _, err := ParseGrant(bad); err == nil {
+		t.Error("a turn tag without a credential and URL parsed")
+	}
+}

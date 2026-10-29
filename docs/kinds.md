@@ -33,6 +33,8 @@ the device has a key, the device. Station's own tags are single words.
 | `lease` | the lease id, `lse_<hex>` | The current lease, or a higher `seq` |
 | `seq` | the device's lease counter | Never lower than the one it has |
 | `scope` | one per tag: `view`, `input`, `bidi`, `admin` | Each operation's scope, and the rig policy allows it |
+| `stun` | STUN URLs, when the station has them | Nothing; the rig gathers candidates with them |
+| `turn` | the lease's TURN username (`<expiry>:<lease id>`), its credential, then the TURN URLs | Nothing; the rig gathers relay candidates with them. The credential lasts the lease's maximum time |
 | `expiration` | NIP-40, 10 minutes after `created_at` | Not expired, 30 s skew |
 | `nonce` | 8 random bytes, hex | Nothing; it keeps every grant's id distinct |
 

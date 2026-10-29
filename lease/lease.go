@@ -34,6 +34,9 @@ type Manager struct {
 	// OnRevoke is told about every signed revocation, to push it to the
 	// rig over the tunnel. Optional.
 	OnRevoke func(ctx context.Context, rigID string, ev nostr.Event)
+	// ICE names the STUN and TURN servers a lease's grants carry, with
+	// credentials good until the lease's end. Optional.
+	ICE func(lease station.Lease) []token.ICEServer
 
 	Now         func() time.Time // optional, for tests
 	IdleTimeout time.Duration    // zero means IdleTimeout
@@ -169,6 +172,9 @@ func (m *Manager) issue(ctx context.Context, rig station.Rig, dev station.Device
 	}
 	if g.ExpiresAt.After(lease.ExpiresAt) {
 		g.ExpiresAt = lease.ExpiresAt
+	}
+	if m.ICE != nil {
+		g.ICE = m.ICE(lease)
 	}
 	if dev.Key != "" {
 		pk, err := nostr.PubKeyFromHex(dev.Key)

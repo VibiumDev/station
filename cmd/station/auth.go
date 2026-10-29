@@ -32,6 +32,9 @@ type auth struct {
 	db  *sqlite.DB
 	who identity // nil outside tailnet mode
 	tls bool     // cookies are Secure when served over TLS
+	// proxied says a TLS proxy is in front (--http): the client's address
+	// is in the headers the proxy sets, not the connection's.
+	proxied bool
 
 	mu       sync.Mutex
 	sessions map[string]*session
@@ -44,8 +47,23 @@ type session struct {
 	expires   time.Time
 }
 
-func newAuth(cfg *Config, db *sqlite.DB, who identity, tls bool) *auth {
-	return &auth{cfg: cfg, db: db, who: who, tls: tls, sessions: map[string]*session{}, failures: map[string][]time.Time{}}
+func newAuth(cfg *Config, db *sqlite.DB, who identity, tls, proxied bool) *auth {
+	return &auth{cfg: cfg, db: db, who: who, tls: tls, proxied: proxied, sessions: map[string]*session{}, failures: map[string][]time.Time{}}
+}
+
+// clientIP is the address login failures are counted by: behind a proxy,
+// what the proxy says (Fly-Client-IP, then the first X-Forwarded-For).
+func (a *auth) clientIP(r *http.Request) string {
+	if a.proxied {
+		if h := r.Header.Get("Fly-Client-IP"); h != "" {
+			return h
+		}
+		if h := r.Header.Get("X-Forwarded-For"); h != "" {
+			first, _, _ := strings.Cut(h, ",")
+			return strings.TrimSpace(first)
+		}
+	}
+	return ip(r.RemoteAddr)
 }
 
 func randomID() string {
@@ -169,7 +187,7 @@ func (a *auth) csrfToken(r *http.Request) string {
 // login checks the password, with a lockout after repeated failures from
 // one address, and starts a session.
 func (a *auth) login(w http.ResponseWriter, r *http.Request, password string) bool {
-	addr := ip(r.RemoteAddr)
+	addr := a.clientIP(r)
 	a.mu.Lock()
 	now := time.Now()
 	var recent []time.Time

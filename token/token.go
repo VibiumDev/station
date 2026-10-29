@@ -66,6 +66,19 @@ type Grant struct {
 	Scopes    []station.Scope
 	IssuedAt  time.Time
 	ExpiresAt time.Time
+	// ICE lists the STUN and TURN servers the session's media may use,
+	// with the lease's own TURN credentials; empty when the station runs
+	// none.
+	ICE []ICEServer
+}
+
+// ICEServer is a STUN or TURN server a grant names, shaped like the
+// browser's RTCIceServer. A TURN credential is the lease's own and lasts
+// the lease's maximum time.
+type ICEServer struct {
+	URLs       []string `json:"urls"`
+	Username   string   `json:"username,omitempty"`
+	Credential string   `json:"credential,omitempty"`
 }
 
 // HasScope says whether the grant allows s.
@@ -85,6 +98,13 @@ func (g Grant) event() nostr.Event {
 	)
 	for _, s := range g.Scopes {
 		tags = append(tags, nostr.Tag{"scope", string(s)})
+	}
+	for _, s := range g.ICE {
+		if s.Username == "" {
+			tags = append(tags, append(nostr.Tag{"stun"}, s.URLs...))
+		} else {
+			tags = append(tags, append(nostr.Tag{"turn", s.Username, s.Credential}, s.URLs...))
+		}
 	}
 	tags = append(tags, nostr.Tag{"expiration", strconv.FormatInt(g.ExpiresAt.Unix(), 10)})
 	// Two grants with the same fields in the same second would share an id,
@@ -163,6 +183,13 @@ func ParseGrant(ev nostr.Event) (Grant, error) {
 				return Grant{}, fmt.Errorf("%w: expiration %q", ErrMalformed, t[1])
 			}
 			g.ExpiresAt = time.Unix(n, 0)
+		case "stun":
+			g.ICE = append(g.ICE, ICEServer{URLs: append([]string(nil), t[1:]...)})
+		case "turn":
+			if len(t) < 4 {
+				return Grant{}, fmt.Errorf("%w: a turn tag needs a username, a credential and a URL", ErrMalformed)
+			}
+			g.ICE = append(g.ICE, ICEServer{Username: t[1], Credential: t[2], URLs: append([]string(nil), t[3:]...)})
 		}
 	}
 	if len(parties) == 0 || len(parties) > 2 {
