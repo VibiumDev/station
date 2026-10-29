@@ -17,7 +17,7 @@ import (
 	"github.com/VibiumDev/station"
 )
 
-//go:embed webrtc.js input.js viewer.js viewer.css page.html
+//go:embed webrtc.js input.js viewer.js viewer.css page.html pcm-player.js pcm-sender.js
 var files embed.FS
 
 func mustRead(name string) []byte {

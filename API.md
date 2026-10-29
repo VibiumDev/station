@@ -17,6 +17,11 @@ appears in paths as two segments.
 | `GET /v1/devices/{rig}/{name}/stream` | The device's MJPEG stream, relayed from the rig at the rig's relay cap (a few frames a second); `?fps=` asks for less. The station signs a view grant for the caller: their own lease, or a seat watching the holder's |
 | `GET /v1/devices/{rig}/{name}/screenshot` | One JPEG from the rig (`?quality=30..95`), the same way |
 | `wss /v1/devices/{rig}/{name}/hid` | Input as the rig's HID WebSocket takes it, relayed with an input grant; the caller must hold the device's lease already (409 otherwise) |
+| `wss /v1/devices/{rig}/{name}/audio` | The device's sound for the fallback, relayed with a view grant: a JSON parameters message, then binary chunks; through a station a Roadie sends 16 kHz mono 16-bit |
+| `wss /v1/devices/{rig}/{name}/mic` | The caller's microphone into the device as 16 kHz mono 16-bit chunks, relayed with an input grant (the lease must be held) |
+
+Browser WebSockets must come from the station's own origin; a request
+with an `Origin` header naming another site is refused.
 | `GET /v1/station` | The station's name, key, tunnel URL and signed profile; what a rig checks at enrollment |
 | `POST /v1/enroll` | A rig's enrollment request: `{"event": <kind 7702>}` with the code, name and devices; see [docs/kinds.md](docs/kinds.md) |
 | `wss /v1/tunnel` | The rig tunnel: a challenge, the rig's signed hello, then yamux |

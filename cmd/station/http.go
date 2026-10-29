@@ -81,6 +81,8 @@ func (s *server) handler() http.Handler {
 	mux.Handle("GET /v1/devices/{rig}/{name}/stream", s.api(station.ActionView, s.relayed("/stream", station.ScopeView)))
 	mux.Handle("GET /v1/devices/{rig}/{name}/screenshot", s.api(station.ActionView, s.relayed("/snapshot", station.ScopeView)))
 	mux.Handle("GET /v1/devices/{rig}/{name}/hid", s.api(station.ActionControl, s.relayed("/api/hid/ws", station.ScopeInput)))
+	mux.Handle("GET /v1/devices/{rig}/{name}/audio", s.api(station.ActionView, s.relayed("/audio", station.ScopeView)))
+	mux.Handle("GET /v1/devices/{rig}/{name}/mic", s.api(station.ActionControl, s.relayed("/api/mic", station.ScopeInput)))
 	return secure(mux)
 }
 
@@ -133,10 +135,27 @@ func apiJSON(w http.ResponseWriter, v any) {
 	json.NewEncoder(w).Encode(v)
 }
 
+// sameOrigin says whether a browser's Origin header names this station.
+// Requests without one (API clients) pass.
+func sameOrigin(r *http.Request) bool {
+	o := r.Header.Get("Origin")
+	if o == "" {
+		return true
+	}
+	u, err := url.Parse(o)
+	return err == nil && strings.EqualFold(u.Host, r.Host)
+}
+
 // api gates an API call: a bearer token, the session (with CSRF on
-// writes), or a tailnet identity.
+// writes), or a tailnet identity. A WebSocket from a browser must come
+// from this station's own pages: the cookie would otherwise let any site
+// the owner visits open one.
 func (s *server) api(action station.Action, next handlerWithPrincipal) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if relay.IsWebSocket(r) && !sameOrigin(r) {
+			apiError(w, http.StatusForbidden, "cross-origin WebSocket")
+			return
+		}
 		p, err := s.auth.Authenticate(r)
 		if err != nil {
 			apiError(w, http.StatusUnauthorized, "sign in, or send Authorization: Bearer <token>")

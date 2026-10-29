@@ -36,9 +36,12 @@ func (rl *Relay) Serve(w http.ResponseWriter, r *http.Request, rigID, path strin
 			pr.Out.URL = target
 			pr.Out.Host = "rig"
 			// The rig sees the station as the client; who the browser is
-			// travels in the grant, not in headers it could forge.
+			// travels in the grant, not in headers it could forge. The
+			// station checked the browser's Origin; the rig's own
+			// same-origin checks would only see the station's name.
 			pr.Out.Header.Del("X-Forwarded-For")
 			pr.Out.Header.Del("Cookie")
+			pr.Out.Header.Del("Origin")
 		},
 		Transport:     rl.Tunnel.Transport(rigID),
 		FlushInterval: -1, // streams (MJPEG, events) flush as they come
