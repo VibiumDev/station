@@ -1,4 +1,4 @@
-// The theme switch for Vibium's pages: light or dark as the system has
+// The theme switch for Vibium's pages, and the "?" help toggles: light or dark as the system has
 // it, unless the person picked one here, which this browser remembers.
 // Loaded in the head, so a remembered choice applies before the first
 // paint; the button is wired once the page is there.
@@ -21,6 +21,16 @@
     btn.innerHTML = dark ? SUN : MOON;
   }
   document.addEventListener('DOMContentLoaded', function () {
+    // The "?" buttons: each shows or hides the explanation it names.
+    Array.prototype.forEach.call(document.querySelectorAll('.qhelp[aria-controls]'), function (q) {
+      var text = document.getElementById(q.getAttribute('aria-controls'));
+      if (!text) return;
+      q.addEventListener('click', function () {
+        var open = text.hidden;
+        text.hidden = !open;
+        q.setAttribute('aria-expanded', open ? 'true' : 'false');
+      });
+    });
     var btn = document.getElementById('themeBtn');
     if (!btn) return;
     paint(btn);
