@@ -1020,7 +1020,65 @@
     }
     return list;
   }
-  var twoFingerLastY = null, scrollAccum = 0;
+  // Two fingers in mouse mode. A target that takes touch as its pointer
+  // (an iPhone) never sees two fingers, so the pair becomes what the
+  // pointer can do. Fingers moving together turn the wheel. Fingers
+  // moving apart or towards each other become Apple Maps' one-finger
+  // zoom: a double tap at their centre with the second tap held, dragged
+  // up to zoom in and down to zoom out, about a seventh of the picture
+  // per doubling of the distance between the fingers. Google Maps zooms
+  // the same way; other apps get a double tap and a drag. Which of the
+  // two a pair is gets decided by whichever moves first past a few
+  // pixels, and stays decided until a finger lifts.
+  var two = null;
+  var ZOOM_UNITS = 4900;  // the drag for one doubling, in picture units
+  function pair(e) {
+    var a = e.touches[0], b = e.touches[1];
+    return {d: Math.sqrt(Math.pow(a.clientX - b.clientX, 2) + Math.pow(a.clientY - b.clientY, 2)),
+      cx: (a.clientX + b.clientX) / 2, cy: (a.clientY + b.clientY) / 2};
+  }
+  function twoStart(e) {
+    // Whatever the first finger began is off: a press still pending is
+    // dropped, one already down is let go.
+    if (pending) { clearTimeout(pending.timer); pending = null; }
+    else if (feedPressed) hidSend({cmd: 'mouse_release', buttons: feedButton || 1});
+    feedPressed = false; feedButton = 0;
+    var q = pair(e), c = posFromFeed({clientX: q.cx, clientY: q.cy});
+    two = {d0: q.d, cy: q.cy, kind: null, x: c.x, y: c.y, lastY: null, accum: 0};
+  }
+  function twoMove(e) {
+    var q = pair(e);
+    if (!two.kind) {
+      if (Math.abs(q.d - two.d0) > 24) {
+        two.kind = 'pinch';
+        move(two.x, two.y); mouseDirty = false;
+        hidSend({cmd: 'mouse_click', buttons: 1});
+        hidSend({cmd: 'mouse_press', buttons: 1});
+      } else if (Math.abs(q.cy - two.cy) > 16) {
+        two.kind = 'scroll'; two.lastY = q.cy;
+      } else return;
+    }
+    if (two.kind === 'pinch') {
+      var y = two.y - Math.log(q.d / two.d0) / Math.LN2 * ZOOM_UNITS;
+      pendingX = two.x; pendingY = Math.max(0, Math.min(32767, Math.round(y))); mouseDirty = true;
+      return;
+    }
+    two.accum += q.cy - two.lastY;
+    two.lastY = q.cy;
+    while (Math.abs(two.accum) >= 10) {
+      pendingScroll = Math.max(-127, Math.min(127, pendingScroll + (two.accum > 0 ? 3 : -3)));
+      scrollDirty = true;
+      two.accum -= (two.accum > 0 ? 10 : -10);
+    }
+  }
+  function twoEnd() {
+    if (!two) return;
+    if (two.kind === 'pinch') {
+      if (mouseDirty) { move(pendingX, pendingY); mouseDirty = false; }
+      hidSend({cmd: 'mouse_release', buttons: 1});
+    }
+    two = null;
+  }
   img.addEventListener('touchstart', function (e) {
     e.preventDefault();
     if (inputMode === 'touch') {
@@ -1034,8 +1092,8 @@
       pendingX = p.x; pendingY = p.y; mouseDirty = false;
       move(p.x, p.y);
       beginPress(p, 'mouse', 1);
-    } else {
-      commitPress();
+    } else if (!two) {
+      twoStart(e);
     }
   }, {passive: false});
   img.addEventListener('touchmove', function (e) {
@@ -1048,19 +1106,10 @@
       return;
     }
     if (e.touches.length >= 2) {
-      commitPress();
-      var avgY = (e.touches[0].clientY + e.touches[1].clientY) / 2;
-      if (twoFingerLastY !== null) {
-        scrollAccum += (avgY - twoFingerLastY);
-        while (Math.abs(scrollAccum) >= 10) {
-          pendingScroll = Math.max(-127, Math.min(127, pendingScroll + (scrollAccum > 0 ? 3 : -3)));
-          scrollDirty = true;
-          scrollAccum -= (scrollAccum > 0 ? 10 : -10);
-        }
-      }
-      twoFingerLastY = avgY;
+      if (!two) twoStart(e);
+      twoMove(e);
     } else {
-      twoFingerLastY = null; scrollAccum = 0;
+      twoEnd();
       var p = posFromFeed(e.touches[0]);
       if (pending && movedFar(p)) commitPress();
       pendingX = p.x; pendingY = p.y; mouseDirty = true;
@@ -1068,14 +1117,18 @@
   }, {passive: false});
   img.addEventListener('touchend', function (e) {
     e.preventDefault();
+    if (e.touches.length < 2) twoEnd();
     if (inputMode === 'touch') {
       if (e.touches.length) { commitPress(); pendingContacts = touchToContacts(e); touchDirty = false; touch(pendingContacts); }
       else if (feedPressed) endPress(e.changedTouches && e.changedTouches[0] ? posFromFeed(e.changedTouches[0]) : null);
     } else if (!e.touches.length && feedPressed) {
       endPress(null);
     }
-    if (e.touches.length < 2) { twoFingerLastY = null; scrollAccum = 0; }
   }, {passive: false});
+  // Safari's own pinch of the page stays out of the picture.
+  ['gesturestart', 'gesturechange', 'gestureend'].forEach(function (type) {
+    img.addEventListener(type, function (e) { e.preventDefault(); }, {passive: false});
+  });
 
   // --- The keyboard: keys go to the device while capture is on and no
   // form control has the focus. What is held is remembered, so a keyup
@@ -1103,6 +1156,7 @@
   kbdCaptureCheck.onchange = function () { kbdCapture = kbdCaptureCheck.checked; };
   var heldKeys = {};
   function releaseEverythingHeld() {
+    two = null;
     if (pending) { clearTimeout(pending.timer); pending = null; }
     hidSend({cmd: 'mouse_release', buttons: 7});
     touch([]);

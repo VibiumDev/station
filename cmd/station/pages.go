@@ -40,10 +40,10 @@ var pages = template.Must(template.New("").Funcs(template.FuncMap{"npub": npub, 
 
 {{define "header"}}<header class="top"><div class="wrap">
 <a class="brand" href="/"><span class="wordmark">{{if .Named}}{{.Name}}{{else}}Station{{end}}</span></a>
-<nav><a href="/"{{if eq (printf "%v" .Page) "index"}} aria-current="page"{{end}}>Devices</a>{{if .Principal.Admin}}<a href="/settings"{{if eq (printf "%v" .Page) "settings"}} aria-current="page"{{end}}>Settings</a>{{end}}
-<span class="who">{{.Principal.Subject}}</span>
-<form class="inline" method="post" action="/logout"><input type="hidden" name="csrf" value="{{.CSRF}}"><button class="link" type="submit">Sign out</button></form></nav>
-{{template "theme"}}</div></header>{{end}}
+<nav class="pages"><a href="/"{{if eq (printf "%v" .Page) "index"}} aria-current="page"{{end}}>Devices</a>{{if .Principal.Admin}}<a href="/settings"{{if eq (printf "%v" .Page) "settings"}} aria-current="page"{{end}}>Settings</a>{{end}}</nav>
+<div class="account"><span class="who">{{.Principal.Subject}}</span>
+<form class="inline" method="post" action="/logout"><input type="hidden" name="csrf" value="{{.CSRF}}"><button class="link" type="submit">Sign out</button></form></div>
+{{template "theme"}}<span class="break"></span></div></header>{{end}}
 
 {{define "foot"}}<footer class="foot"><div class="wrap"><span class="wordmark">Vibium</span>
 <span class="line">{{.Host}}</span>

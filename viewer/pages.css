@@ -59,11 +59,17 @@ pre { background: var(--surface); border: 1px solid var(--line-card); border-rad
 .brand { display: flex; gap: 10px; align-items: baseline; color: var(--text); text-decoration: none; }
 .brand .wordmark { font: 700 25px/1 var(--head); letter-spacing: 0.01em; }
 .brand .product { font: 13px var(--mono); letter-spacing: 0.08em; text-transform: uppercase; color: var(--text-muted); }
-.top nav { display: flex; flex-wrap: wrap; gap: 8px 24px; align-items: center; margin-left: auto; font-size: 15px; }
-.top nav a { color: var(--text-2); text-decoration: none; }
-.top nav a:hover { color: var(--text); }
-.top nav a[aria-current="page"] { color: var(--text); font-weight: 600; }
-.top nav .who { color: var(--text-muted); font-family: var(--mono); font-size: 13px; }
+/* The page links sit by the wordmark; who is signed in and Sign out sit
+   at the right, the theme button after them. */
+.top .pages { display: flex; flex-wrap: wrap; gap: 6px 20px; align-items: center; margin-left: 12px; font-size: 15px; }
+.top .pages a { color: var(--text-2); text-decoration: none; }
+.top .pages a:hover { color: var(--text); }
+.top .pages a[aria-current="page"] { color: var(--text); font-weight: 600; }
+.top .account { display: flex; gap: 16px; align-items: center; margin-left: auto; font-size: 15px; }
+.top .who { color: var(--text-muted); font-family: var(--mono); font-size: 13px; }
+.top .iconbtn { margin-left: auto; }
+.top .account ~ .iconbtn { margin-left: 16px; }
+.top .break { display: none; flex-basis: 100%; height: 0; }
 
 main { flex: 1; }
 main.wrap { padding-top: 56px; padding-bottom: 88px; }
@@ -140,9 +146,14 @@ form.row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margi
    lines, so nothing scrolls sideways or breaks mid-word. */
 @media (max-width: 640px) {
   .wrap { padding: 0 16px; }
-  .top .wrap { padding: 14px 16px; gap: 8px 16px; }
-  .top .iconbtn { margin-left: auto; }
-  .top nav { order: 3; width: 100%; margin-left: 0; gap: 6px 16px; }
+  /* Two rows: the wordmark and the theme button, then the page links
+     at the left and the account at the right. */
+  .top .wrap { padding: 14px 16px; gap: 10px 16px; }
+  .top .brand { order: 1; }
+  .top .iconbtn, .top .account ~ .iconbtn { order: 2; margin-left: auto; }
+  .top .break { order: 3; display: block; }
+  .top .pages { order: 4; margin-left: 0; gap: 6px 16px; }
+  .top .account { order: 5; gap: 12px; }
   main.wrap { padding-top: 36px; padding-bottom: 56px; }
   .h2 { margin-top: 40px; }
   .tablewrap table:not(.kv) thead { display: none; }
