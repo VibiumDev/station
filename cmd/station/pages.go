@@ -28,7 +28,8 @@ func platformName(p string) string {
 
 // The station's pages, in the look of Vibium's web style guide: the
 // shared stylesheet and theme switch come from the viewer package, so a
-// Roadie's pages are the same.
+// Roadie's pages are the same. Signed in, the top bar is the station's
+// own name; the brand is on the sign-in page and in every foot.
 var pages = template.Must(template.New("").Funcs(template.FuncMap{"npub": npub, "dict": dict, "platform": platformName}).Parse(`
 {{define "head"}}<!DOCTYPE html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
@@ -38,7 +39,7 @@ var pages = template.Must(template.New("").Funcs(template.FuncMap{"npub": npub, 
 {{define "theme"}}<button id="themeBtn" class="iconbtn" type="button" aria-label="Switch theme"></button>{{end}}
 
 {{define "header"}}<header class="top"><div class="wrap">
-<a class="brand" href="/"><span class="wordmark">Vibium</span><span class="product">Station</span></a>
+<a class="brand" href="/"><span class="wordmark">{{if .Named}}{{.Name}}{{else}}Station{{end}}</span></a>
 <nav><a href="/"{{if eq (printf "%v" .Page) "index"}} aria-current="page"{{end}}>Devices</a>{{if .Principal.Admin}}<a href="/settings"{{if eq (printf "%v" .Page) "settings"}} aria-current="page"{{end}}>Settings</a>{{end}}
 <span class="who">{{.Principal.Subject}}</span>
 <form class="inline" method="post" action="/logout"><input type="hidden" name="csrf" value="{{.CSRF}}"><button class="link" type="submit">Sign out</button></form></nav>
@@ -61,7 +62,7 @@ var pages = template.Must(template.New("").Funcs(template.FuncMap{"npub": npub, 
 {{template "foot" .}}{{end}}
 
 {{define "index"}}{{template "head" (dict "Title" "Devices" "Name" .Name "Named" .Named)}}{{template "header" .}}
-<main class="wrap">{{template "kicker" .}}<h1 class="h1">Devices.</h1>
+<main class="wrap"><h1 class="h1">Devices.</h1>
 <p class="lead">Open a device to drive it, or to watch when someone else has it.</p>
 {{if not .Devices}}<div class="msg">No rigs yet. Make an enrollment code on <a href="/settings">Settings</a>, then on the rig run <code>roadie enroll --code …</code>.</div>{{end}}
 {{if .Devices}}<div class="tablewrap"><table><thead><tr><th>Device</th><th>Rig</th><th>Status</th><th></th></tr></thead><tbody>
@@ -74,7 +75,7 @@ var pages = template.Must(template.New("").Funcs(template.FuncMap{"npub": npub, 
 </main>{{template "foot" .}}{{end}}
 
 {{define "settings"}}{{template "head" (dict "Title" "Settings" "Name" .Name "Named" .Named)}}{{template "header" .}}
-<main class="wrap">{{template "kicker" .}}<h1 class="h1">Settings.</h1>
+<main class="wrap"><h1 class="h1">Settings.</h1>
 {{if .Message}}<div class="msg" role="alert">{{.Message}}</div>{{end}}
 
 <h2 class="h2">Name</h2>
