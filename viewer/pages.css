@@ -143,6 +143,7 @@ td .helptext { margin: 8px 0 0; font-size: 14px; }
 /* Settings with sliders and menus (Roadie's page). */
 select { min-height: 40px; padding: 6px 32px 6px 12px; border-radius: 10px; border: 1px solid var(--line-strong); background: var(--bg); color: var(--text); font: 15px var(--sans); }
 input[type=range] { width: min(100%, 320px); accent-color: var(--accent); vertical-align: middle; }
+input[type=radio], input[type=checkbox] { accent-color: var(--accent); width: 16px; height: 16px; }
 .setting { margin: 18px 0; }
 .setting > label, .setting > .lbl { display: block; font-size: 14px; font-weight: 600; color: var(--text); margin-bottom: 8px; }
 .setting .val { font: 500 14px var(--mono); color: var(--text-3); margin-left: 6px; }
