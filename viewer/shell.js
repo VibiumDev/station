@@ -482,7 +482,7 @@
   var REVEAL_PX = 18;
   var autoHide = false;
   var tuckTimer = null, overToolbar = false;
-  var toolbarSide = 'right';
+  var toolbarSide = 'left';
   function roomBeside() {
     var nw = img.naturalWidth, nh = img.naturalHeight;
     if (!nw || !nh) return true;
@@ -541,13 +541,21 @@
       scheduleTuck(1500);  // unless the pointer goes on to it
     }
   });
-  // A touch screen has no hover: a tap at the edge shows it, a tap
-  // anywhere else tucks it.
+  // A touch screen has no hover: a tap at the edge or on the grip shows
+  // it, a tap anywhere else tucks it.
+  var tbHandle = $('tbHandle');
   document.addEventListener('pointerdown', function (e) {
     if (e.pointerType === 'mouse' || !autoHide) return;
-    if (nearEdge(e)) untuck();
+    if (nearEdge(e) || tbHandle.contains(e.target)) untuck();
     else if (!toolbarEl.contains(e.target)) { overToolbar = false; scheduleTuck(600); }
   }, true);
+  // The grip with a mouse: the toolbar comes and stays while the pointer
+  // is on it, as from the edge.
+  tbHandle.addEventListener('pointerdown', function (e) {
+    e.preventDefault();
+    untuck();
+    if (e.pointerType === 'mouse') scheduleTuck(1500);
+  });
 
   // --- Keys to the device: USB HID usage codes, pressed then released in
   // reverse, as a shortcut button does.
@@ -640,7 +648,7 @@
   });
   var sideBtns = {top: $('tbSideTop'), right: $('tbSideRight'), bottom: $('tbSideBottom'), left: $('tbSideLeft')};
   function setToolbarSide(side) {
-    if (!sideBtns[side]) side = 'right';
+    if (!sideBtns[side]) side = 'left';
     toolbarSide = side;
     for (var k in sideBtns) {
       sideBtns[k].classList.toggle('on', k === side);
@@ -1266,7 +1274,7 @@
     if (!station) return;
     var watching = hold && observer && role === 'watch';
     holdStatus.textContent = watching ? 'watching ' + hold.subject : '';
-    holdStatus.title = watching ? 'Watching ' + hold.subject + '’s session' + (watchOnly ? '' : '; Hold takes the device') : '';
+    holdStatus.title = watching ? 'Watching ' + hold.subject + '’s session' + (watchOnly ? '' : '; press Hold to take the device') : '';
     takeBtn.style.display = role === 'watch' && !watchOnly ? 'flex' : 'none';
     releaseBtn.style.display = hold && !observer && !watchOnly ? 'flex' : 'none';
     releaseBtn.title = hold && !observer ? 'Release the device (you hold it)' : 'Release the device';
@@ -1321,7 +1329,7 @@
     role = 'watch';
     stopPicture();
     showHold();
-    showOverlay(watchOnly ? 'Nobody holds the device.' : 'Nobody holds the device. Hold takes it.');
+    showOverlay(watchOnly ? 'Nobody is driving the device.' : 'Nobody is driving the device. Press Hold to take it.');
     clearTimeout(lookAgain);
     lookAgain = setTimeout(function () { lookAgain = null; takeHold(['view'], false, true).catch(function () {}); }, 5000);
   }
@@ -1334,12 +1342,19 @@
     changing = true;
     takeHold(wanted(), false, true).catch(function () {}).then(function () { changing = false; });
   }
+  // Release ends the hold and goes back to the host's front page, the
+  // device list; without one, the page stays and watches.
   function release() {
     released = true;
     releaseEverythingHeld();
     stopPicture();
-    if (hold && !observer) request('DELETE', api.hold).catch(function () {});
-    nobody();
+    var ended = hold && !observer ? request('DELETE', api.hold).catch(function () {}) : Promise.resolve();
+    var home = $('homeLink');
+    if (!home) { nobody(); return; }
+    showOverlay('Released.');
+    var go = function () { location.href = home.getAttribute('href'); };
+    ended.then(go);
+    setTimeout(go, 3000);  // whatever the network says
   }
   if (station) {
     window.__roadieRTCConfig = {

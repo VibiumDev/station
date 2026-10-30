@@ -444,8 +444,14 @@ func serve(args []string) int {
 		var p int
 		fmt.Sscan(port, &p)
 		if shutdown, err := enroll.Advertise(cfg.Name, p); err == nil {
-			s.mdns = true
-			defer shutdown()
+			s.mdns, s.mdnsStop, s.mdnsPort = true, shutdown, p
+			defer func() {
+				s.nameMu.Lock()
+				defer s.nameMu.Unlock()
+				if s.mdnsStop != nil {
+					s.mdnsStop()
+				}
+			}()
 		} else {
 			fmt.Fprintln(os.Stderr, "mdns:", err)
 		}

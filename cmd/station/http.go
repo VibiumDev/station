@@ -11,6 +11,7 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"fiatjaf.com/nostr"
@@ -44,13 +45,90 @@ type server struct {
 	publicURL string
 	mode      string
 	mdns      bool
+	// The name may change from the Settings page while the station runs.
+	nameMu   sync.RWMutex
+	mdnsStop func() // the LAN advertisement, to redo under a new name
+	mdnsPort int
+}
+
+// name is the station's name: the config's, "station" until the owner
+// sets one.
+func (s *server) name() string {
+	s.nameMu.RLock()
+	defer s.nameMu.RUnlock()
+	return s.cfg.Name
+}
+
+// named says whether the owner has given the station a name of their
+// own; the default is not shown on the pages.
+func (s *server) named() bool {
+	n := s.name()
+	return n != "" && n != "station"
+}
+
+// title is the name for a browser tab: the owner's, or the product's.
+func (s *server) title() string {
+	if s.named() {
+		return s.name()
+	}
+	return "Vibium Station"
+}
+
+// host is the station's address without the scheme, for the pages' foot.
+func (s *server) host() string {
+	u := s.publicURL
+	if i := strings.Index(u, "://"); i >= 0 {
+		u = u[i+3:]
+	}
+	return strings.TrimSuffix(u, "/")
+}
+
+// enrollNow is the enrollment handler under the station's current name.
+func (s *server) enrollNow() *enroll.Handler {
+	h := *s.enroll
+	h.Name = s.name()
+	return &h
+}
+
+// setName renames the station: the config, the enrollment profile from
+// now on, and the LAN advertisement.
+func (s *server) setName(w http.ResponseWriter, r *http.Request, p station.Principal) {
+	name := strings.TrimSpace(r.FormValue("name"))
+	msg := "Name saved."
+	switch {
+	case name == "":
+		msg = "The station needs a name."
+	case len(name) > 60:
+		msg = "A name is at most 60 characters."
+	default:
+		s.nameMu.Lock()
+		old := s.cfg.Name
+		s.cfg.Name = name
+		err := saveConfig(s.dir, s.cfg)
+		if err != nil {
+			s.cfg.Name = old
+			msg = "Could not save: " + err.Error()
+		} else if s.mdnsStop != nil {
+			s.mdnsStop()
+			if stop, err := enroll.Advertise(name, s.mdnsPort); err == nil {
+				s.mdnsStop = stop
+			} else {
+				s.mdnsStop, s.mdns = nil, false
+			}
+		}
+		s.nameMu.Unlock()
+		if err == nil && name != old {
+			s.db.Audit(r.Context(), station.AuditEntry{Subject: p.Subject, Action: "name", Detail: old + " renamed " + name})
+		}
+	}
+	s.render(w, "settings", s.settingsData(r, p, map[string]any{"Message": msg}))
 }
 
 func (s *server) handler() http.Handler {
 	mux := http.NewServeMux()
 	// Rigs and the public bits.
-	mux.HandleFunc("GET /v1/station", s.enroll.ServeProfile)
-	mux.HandleFunc("POST /v1/enroll", s.enroll.ServeEnroll)
+	mux.HandleFunc("GET /v1/station", func(w http.ResponseWriter, r *http.Request) { s.enrollNow().ServeProfile(w, r) })
+	mux.HandleFunc("POST /v1/enroll", func(w http.ResponseWriter, r *http.Request) { s.enrollNow().ServeEnroll(w, r) })
 	mux.Handle("/v1/tunnel", s.tunnel)
 	mux.Handle("GET /viewer/", http.StripPrefix("/viewer/", viewer.Assets()))
 	mux.HandleFunc("GET /login", s.loginPage)
@@ -60,6 +138,7 @@ func (s *server) handler() http.Handler {
 	mux.Handle("GET /{$}", s.page(station.ActionView, s.indexPage))
 	mux.Handle("GET /devices/{rig}/{name}/view", s.page(station.ActionView, s.viewPage))
 	mux.Handle("GET /settings", s.page(station.ActionManage, s.settingsPage))
+	mux.Handle("POST /settings/name", s.page(station.ActionManage, s.setName))
 	mux.Handle("POST /settings/password", s.page(station.ActionManage, s.setPassword))
 	mux.Handle("POST /settings/tokens", s.page(station.ActionManage, s.createToken))
 	mux.Handle("POST /settings/tokens/revoke", s.page(station.ActionManage, s.revokeToken))
@@ -586,7 +665,7 @@ func (s *server) indexPage(w http.ResponseWriter, r *http.Request, p station.Pri
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	s.render(w, "index", map[string]any{"Page": "index", "Devices": devs, "Principal": p, "CSRF": s.auth.csrfToken(r), "Name": s.cfg.Name})
+	s.render(w, "index", map[string]any{"Page": "index", "Devices": devs, "Principal": p, "CSRF": s.auth.csrfToken(r)})
 }
 
 func (s *server) viewPage(w http.ResponseWriter, r *http.Request, p station.Principal) {
@@ -619,7 +698,7 @@ func (s *server) viewPage(w http.ResponseWriter, r *http.Request, p station.Prin
 	if dev.Extras != "" {
 		cfg.Extras = "/v1/devices/" + dev.ID + "/extras.js"
 	}
-	viewer.Render(w, viewer.Page{Title: rg.Name + " / " + label + " · " + s.cfg.Name, Minimal: q.Get("minimal") == "1", Home: "/", HomeTitle: "Devices", Config: cfg})
+	viewer.Render(w, viewer.Page{Title: rg.Name + " / " + label + " · " + s.title(), Minimal: q.Get("minimal") == "1", Home: "/", HomeTitle: "Devices", Config: cfg})
 }
 
 func (s *server) settingsData(r *http.Request, p station.Principal, extra map[string]any) map[string]any {
@@ -628,7 +707,7 @@ func (s *server) settingsData(r *http.Request, p station.Principal, extra map[st
 	rigs, _ := s.db.Rigs(ctx)
 	codes, _ := s.db.OpenCodes(ctx, time.Now())
 	data := map[string]any{
-		"Page": "settings", "Principal": p, "CSRF": s.auth.csrfToken(r), "Name": s.cfg.Name, "Tokens": tokens, "Rigs": rigs, "OpenCodes": codes,
+		"Page": "settings", "Principal": p, "CSRF": s.auth.csrfToken(r), "Tokens": tokens, "Rigs": rigs, "OpenCodes": codes,
 		"Mode": s.mode, "PublicURL": s.publicURL, "TunnelURL": s.enroll.TunnelURL, "MDNS": s.mdns,
 		"Npub": npub(s.key.Public()), "Fingerprint": enroll.Fingerprint(s.key.Public()), "Allow": s.cfg.Allow,
 		"NoPassword": s.cfg.PasswordHash == "", "TURN": s.turnInfo,
@@ -714,7 +793,10 @@ func (s *server) removeRig(w http.ResponseWriter, r *http.Request, p station.Pri
 	http.Redirect(w, r, "/settings", http.StatusSeeOther)
 }
 
+// render writes a page; every page knows the station's name, whether the
+// owner set it, and the station's address.
 func (s *server) render(w http.ResponseWriter, name string, data map[string]any) {
+	data["Name"], data["Named"], data["Host"] = s.name(), s.named(), s.host()
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	if err := pages.ExecuteTemplate(w, name, data); err != nil {
 		log.Printf("render %s: %v", name, err)

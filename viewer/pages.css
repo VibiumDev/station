@@ -95,6 +95,7 @@ tr:last-child td { border-bottom: none; }
 td .sub { display: block; font: 13px var(--mono); color: var(--text-muted); margin-top: 3px; }
 td b { color: var(--text); font-weight: 600; }
 td code { word-break: break-all; }
+td.act { text-align: right; white-space: nowrap; }
 .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--line-strong); margin-right: 8px; vertical-align: 1px; }
 .dot.on { background: var(--success); }
 .kv th { width: 180px; color: var(--text-muted); font-weight: 500; background: none; }
@@ -133,4 +134,26 @@ form.row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margi
 .foot a:hover { color: var(--text); }
 
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
-@media (max-width: 480px) { th, td { padding: 12px 14px; } .top .wrap { padding: 14px 16px; } .wrap { padding: 0 16px; } }
+
+/* A phone: the links on their own row under the wordmark and the theme
+   button; a list table becomes a list, each row a block of labelled
+   lines, so nothing scrolls sideways or breaks mid-word. */
+@media (max-width: 640px) {
+  .wrap { padding: 0 16px; }
+  .top .wrap { padding: 14px 16px; gap: 8px 16px; }
+  .top .iconbtn { margin-left: auto; }
+  .top nav { order: 3; width: 100%; margin-left: 0; gap: 6px 16px; }
+  main.wrap { padding-top: 36px; padding-bottom: 56px; }
+  .h2 { margin-top: 40px; }
+  .tablewrap table:not(.kv) thead { display: none; }
+  .tablewrap table:not(.kv) tbody, .tablewrap table:not(.kv) tr, .tablewrap table:not(.kv) td { display: block; }
+  .tablewrap table:not(.kv) tr { padding: 10px 0; border-bottom: 1px solid var(--line-card); }
+  .tablewrap table:not(.kv) tr:last-child { border-bottom: none; }
+  .tablewrap table:not(.kv) td { position: relative; padding: 4px 16px 4px 112px; border-bottom: none; min-height: 32px; }
+  .tablewrap table:not(.kv) td[data-l]::before { content: attr(data-l); position: absolute; left: 16px; top: 4px; width: 88px; font: 13px/1.6 var(--mono); color: var(--text-muted); }
+  .tablewrap table:not(.kv) td.act { text-align: left; padding-top: 8px; }
+  .tablewrap table:not(.kv) td:empty { display: none; }
+  .kv th { width: 110px; padding-right: 8px; }
+  .foot .wrap { padding: 20px 16px; }
+}
+@media (max-width: 480px) { th, td { padding: 12px 14px; } .tablewrap table:not(.kv) td { padding: 4px 14px 4px 108px; } .tablewrap table:not(.kv) td[data-l]::before { left: 14px; } }

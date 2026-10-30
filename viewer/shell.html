@@ -8,7 +8,7 @@
 <link rel="stylesheet" href="{{.Assets}}/viewer/shell.css">
 {{if .Minimal}}<style>#toolbar { display:none !important; }</style>
 {{end}}</head>
-<body class="tb-right" style="margin:0; display:flex; height:100vh; height:100dvh; overflow:hidden; overscroll-behavior:none;" data-config="{{.ConfigJSON}}">
+<body class="tb-left" style="margin:0; display:flex; height:100vh; height:100dvh; overscroll-behavior:none;" data-config="{{.ConfigJSON}}">
   <div style="flex:1; min-width:0; min-height:0; display:flex; flex-direction:column;">
     <div id="viewer" style="position:relative; flex:1; min-width:0; min-height:0; overflow:hidden; user-select:none; -webkit-user-select:none;">
       <div id="overlay" style="display:flex;">
@@ -129,6 +129,7 @@
       </div>
     </div>
   </div>
+  <div id="tbHandle" title="Show the toolbar"></div>
   <script src="{{.Assets}}/viewer/shell.js"></script>
   <script src="{{.Assets}}/viewer/webrtc.js"></script>
 </body>

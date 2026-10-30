@@ -102,7 +102,7 @@ CLI or an SDK script, with a recording at the end.
 | `--http ADDR` | | Public mode behind your own TLS proxy (or Fly.io): plain HTTP on ADDR; needs `--public-url`. Login lockouts then count by `Fly-Client-IP` or the first `X-Forwarded-For` address |
 | `--allow` | none | Tailnet logins and tags that may sign in by identity (saved) |
 | `--public-url` | derived | How rigs and browsers reach the station; the tunnel URL follows |
-| `--name` | `station` | The station's name (saved) |
+| `--name` | `station` | The station's name, shown on its pages and told to rigs when they enroll (saved; the Settings page changes it too) |
 | `--no-mdns` | off | Do not advertise on the LAN |
 | `--turn` | `auto` | Run the TURN server: `on`, `off`, or `auto` (on in public mode) |
 | `--turn-listen` | `:3478` | TURN's UDP address; `fly-global-services:3478` on Fly.io |

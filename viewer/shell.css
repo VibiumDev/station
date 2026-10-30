@@ -46,8 +46,8 @@
   #toolbar { position:relative; flex-direction:column; gap:4px; padding:8px 6px; transition:transform 0.15s ease-out; }
   #toolbar.floating { position:fixed; z-index:20; }
   #toolbar.tucked { transform:translateX(100%); }
-  /* The side the toolbar sits on: a column at the right (the default) or
-     left, a row at the top or bottom from the left-hand corner. */
+  /* The side the toolbar sits on: a column at the left (the default) or
+     right, a row at the top or bottom from the left-hand corner. */
   body.tb-left #toolbar, body.tb-top #toolbar { order:-1; }
   body.tb-top, body.tb-bottom { flex-direction:column; }
   body.tb-top #toolbar, body.tb-bottom #toolbar { flex-direction:row; justify-content:flex-start; padding:6px 8px; }
@@ -58,7 +58,30 @@
   body.tb-left #toolbar.tucked { transform:translateX(-100%); }
   body.tb-top #toolbar.tucked { transform:translateY(-100%); }
   body.tb-bottom #toolbar.tucked { transform:translateY(100%); }
-  body { background:var(--page-bg); }
+  /* Nothing the page puts past its edge (a tucked toolbar) may make it
+     scrollable: the body clips rather than scrolls, and the root's own
+     overflow is set so the body's value applies to the body. Phones
+     ignore a hidden overflow on the page and pan to the content, so the
+     content must not be there. */
+  html { overflow:hidden; }
+  body { background:var(--page-bg); overflow:hidden; overflow:clip; }
+  /* The grip: where a tucked toolbar is, and a tap brings it back. On
+     its side's edge, in the middle, with a hit area bigger than it. */
+  #tbHandle { position:fixed; display:none; z-index:19; cursor:pointer; -webkit-tap-highlight-color:transparent; touch-action:none; }
+  #tbHandle::after { content:''; position:absolute; background:var(--ui-icon); opacity:0.55; border-radius:3px; }
+  #toolbar.tucked ~ #tbHandle { display:block; }
+  body.tb-right #tbHandle, body.tb-left #tbHandle { top:50%; width:28px; height:88px; margin-top:-44px; }
+  body.tb-right #tbHandle { right:0; }
+  body.tb-left #tbHandle { left:0; }
+  body.tb-right #tbHandle::after, body.tb-left #tbHandle::after { top:16px; bottom:16px; width:5px; }
+  body.tb-right #tbHandle::after { right:5px; }
+  body.tb-left #tbHandle::after { left:5px; }
+  body.tb-top #tbHandle, body.tb-bottom #tbHandle { left:50%; width:88px; height:28px; margin-left:-44px; }
+  body.tb-top #tbHandle { top:0; }
+  body.tb-bottom #tbHandle { bottom:0; }
+  body.tb-top #tbHandle::after, body.tb-bottom #tbHandle::after { left:16px; right:16px; height:5px; }
+  body.tb-top #tbHandle::after { top:5px; }
+  body.tb-bottom #tbHandle::after { bottom:5px; }
   @keyframes spin { to { transform:rotate(360deg); } }
   #onscreen-kbd .kr { display:flex; gap:3px; margin-bottom:3px; justify-content:center; }
   #onscreen-kbd .kr:last-child { margin-bottom:0; }
