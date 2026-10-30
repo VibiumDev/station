@@ -131,11 +131,23 @@ form.row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margi
 .qhelp[aria-expanded="true"] { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
 .qhelp.inline { margin: 0 2px; top: -1px; cursor: default; }
 .h2 .qhelp { top: -5px; }
+.h1 .qhelp { top: -14px; margin-left: 10px; }
+th .qhelp { margin-left: 4px; width: 20px; height: 20px; min-height: 20px; font-size: 12px; }
+.tablewrap + .helptext { margin-top: -8px; }
 .kv th .qhelp { top: -1px; }
 .helptext { margin: 0 0 16px; max-width: 640px; color: var(--text-3); font-size: 15px; line-height: 1.55; }
 .helptext b { color: var(--text); font-weight: 600; }
 td .helptext { margin: 8px 0 0; font-size: 14px; }
 .h2 + .helptext { margin-top: -6px; }
+
+/* Settings with sliders and menus (Roadie's page). */
+select { min-height: 40px; padding: 6px 32px 6px 12px; border-radius: 10px; border: 1px solid var(--line-strong); background: var(--bg); color: var(--text); font: 15px var(--sans); }
+input[type=range] { width: min(100%, 320px); accent-color: var(--accent); vertical-align: middle; }
+.setting { margin: 18px 0; }
+.setting > label, .setting > .lbl { display: block; font-size: 14px; font-weight: 600; color: var(--text); margin-bottom: 8px; }
+.setting .val { font: 500 14px var(--mono); color: var(--text-3); margin-left: 6px; }
+.setting .check { display: flex; margin: 4px 0; }
+.status { font: 14px/1.6 var(--mono); color: var(--text-3); margin: 10px 0; }
 
 /* Sign in: one card in the middle. */
 .login { max-width: 420px; margin: 10vh auto 0; }
