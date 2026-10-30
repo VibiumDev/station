@@ -490,14 +490,16 @@
     var W = document.documentElement.clientWidth;
     var H = document.documentElement.clientHeight - $('onscreen-kbd').offsetHeight;
     var bar = across ? toolbarEl.offsetHeight : toolbarEl.offsetWidth;
-    var fit = function (w, h) { return Math.min(nw, w, nw * h / nh); };
+    var cap = fitMode ? Infinity : nw;  // fit scales up too
+    var fit = function (w, h) { return Math.min(cap, w, nw * h / nh); };
     var full = fit(W, H);
     var kept = across ? fit(W, H - bar) : fit(W - bar, H);
-    var zoom = (parseInt(zoomRange.value, 10) || 100) / 100;
+    var zoom = fitMode ? 1 : zoomPct / 100;
     var zoomedFits = across ? kept * nh / nw * zoom <= H - bar + 0.5 : kept * zoom <= W - bar + 0.5;
     return full <= kept + 0.5 && zoomedFits;
   }
   function relayout() {
+    if (fitMode) layoutZoom();
     if (!autoHide) return;
     var room = roomBeside();
     if (toolbarEl.classList.contains('tucked')) toolbarEl.classList.toggle('floating', !room);
@@ -518,7 +520,6 @@
   }
   window.addEventListener('resize', relayout);
   if (window.ResizeObserver) new ResizeObserver(relayout).observe($('viewer'));
-  zoomRange.addEventListener('input', relayout);
   function applyAutoHide(on) {
     autoHide = on;
     if (on) scheduleTuck(600);
@@ -664,6 +665,16 @@
   })();
 
   // --- Zoom and alignment ---
+  // The picture is laid out at its own size, held within its room by
+  // max-width and max-height; zoom is a scale on that. Fit scales it to
+  // the room it has, up or down, and again whenever the room or the
+  // picture changes: the default on a phone or tablet, where a picture
+  // at its own size leaves the small screen half empty; on a desktop a
+  // choice in the menu, 100% the default. Touching the slider leaves fit.
+  var zoomFitBtn = $('zoomFitBtn');
+  var coarse = window.matchMedia && window.matchMedia('(pointer: coarse)').matches;
+  var fitMode = false;
+  var zoomPct = 100;  // the slider's, when not fitting
   function applyAlignment(mode) {
     alignment = mode;
     var viewer = $('viewer');
@@ -681,29 +692,51 @@
       viewer.style.alignItems = '';
       kbdI.style.textAlign = '';
     }
-    applyZoom(parseInt(zoomRange.value, 10));
+    layoutZoom();
   }
-  function applyZoom(pct) {
-    zoomVal.textContent = pct + '%';
-    zoomRange.value = pct;
-    var scale = pct / 100;
+  // The scale that fills the room: the picture's laid-out size (its own,
+  // or already held to the room) against the room.
+  function fitScale() {
+    var viewer = $('viewer');
+    var W = viewer.clientWidth, H = viewer.clientHeight;
+    var cs = getComputedStyle(img);
+    var w = parseFloat(cs.width), h = parseFloat(cs.height);
+    if (!W || !H || !w || !h || img.style.display === 'none') return 1;
+    return Math.min(W / w, H / h);
+  }
+  function layoutZoom() {
+    var scale = fitMode ? fitScale() : zoomPct / 100;
     img.style.transform = scale === 1 ? '' : 'scale(' + scale + ')';
     img.style.transformOrigin = alignment === 'center' ? 'center center' : 'top left';
     $('viewer').style.overflow = 'hidden';
+    var pct = Math.round(scale * 100);
+    zoomVal.textContent = pct + '%';
+    zoomRange.value = pct;
+    zoomFitBtn.classList.toggle('on', fitMode);
   }
+  function applyZoom(pct) { fitMode = false; zoomPct = pct; layoutZoom(); }
+  function applyFit() { fitMode = true; layoutZoom(); }
   function snapZoom(val) {
     var nearest = Math.round(val / 25) * 25;
     return Math.abs(val - nearest) <= 3 ? nearest : val;
   }
-  zoomRange.oninput = function () { var pct = snapZoom(parseInt(zoomRange.value, 10)); applyZoom(pct); saveSettings({zoom: pct}); };
+  zoomRange.oninput = function () { var pct = snapZoom(parseInt(zoomRange.value, 10)); applyZoom(pct); saveSettings({zoom: pct}); relayout(); };
+  zoomFitBtn.onclick = function () {
+    if (fitMode) { applyZoom(100); saveSettings({zoom: 100}); }
+    else { applyFit(); saveSettings({zoom: 'fit'}); }
+  };
   alignTLBtn.onclick = function () { applyAlignment('top-left'); saveSettings({alignment: 'top-left'}); };
   alignCenterBtn.onclick = function () { applyAlignment('center'); saveSettings({alignment: 'center'}); };
   (function () {
     var align = qs.get('align');
     applyAlignment(align === 'center' || align === 'top-left' ? align : (saved.alignment || alignment));
-    var zoom = parseInt(qs.get('zoom'), 10);
-    if (zoom >= 50 && zoom <= 400) applyZoom(zoom);
-    else if (saved.zoom !== undefined) applyZoom(saved.zoom);
+    var zq = qs.get('zoom');
+    var zoom = parseInt(zq, 10);
+    if (zq === 'fit') applyFit();
+    else if (zoom >= 50 && zoom <= 400) applyZoom(zoom);
+    else if (saved.zoom === 'fit') applyFit();
+    else if (typeof saved.zoom === 'number') applyZoom(saved.zoom);
+    else if (coarse) applyFit();
   })();
 
   // --- Screenshot quality: the Screenshot button's own JPEG quality.
@@ -815,7 +848,6 @@
 
   // --- Input mode: the mode the host resolved for this load, then the
   // one this viewer picked, then mouse (or touch on a touchscreen).
-  var coarse = window.matchMedia && window.matchMedia('(pointer: coarse)').matches;
   var inputMode = (cfg.inputMode === 'touch' || cfg.inputMode === 'mouse') ? cfg.inputMode
     : (localStorage.getItem('roadie-input-mode') === 'touch' ? 'touch' : localStorage.getItem('roadie-input-mode') === 'mouse' ? 'mouse' : (coarse ? 'touch' : 'mouse'));
   var modeMouseBtn = $('modeMouseBtn');
