@@ -84,7 +84,6 @@ var pages = template.Must(template.New("").Funcs(template.FuncMap{"npub": npub, 
 
 {{define "settings"}}{{template "head" (dict "Title" "Settings" "Name" .Name "Named" .Named)}}{{template "header" .}}
 <main class="wrap"><h1 class="h1">Settings.</h1>
-<p class="lead">The <span class="qhelp inline" aria-hidden="true">?</span> by a heading explains its section.</p>
 {{if .Message}}<div class="msg" role="alert">{{.Message}}</div>{{end}}
 
 <h2 class="h2">Name {{template "help" "name"}}</h2>

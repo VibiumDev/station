@@ -129,7 +129,6 @@ form.row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margi
 .qhelp { display: inline-flex; align-items: center; justify-content: center; width: 22px; height: 22px; min-height: 22px; padding: 0; margin-left: 6px; border-radius: 50%; border: 1px solid var(--line-strong); background: transparent; color: var(--text-muted); font: 500 13px/1 var(--mono); vertical-align: middle; cursor: pointer; position: relative; top: -2px; }
 .qhelp:hover { color: var(--text); border-color: var(--text-3); }
 .qhelp[aria-expanded="true"] { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
-.qhelp.inline { margin: 0 2px; top: -1px; cursor: default; }
 .h2 .qhelp { top: -5px; }
 .h1 .qhelp { top: -14px; margin-left: 10px; }
 .helptext { margin: 0 0 16px; max-width: 640px; color: var(--text-3); font-size: 15px; line-height: 1.55; }
