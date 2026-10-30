@@ -64,25 +64,27 @@ var pages = template.Must(template.New("").Funcs(template.FuncMap{"npub": npub, 
 {{define "index"}}{{template "head" (dict "Title" "Devices" "Name" .Name "Named" .Named)}}{{template "header" .}}
 <main class="wrap"><h1 class="h1">Devices. {{template "help" "devices"}}</h1>
 <p class="lead">Open a device to drive it, or to watch when someone else has it.</p>
-<p class="helptext" id="help-devices" hidden>Every device on every rig enrolled here. Open takes a device nobody holds, and you drive it: the picture, touch, keys and sound. A device someone else holds opens watching, and Hold in the viewer takes it from them; an agent's run ends when you do. Release in the viewer gives the device back and returns here. A hold also ends after 5 idle minutes, or after 8 hours.</p>
+<div class="helptext" id="help-devices" hidden>
+<p>Every device on every rig enrolled here. Open takes a device nobody holds, and you drive it: the picture, touch, keys and sound. A device someone else holds opens watching, and Hold in the viewer takes it from them; an agent's run ends when you do. Release in the viewer gives the device back and returns here. A hold also ends after 5 idle minutes, or after 8 hours.</p>
+<p><b>Device.</b> The device's label, or its name when the rig gave it no label, with its kind and platform under it. The name is the last part of the device's address, rig/name, which holds and the API use; Roadie's <code>--label</code> sets the label and <code>--platform</code> the platform.</p>
+<p><b>Rig.</b> The machine the device is wired to: the name it enrolled with, and the id the station gave it.</p>
+<p><b>Status.</b> Online while the rig's tunnel to the station is up, offline otherwise. Under it, available when nobody holds the device, or who holds it and how many agents are waiting their turn.</p>
+</div>
 {{if not .Devices}}<div class="msg">No rigs yet. Make an enrollment code on <a href="/settings">Settings</a>, then on the rig run <code>roadie enroll --code …</code>.</div>{{end}}
-{{if .Devices}}<div class="tablewrap"><table><thead><tr><th>Device {{template "help" "device"}}</th><th>Rig {{template "help" "rig"}}</th><th>Status {{template "help" "status"}}</th><th></th></tr></thead><tbody>
+{{if .Devices}}<div class="tablewrap"><table><thead><tr><th>Device</th><th>Rig</th><th>Status</th><th></th></tr></thead><tbody>
 {{range .Devices}}<tr>
 <td data-l="Device">{{if .ID}}<b>{{if .Label}}{{.Label}}{{else}}{{.Name}}{{end}}</b><span class="sub">{{.Kind}}{{if .Platform}} · {{platform .Platform}}{{end}}{{if .Label}} · {{.Name}}{{end}}</span>{{else}}<span class="muted">no devices announced</span>{{end}}</td>
 <td data-l="Rig"><b>{{.Rig.Name}}</b><span class="sub">{{.Rig.ID}}</span></td>
 <td data-l="Status">{{if .Online}}<span class="dot on"></span>online{{else}}<span class="dot"></span><span class="muted">offline</span>{{end}}<span class="sub">{{if .Hold}}held by {{.Hold.Subject}}{{else}}available{{end}}{{if .Waiting}} · {{.Waiting}} waiting{{end}}</span></td>
 <td class="act">{{if .ID}}<a class="btn small" href="/devices/{{.ID}}/view">Open</a>{{end}}</td>
-</tr>{{end}}</tbody></table></div>
-<p class="helptext" id="help-device" hidden>The device's label, or its name when the rig gave it no label, with its kind and platform under it. The name is the last part of the device's address, rig/name, which holds and the API use; Roadie's <code>--label</code> sets the label and <code>--platform</code> the platform.</p>
-<p class="helptext" id="help-rig" hidden>The machine the device is wired to: the name it enrolled with, and the id the station gave it.</p>
-<p class="helptext" id="help-status" hidden><b>online</b> while the rig's tunnel to the station is up, <b>offline</b> otherwise. Under it, <b>available</b> when nobody holds the device, or who holds it and how many agents are waiting their turn.</p>{{end}}
+</tr>{{end}}</tbody></table></div>{{end}}
 </main>{{template "foot" .}}{{end}}
 
 {{define "help"}}<button class="qhelp" type="button" aria-expanded="false" aria-controls="help-{{.}}" aria-label="What this is">?</button>{{end}}
 
 {{define "settings"}}{{template "head" (dict "Title" "Settings" "Name" .Name "Named" .Named)}}{{template "header" .}}
 <main class="wrap"><h1 class="h1">Settings.</h1>
-<p class="lead">Each <span class="qhelp inline" aria-hidden="true">?</span> explains the setting beside it.</p>
+<p class="lead">The <span class="qhelp inline" aria-hidden="true">?</span> by a heading explains its section.</p>
 {{if .Message}}<div class="msg" role="alert">{{.Message}}</div>{{end}}
 
 <h2 class="h2">Name {{template "help" "name"}}</h2>
@@ -125,15 +127,24 @@ var pages = template.Must(template.New("").Funcs(template.FuncMap{"npub": npub, 
 <input type="submit" value="Change"></form>
 
 <h2 class="h2">Network {{template "help" "network"}}</h2>
-<p class="helptext" id="help-network" hidden>How this station is reached, set by the flags it was started with. Each row has its own explanation.</p>
+<div class="helptext" id="help-network" hidden>
+<p>How this station is reached, set by the flags it was started with.</p>
+<p><b>Mode.</b> In <code>lan</code> mode the station listens on this machine's own network with a certificate it made itself. In <code>tailnet</code> mode it joins your Tailscale network as a node of its own, with HTTPS from Tailscale and sign-in by identity. In <code>public</code> mode it listens on a public address with a Let's Encrypt certificate, or behind a proxy such as Fly.io.</p>
+<p><b>Address.</b> Where browsers and rigs reach this station. Rigs are told it when they enroll, and every link the station gives out starts with it.</p>
+<p><b>Tunnel.</b> The connection every enrolled rig keeps open to this station, a WebSocket the rig opens outward. Through it the station reaches the rig's devices wherever the rig is, behind any router, with nothing opened on the rig's side: holds, the picture, input and the device's API all travel through the tunnel. A rig that drops reconnects on its own.</p>
+<p><b>mDNS.</b> In lan mode the station announces itself on the local network as <code>_vibium-station._tcp</code>, so a rig on the same network can enroll without being given the address. Off with <code>--no-mdns</code>, and in the other modes.</p>
+<p><b>Station key.</b> This station's identity: a key pair of its own, made the first time it ran and kept in its data directory. Rigs record the public key when they enroll and accept only what it signs, such as the grant a browser or an agent presents to hold a device. The fingerprint is the key's first four characters, the last group of every enrollment code.</p>
+<p><b>Tailnet identities.</b> In tailnet mode, the Tailscale logins and tags allowed to sign in by identity, with no password, as given to <code>--allow</code>. Anyone else on the tailnet gets the sign-in page.</p>
+<p><b>TURN.</b> A relay for the picture and sound when a browser and a rig cannot reach each other directly, as across two home routers. Each hold gets its own short-lived credentials, and relaying to private addresses is refused. On by itself in public mode, off in tailnet mode, where the tailnet already joins both ends; <code>--turn on</code> or <code>off</code> decides otherwise.</p>
+</div>
 <div class="tablewrap"><table class="kv">
-<tr><th>Mode {{template "help" "mode"}}</th><td>{{.Mode}}<p class="helptext" id="help-mode" hidden><b>lan</b>: the station listens on this machine's own network with a certificate it made itself. <b>tailnet</b>: it joins your Tailscale network as a node of its own, with HTTPS from Tailscale and sign-in by identity. <b>public</b>: it listens on a public address with a Let's Encrypt certificate, or behind a proxy such as Fly.io.</p></td></tr>
-<tr><th>Address {{template "help" "address"}}</th><td>{{.PublicURL}}<p class="helptext" id="help-address" hidden>Where browsers and rigs reach this station. Rigs are told it when they enroll, and every link the station gives out starts with it.</p></td></tr>
-<tr><th>Tunnel {{template "help" "tunnel"}}</th><td>{{.TunnelURL}}<p class="helptext" id="help-tunnel" hidden>The connection every enrolled rig keeps open to this station, a WebSocket the rig opens outward. Through it the station reaches the rig's devices wherever the rig is, behind any router, with nothing opened on the rig's side: holds, the picture, input and the device's API all travel through the tunnel. A rig that drops reconnects on its own.</p></td></tr>
-<tr><th>mDNS {{template "help" "mdns"}}</th><td>{{if .MDNS}}advertised on the LAN as _vibium-station._tcp{{else}}off{{end}}<p class="helptext" id="help-mdns" hidden>In lan mode the station announces itself on the local network as <code>_vibium-station._tcp</code>, so a rig on the same network can enroll without being given the address. Off with <code>--no-mdns</code>, and in the other modes.</p></td></tr>
-<tr><th>Station key {{template "help" "key"}}</th><td><code>{{.Npub}}</code> <span class="muted">fingerprint {{.Fingerprint}}</span><p class="helptext" id="help-key" hidden>This station's identity: a key pair of its own, made the first time it ran and kept in its data directory. Rigs record the public key when they enroll and accept only what it signs, such as the grant a browser or an agent presents to hold a device. The fingerprint is the key's first four characters, the last group of every enrollment code.</p></td></tr>
-<tr><th>Tailnet identities {{template "help" "allow"}}</th><td>{{if .Allow}}{{range .Allow}}{{.}} {{end}}{{else}}<span class="muted">none (--allow)</span>{{end}}<p class="helptext" id="help-allow" hidden>In tailnet mode, the Tailscale logins and tags allowed to sign in by identity, with no password, as given to <code>--allow</code>. Anyone else on the tailnet gets the sign-in page.</p></td></tr>
-<tr><th>TURN {{template "help" "turn"}}</th><td>{{if .TURN}}{{.TURN}}{{else}}<span class="muted">off (--turn on)</span>{{end}}<p class="helptext" id="help-turn" hidden>A relay for the picture and sound when a browser and a rig cannot reach each other directly, as across two home routers. Each hold gets its own short-lived credentials, and relaying to private addresses is refused. On by itself in public mode, off in tailnet mode, where the tailnet already joins both ends; <code>--turn on</code> or <code>off</code> decides otherwise.</p></td></tr>
+<tr><th>Mode</th><td>{{.Mode}}</td></tr>
+<tr><th>Address</th><td>{{.PublicURL}}</td></tr>
+<tr><th>Tunnel</th><td>{{.TunnelURL}}</td></tr>
+<tr><th>mDNS</th><td>{{if .MDNS}}advertised on the LAN as _vibium-station._tcp{{else}}off{{end}}</td></tr>
+<tr><th>Station key</th><td><code>{{.Npub}}</code> <span class="muted">fingerprint {{.Fingerprint}}</span></td></tr>
+<tr><th>Tailnet identities</th><td>{{if .Allow}}{{range .Allow}}{{.}} {{end}}{{else}}<span class="muted">none (--allow)</span>{{end}}</td></tr>
+<tr><th>TURN</th><td>{{if .TURN}}{{.TURN}}{{else}}<span class="muted">off (--turn on)</span>{{end}}</td></tr>
 </table></div>
 </main>{{template "foot" .}}{{end}}
 `))
