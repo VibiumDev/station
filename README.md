@@ -80,6 +80,9 @@ never take control. See [API.md](API.md), and
 [docs/tutorials/agent-remote-phone.md](docs/tutorials/agent-remote-phone.md)
 for driving a phone from a laptop with Claude Code, Codex, the Vibium
 CLI or an SDK script, with a recording at the end.
+[docs/explanation/nostr-keys.md](docs/explanation/nostr-keys.md) explains
+why every station, rig and device key is a Nostr key, what the signed
+events do today, and what they leave open.
 
 ## Commands and flags
 
