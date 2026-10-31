@@ -77,7 +77,9 @@ main.wrap { padding-top: 56px; padding-bottom: 88px; }
 .h1 { margin: 0; font: 700 clamp(40px, 6vw, 64px)/0.95 var(--head); letter-spacing: -0.01em; }
 .h2 { margin: 56px 0 16px; font: 700 clamp(28px, 3.6vw, 36px)/1.05 var(--head); }
 .h2:first-of-type { margin-top: 40px; }
+main > .h2:first-child { margin-top: 0; }
 .lead { margin: 16px 0 0; font-size: 18px; color: var(--text-2); max-width: 640px; }
+main > .lead:first-child { margin-top: 0; }
 .section { margin-top: 40px; }
 
 /* Cards, notes and the one-time secrets. */
@@ -126,11 +128,9 @@ form.row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margi
 
 /* The "?" beside a heading opens a plain explanation of its section
    under it, a paragraph per setting where there are several. */
-.qhelp { display: inline-flex; align-items: center; justify-content: center; width: 22px; height: 22px; min-height: 22px; padding: 0; margin-left: 6px; border-radius: 50%; border: 1px solid var(--line-strong); background: transparent; color: var(--text-muted); font: 500 13px/1 var(--mono); vertical-align: middle; cursor: pointer; position: relative; top: -2px; }
+.qhelp { display: inline-flex; align-items: center; justify-content: center; width: 22px; height: 22px; min-height: 22px; padding: 0; margin-left: 6px; border-radius: 50%; border: 1px solid var(--line-strong); background: transparent; color: var(--text-muted); font: 500 13px/1 var(--mono); vertical-align: middle; cursor: pointer; position: relative; top: -1px; }
 .qhelp:hover { color: var(--text); border-color: var(--text-3); }
 .qhelp[aria-expanded="true"] { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
-.h2 .qhelp { top: -5px; }
-.h1 .qhelp { top: -14px; margin-left: 10px; }
 .helptext { margin: 0 0 16px; max-width: 640px; color: var(--text-3); font-size: 15px; line-height: 1.55; }
 .helptext p { margin: 0 0 10px; }
 .helptext p:last-child { margin-bottom: 0; }

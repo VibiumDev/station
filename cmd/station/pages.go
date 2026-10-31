@@ -62,8 +62,7 @@ var pages = template.Must(template.New("").Funcs(template.FuncMap{"npub": npub, 
 {{template "foot" .}}{{end}}
 
 {{define "index"}}{{template "head" (dict "Title" "Devices" "Name" .Name "Named" .Named)}}{{template "header" .}}
-<main class="wrap"><h1 class="h1">Devices. {{template "help" "devices"}}</h1>
-<p class="lead">Open a device to drive it, or to watch when someone else has it.</p>
+<main class="wrap"><p class="lead">Open a device to drive it, or to watch when someone else has it. {{template "help" "devices"}}</p>
 <div class="helptext" id="help-devices" hidden>
 <p>Every device on every rig enrolled here. Open takes a device nobody holds, and you drive it: the picture, touch, keys and sound. A device someone else holds opens watching, and Hold in the viewer takes it from them; an agent's run ends when you do. Release in the viewer gives the device back and returns here. A hold also ends after 5 idle minutes, or after 8 hours.</p>
 <p><b>Device.</b> The device's label, or its name when the rig gave it no label, with its kind and platform under it. The name is the last part of the device's address, rig/name, which holds and the API use; Roadie's <code>--label</code> sets the label and <code>--platform</code> the platform.</p>
@@ -83,7 +82,7 @@ var pages = template.Must(template.New("").Funcs(template.FuncMap{"npub": npub, 
 {{define "help"}}<button class="qhelp" type="button" aria-expanded="false" aria-controls="help-{{.}}" aria-label="What this is">?</button>{{end}}
 
 {{define "settings"}}{{template "head" (dict "Title" "Settings" "Name" .Name "Named" .Named)}}{{template "header" .}}
-<main class="wrap"><h1 class="h1">Settings.</h1>
+<main class="wrap">
 {{if .Message}}<div class="msg" role="alert">{{.Message}}</div>{{end}}
 
 <h2 class="h2">Name {{template "help" "name"}}</h2>
