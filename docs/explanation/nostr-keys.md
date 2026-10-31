@@ -94,10 +94,18 @@ hosted one. Because grants are verifiable, each station gets exactly what
 the operator allowed and no more, and a policy change on the rig takes
 effect without the station's cooperation.
 
-**The record is signed.** Every event the station signs or accepts is
-stored exactly as signed, in an append-only table. "Who held this phone
-at three o'clock" is answered by a grant the station signed and a hello
-the rig signed, neither of which could be written after the fact.
+**Auditing comes free.** Every message between a station and a rig is
+signed by whoever sent it, and every one the station accepts is stored
+exactly as signed, in an append-only table. So the audit trail is the
+traffic itself, and there is no separate log to keep honest. "Who held
+this phone at three o'clock" is answered by a grant the station signed
+and a hello the rig signed; anyone with the two npubs can check both,
+and neither could have been written after the fact or by the other
+party. Refused events are not stored, so the table holds only what was
+accepted. The owner's own actions on the pages (making or revoking a
+token, removing a rig, renaming the station) are not events; they go to
+a plain audit table beside it, the one part of the record that rests on
+the station's word alone.
 
 **A key made elsewhere works.** The key files accept an nsec, so a station
 or a rig can run under a key that already exists. A rig's key is still
