@@ -12,7 +12,7 @@ heard of it know it as the thing under a few social networks that have no
 company in the middle. The social networks are not the point here. The
 plumbing is, and the plumbing is three ideas:
 
-1. **You are a key, not an account.** Nobody signs you up. You make a key
+1. **Keys, not accounts.** Nobody signs you up. You make a key
    pair on your own machine: a public half you hand out and a secret half
    you keep. Nobody issued it, so nobody can take it away or lock you out.
 2. **A message is a signed event.** An event is a small blob of JSON: who
@@ -219,46 +219,47 @@ to one agent, across stations, by a signature instead of a token table.
 
 **Meeting without a tunnel.** Station brokers WebRTC signaling itself,
 over the rig's tunnel. Nostr relays can also carry that signaling between
-two peers with no server in common; the next section is one project doing
+two peers with no server in common; Microduck's simulator, below, does
 exactly that. A viewer and a rig that both have keys could meet that way
 when no station sits between them, with the rig still demanding a grant
 before it answers.
 
-## What Microduck does with Nostr
+## Who else builds on Nostr
 
-[Microduck](https://github.com/pollen-robotics/microduck) is a small
-open-source biped robot from Pollen Robotics (part of Hugging Face), built
-for reinforcement learning. Its browser
+Nostr's keys and events are infrastructure for more than social
+networks, and a few well-known projects use them the way Station does.
+
+**Block's Buzz.** In July 2026 Block released
+[Buzz](https://github.com/block/buzz), an open-source, self-hostable
+workspace where people and AI agents share the same channels. Its
+[announcement](https://engineering.block.xyz/blog/buzz) lays out the
+model: an identity is a keypair and every action is a signed event; each
+agent gets its own key; the agent's owner signs a narrowly scoped
+authorization, the agent signs its own work, and removing the owner means
+the agent cannot reconnect. The server you run is a Nostr relay (NIP-01,
+NIP-42 for login, NIP-34 for Git). That is the same shape as Station's
+operator attestation and the agent keys described above, and Block gives
+the same reason: "A protocol anyone can rebuild is a protocol nobody can
+lock you into." Block's CEO, Jack Dorsey, has also funded Nostr
+development personally since 2022.
+
+**Bitchat.** The Bluetooth mesh chat app uses Nostr relays as its
+internet transport when Bluetooth is unavailable, and runs its location
+channels over them.
+
+**Nostr Wallet Connect** (NIP-47) lets an app ask a user's Lightning
+wallet to pay by sending it encrypted events over relays. Many wallets
+and apps implement it.
+
+**Microduck.** Pollen Robotics' browser
 [simulator](https://huggingface.co/spaces/pollen-robotics/microduck-simulator)
-and the [librezoo fork](https://github.com/librezoo/microduck-simulator)
-have a multiplayer mode: every open tab shows the other visitors' ducks as
-see-through ghosts. The networking is
-[Trystero](https://github.com/dmotz/trystero), peer-to-peer WebRTC whose
-signaling goes over public Nostr relays, so a static page with no backend
-can find its peers. Tabs join one fixed room name, broadcast the duck's
-pose (trunk, fourteen joints, jaw, colour, variant) ten or fifteen times
-a second under a throwaway peer id, and the fork's privacy notes say the
-rest: relay operators see the signaling and its metadata, WebRTC peers
-see each other's addresses, the project cannot delete copies others
-already received, and the mode is off by default and left out of the
-fork's iOS build altogether.
-
-Two things from that apply here, in opposite directions.
-
-The rendezvous trick is real and it works: public Nostr relays are enough
-for two browsers that share a room name to swap WebRTC offers with no
-server of their own. That is the mechanism behind "meeting without a
-tunnel" above, and it costs nothing to keep that door open, because
-Station's keys are already the kind the relays expect.
-
-The trust model is the opposite of Station's, on purpose. Microduck's
-peers are throwaway identities in a public room, any tab may join, and
-the privacy notes have to warn about what relays and peers can see.
-Station's identities are persistent and pinned, its events are private
-first and encrypted when they cross a third party, and nobody reaches a
-device without a grant the device's own rig has checked. The relay trick
-is worth borrowing. The open room is exactly what the policy file, the
-grants and the private relay are there to avoid.
+for its small open-source biped shows other visitors' robots live, with
+WebRTC signaled over public Nostr relays through
+[Trystero](https://github.com/dmotz/trystero): the "meeting without a
+tunnel" mechanism above, with no server of its own. Its trust model is
+the opposite of Station's, throwaway identities in a room anyone can
+join, which is exactly what the policy file and the grants are there to
+avoid.
 
 ## Further reading
 
