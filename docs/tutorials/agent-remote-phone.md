@@ -11,7 +11,7 @@ talks to a URL with a token, the way it would talk to a remote browser.
 
 ## What you need
 
-- The station's URL, such as `https://tinycorp.vibium.cloud` for a hosted
+- The station's URL, such as `https://example.vibium.cloud` for a hosted
   one or `https://station.<tailnet>.ts.net` for your own.
 - An API token from the station's Settings page (or `station token create
   laptop`), shown once. It starts with `stk_`.
@@ -22,7 +22,7 @@ talks to a URL with a token, the way it would talk to a remote browser.
 Two environment variables tell every Vibium tool where the phone is:
 
 ```bash
-export VIBIUM_CONNECT_URL=wss://tinycorp.vibium.cloud/session
+export VIBIUM_CONNECT_URL=wss://example.vibium.cloud/session
 export VIBIUM_CONNECT_API_KEY=stk_...
 ```
 
@@ -46,7 +46,7 @@ phone instead of a local browser:
 
 ```bash
 claude mcp add vibium \
-  -e VIBIUM_CONNECT_URL=wss://tinycorp.vibium.cloud/session \
+  -e VIBIUM_CONNECT_URL=wss://example.vibium.cloud/session \
   -e VIBIUM_CONNECT_API_KEY=stk_... \
   -- npx -y vibium mcp
 ```
