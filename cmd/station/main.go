@@ -206,16 +206,16 @@ func passwd(dir string) int {
 func serve(args []string) int {
 	fs := flag.NewFlagSet("station", flag.ExitOnError)
 	dirFlag := fs.String("data-dir", "", "where the station keeps its files (default $STATION_DIR or the user config dir)")
-	listen := fs.String("listen", "", "address to serve HTTPS on (LAN mode: :8443; with --acme: :443)")
+	listen := fs.String("listen", "", "address to serve HTTPS on (LAN mode: :8443; with --public: :443)")
 	tailnetMode := fs.Bool("tailnet", false, "join the tailnet as a node with tsnet and serve there only")
 	hostname := fs.String("hostname", "station", "the node's name on the tailnet")
 	controlURL := fs.String("control-url", "", "a Headscale or other control server, with --tailnet")
-	acmeHost := fs.String("acme", "", "public mode: HTTPS with a Let's Encrypt certificate for this host name, on :443, the HTTP-01 challenge on :80")
+	publicHost := fs.String("public", "", "public mode: serve HTTPS on :443 with a Let's Encrypt certificate for this host name, answering its challenge on :80")
 	httpAddr := fs.String("http", "", "public mode behind your own TLS proxy: plain HTTP on this address, such as :8080; needs --public-url")
 	publicURL := fs.String("public-url", "", "how rigs and browsers reach this station (default: derived)")
 	turnMode := fs.String("turn", "auto", "run the TURN server: on, off, or auto (on in public mode)")
 	turnListen := fs.String("turn-listen", turn.DefaultListen, "TURN's UDP address; on Fly.io, fly-global-services:3478")
-	turnPublicIP := fs.String("turn-public-ip", "", "the public address TURN is reached at (default: the --acme host's)")
+	turnPublicIP := fs.String("turn-public-ip", "", "the public address TURN is reached at (default: the --public host's)")
 	turnRelay := fs.String("turn-relay-addr", "", "the address relay sockets bind (default: the listen address's host); on Fly.io, fly-global-services")
 	turnPorts := fs.String("turn-ports", fmt.Sprintf("%d-%d", turn.DefaultMinPort, turn.DefaultMaxPort), "the relay port range, reachable from outside")
 	turnDeny := fs.String("turn-deny", "", "more destinations TURN refuses, comma-separated CIDRs, besides private, loopback, link-local and shared ranges")
@@ -298,20 +298,20 @@ func serve(args []string) int {
 		if base == "" {
 			base = tsURL
 		}
-	case *acmeHost != "":
+	case *publicHost != "":
 		mode = "public"
 		addr := *listen
 		if addr == "" {
 			addr = ":443"
 		}
-		ln, closeNet, err = acme(dir, *acmeHost, ":80", addr)
+		ln, closeNet, err = acme(dir, *publicHost, ":80", addr)
 		if err != nil {
 			fmt.Fprintln(os.Stderr, err)
 			return 1
 		}
 		defer closeNet()
 		if base == "" {
-			base = "https://" + *acmeHost
+			base = "https://" + *publicHost
 		}
 	case *httpAddr != "":
 		mode = "public"
@@ -372,8 +372,8 @@ func serve(args []string) int {
 			fmt.Fprintf(os.Stderr, "--turn-public-ip %q is not an address\n", *turnPublicIP)
 			return 1
 		}
-		if pub == nil && *acmeHost != "" {
-			if ips, err := net.LookupIP(*acmeHost); err == nil {
+		if pub == nil && *publicHost != "" {
+			if ips, err := net.LookupIP(*publicHost); err == nil {
 				for _, ip := range ips {
 					if ip.To4() != nil {
 						pub = ip

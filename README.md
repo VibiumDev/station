@@ -28,7 +28,7 @@ go build ./cmd/station
 ./station passwd                      # the owner's password
 ./station                             # LAN mode: https://<your ip>:8443, a self-signed certificate
 ./station --tailnet --allow you@example.com   # tailnet mode: https://station.<tailnet>.ts.net, sign in by identity
-./station --acme station.example.com  # public mode: Let's Encrypt on :443 (HTTP-01 on :80), TURN on :3478
+./station --public station.example.com  # public mode: its own Let's Encrypt certificate on :443, TURN on :3478
 ./station --http :8080 --public-url https://station.example.com --turn-public-ip 203.0.113.9   # behind your own TLS proxy
 ```
 
@@ -98,11 +98,11 @@ events do today, and what they leave open.
 | Flag | Default | Meaning |
 |---|---|---|
 | `--data-dir` | `$STATION_DIR`, else the user config dir + `/station` | Where `config.json`, `station.key`, `station.db`, the certificate and tsnet state live |
-| `--listen` | `:8443`, with `--acme` `:443` | HTTPS address in LAN mode and with `--acme` |
+| `--listen` | `:8443`, with `--public` `:443` | HTTPS address in LAN mode and with `--public` |
 | `--tailnet` | off | Join the tailnet with tsnet and serve there only |
 | `--hostname` | `station` | The node's name on the tailnet |
 | `--control-url` | Tailscale's | A Headscale or other control server |
-| `--acme HOST` | | Public mode: HTTPS with a Let's Encrypt certificate for HOST, the HTTP-01 challenge on `:80`, the certificate cached in the data directory |
+| `--public HOST` | | Public mode: HTTPS on `:443` with a Let's Encrypt certificate for HOST, fetched and renewed by the station itself (its challenge is answered on `:80`) and cached in the data directory |
 | `--http ADDR` | | Public mode behind your own TLS proxy (or Fly.io): plain HTTP on ADDR; needs `--public-url`. Login lockouts then count by `Fly-Client-IP` or the first `X-Forwarded-For` address |
 | `--allow` | none | Tailnet logins and tags that may sign in by identity (saved) |
 | `--public-url` | derived | How rigs and browsers reach the station; the tunnel URL follows |
@@ -110,7 +110,7 @@ events do today, and what they leave open.
 | `--no-mdns` | off | Do not advertise on the LAN |
 | `--turn` | `auto` | Run the TURN server: `on`, `off`, or `auto` (on in public mode) |
 | `--turn-listen` | `:3478` | TURN's UDP address; `fly-global-services:3478` on Fly.io |
-| `--turn-public-ip` | the `--acme` host's address | The public address TURN and its relays are reached at |
+| `--turn-public-ip` | the `--public` host's address | The public address TURN and its relays are reached at |
 | `--turn-relay-addr` | the listen address's host | The address relay sockets bind; `fly-global-services` on Fly.io |
 | `--turn-ports` | `49152-65535` | The relay port range, one port per allocation, reachable from outside |
 | `--turn-deny` | none | More destinations TURN refuses, comma-separated CIDRs |
