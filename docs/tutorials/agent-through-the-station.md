@@ -1,4 +1,4 @@
-# Reach a device through the station from a laptop
+# Reach a device remotely through the station
 
 A Vibium Station is a server that puts your phones and other devices
 within reach from anywhere. Each device is plugged into a small computer
