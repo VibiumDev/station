@@ -77,9 +77,10 @@ Then enroll a rig:
 Agents use API tokens from the Settings page or `station token create
 NAME`, sent as `Authorization: Bearer`. A read-only token may watch but
 never take control. See [API.md](API.md), and
-[docs/tutorials/agent-remote-phone.md](docs/tutorials/agent-remote-phone.md)
-for driving a phone from a laptop with Claude Code, Codex, the Vibium
-CLI or an SDK script, with a recording at the end.
+[docs/tutorials/agent-through-the-station.md](docs/tutorials/agent-through-the-station.md)
+for pointing Claude Code, Codex, the Vibium CLI or a script at a device
+through the station: the address, the token and the hold. Driving the
+device itself is the rig's tutorial, Roadie's for a phone.
 [docs/explanation/nostr-keys.md](docs/explanation/nostr-keys.md) explains
 why every station, rig and device key is a Nostr key, what the signed
 events do today, and what they leave open.

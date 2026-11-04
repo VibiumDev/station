@@ -138,7 +138,7 @@ held by someone else answers `session.new` with a BiDi error (`session
 not created`) and closes. The device path above
 remains for clients that were handed it. See
 [docs/bidi-conventions.md](docs/bidi-conventions.md) and the tutorial,
-[docs/tutorials/agent-remote-phone.md](docs/tutorials/agent-remote-phone.md).
+[docs/tutorials/agent-through-the-station.md](docs/tutorials/agent-through-the-station.md).
 
 `station-probe -bidi` runs that sequence as a plain BiDi client and,
 with `-bidi-direct ws://<rig>/session`, the same sequence straight at
