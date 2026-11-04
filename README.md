@@ -32,6 +32,9 @@ go build ./cmd/station
 ./station --http :8080 --public-url https://station.example.com --turn-public-ip 203.0.113.9   # behind your own TLS proxy
 ```
 
+To run one on Fly.io, see
+[docs/how-to-guides/deploy-to-fly.md](docs/how-to-guides/deploy-to-fly.md).
+
 The first run makes the station's key and prints its `npub`. Tailnet mode
 joins your tailnet as a node named `station` through `tsnet` and prints a
 login link once; set `TS_AUTHKEY` to skip that. `--control-url` points it

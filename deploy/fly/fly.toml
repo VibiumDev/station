@@ -5,13 +5,8 @@
 # directory is a volume. Fly's private network (fdaa::/16) is unique-local,
 # which TURN refuses by itself.
 #
-#   fly apps create NAME && fly ips allocate-v4 -a NAME
-#   fly volumes create station_data --size 1 -r REGION -a NAME
-#   fly secrets set STATION_PASSWORD=... -a NAME
-#   fly deploy -c deploy/fly/fly.toml --dockerfile Dockerfile
-#
-# Then put the app's IPv4 in --turn-public-ip below, and make an API token
-# or an enrollment code with: fly ssh console -C "station token create NAME"
+# The steps, from the app to the first enrolled rig, are in
+# docs/how-to-guides/deploy-to-fly.md.
 app = "vibium-station-test"
 primary_region = "ord"
 
