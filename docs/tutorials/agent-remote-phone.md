@@ -79,8 +79,9 @@ The agent sees each screenshot, so it can check that the Calculator
 came up. Keys do everything in this tutorial; nothing depends on where
 an icon sits on the screen. On an iPhone, `Meta+Space` opens Search,
 `Meta+h` is the Home chord, and `Shift` wakes the screen. `browser_keys`
-sends one key or chord per call, so a word is one call per letter.
-`browser_tap` is there for what only a finger reaches.
+sends one key or chord per call; `browser_type` with only `text` types
+a word into whatever has focus. `browser_tap` is there for what only a
+finger reaches.
 
 ### 2. The Vibium CLI, by hand or from a script
 
@@ -90,10 +91,7 @@ vibium keys Meta+h                # home screen
 vibium record start -o calc.zip   # screenshots per step from here on
 vibium screenshot -o home.png
 vibium keys Meta+Space            # open Search
-vibium keys c                     # one key per call: c, a, l, c
-vibium keys a
-vibium keys l
-vibium keys c
+vibium type calc                  # into whatever has focus
 vibium keys Enter                 # launch the top hit, the Calculator
 vibium screenshot -o calc.png
 vibium keys Meta+h
@@ -101,7 +99,10 @@ vibium record stop                # writes calc.zip
 vibium stop                       # ends the session and releases the phone
 ```
 
-`vibium keys` takes one key or chord, so a word is one call per letter.
+`vibium keys` sends one key or chord; `vibium type` with only the text
+types into whatever has focus. That form, and `browser_type` with only
+`text`, need a Vibium newer than 26.8.21: older ones insist on a
+selector, so there send the letters one at a time with `vibium keys`.
 `vibium screenshot` saves what the phone shows right now. When only a
 finger will do, `vibium tap X Y` taps the picture at those pixels;
 `vibium start` prints the session, and the picture's size is in the
@@ -185,7 +186,7 @@ records video on the machine the browser runs on, and here that is the
 rig. Screenshots are the record.
 
 A session from this tutorial, run against the test station with each of
-the three paths, gave a trace of six steps from each SDK, seventeen
+the three paths, gave a trace of six steps from each SDK and eleven
 from the CLI (which records its page lookup before every command as a
 step of its own), and the same two pictures everywhere: the home screen
 before the search and the Calculator after it.
