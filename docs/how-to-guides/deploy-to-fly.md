@@ -90,6 +90,42 @@ The probe takes the device, streams over WebRTC through TURN, taps the
 screen, checks that the picture changed, and releases the device; a
 non-zero exit names what failed.
 
+## 6. Use your own domain
+
+`NAME.fly.dev` works as it is, and Fly keeps serving it after you add a
+domain of your own, so this step can wait. Settle the name before
+enrolling rigs, though, because a rig remembers the address it enrolled
+with. Rigs enrolled under the old name keep working, and moving one is a
+matter of running `roadie enroll` again with the new address, which
+keeps its rig id.
+
+Ask Fly for a certificate first, since its edge only routes a custom
+domain that has one, even for plain HTTP:
+
+```bash
+fly certs add station.example.com -a NAME
+```
+
+The command prints the DNS records to create at your registrar. For a
+subdomain such as `station.example.com`, A and AAAA records pointing at
+the app's addresses are the sturdy choice; `fly ips list -a NAME` shows
+them, and the IPv4 is the dedicated one from step 1, which TURN already
+uses. A CNAME to the app's `.fly.dev` hostname works for a subdomain
+too, but an apex such as `example.com` should get A and AAAA records
+unless your DNS provider flattens CNAMEs. Fly validates the domain on
+its own once the records resolve, and `fly certs check
+station.example.com -a NAME` shows how far it has got. A wildcard
+certificate, or one issued before any traffic reaches the app, needs
+the `_acme-challenge` CNAME that the same output lists.
+
+Then tell the station its new name. In `fly.toml`, change `--public-url`
+to `https://station.example.com` and deploy again. Leave
+`--turn-public-ip` as it is, because TURN is reached by address rather
+than by name, and TLS still ends at Fly's edge, so the station's own
+`--public` flag stays out of the picture. From then on the pages, the
+enrollment codes and the tunnel address the station gives new rigs all
+carry the new name.
+
 ## Afterwards
 
 - **Updating**: run the deploy command again. The volume keeps the
