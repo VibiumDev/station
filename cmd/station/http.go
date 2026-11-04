@@ -629,6 +629,12 @@ func (s *server) relayTo(w http.ResponseWriter, r *http.Request, p station.Princ
 	}
 	rigID, _, _ := station.SplitDeviceID(id)
 	s.relay.ServeHold(w, r, rigID, rigPath, res.Hold.ID)
+	// A BiDi socket that took the device gives it back when it closes,
+	// as /session does. A REST request keeps the hold for the next one,
+	// and a device the subject already held is theirs to release.
+	if scope == station.ScopeBidi && relay.IsWebSocket(r) && cur.Subject != p.Subject {
+		s.releaseAfter(id, res.Hold.ID, p.Subject)
+	}
 }
 
 func (s *server) releaseHold(w http.ResponseWriter, r *http.Request, p station.Principal) {

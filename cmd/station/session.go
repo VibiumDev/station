@@ -86,6 +86,7 @@ func (s *server) serveSession(w http.ResponseWriter, r *http.Request, p station.
 		bidiError("session not created", "this token may only view")
 		return
 	}
+	before, _ := s.db.Current(ctx, devID) // whose the device was, if anyone's
 	res, err := s.holds.Take(ctx, hold.Request{DeviceID: devID, Subject: p.Subject, Scopes: scopes, Recall: person(p)})
 	var queued *hold.Queued
 	switch {
@@ -95,6 +96,12 @@ func (s *server) serveSession(w http.ResponseWriter, r *http.Request, p station.
 	case err != nil:
 		bidiError("session not created", err.Error())
 		return
+	}
+	// The socket that took the device gives it back when it closes. A
+	// device the subject already held, through the hold endpoint, stays
+	// theirs until they release it.
+	if before.Subject != p.Subject {
+		defer s.releaseAfter(devID, res.Hold.ID, p.Subject)
 	}
 
 	// The rig's own BiDi socket, over the tunnel, with the grant.
@@ -140,6 +147,16 @@ func (s *server) serveSession(w http.ResponseWriter, r *http.Request, p station.
 	go pump(client, rig)
 	go pump(rig, client)
 	<-done
+}
+
+// releaseAfter ends the hold a BiDi socket took, once the socket is
+// done; a hold that ended on its own is left alone.
+func (s *server) releaseAfter(devID, holdID, subject string) {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	if err := s.holds.Release(ctx, holdID, subject); err != nil {
+		fmt.Printf("session: %s: release %s: %v\n", devID, holdID, err)
+	}
 }
 
 // pickDevice resolves what a client asked for at /session: a device id

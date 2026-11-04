@@ -15,8 +15,8 @@ appears in paths as two segments.
 | `DELETE /v1/devices/{rig}/{name}/hold` | Release the caller's hold, or leave the line. An observer cannot end the holder's |
 | `POST /v1/devices/{rig}/{name}/reservation` | A place in line for a set time: `{"at": "2026-10-30T15:00:00Z", "scopes": [...]}`, `at` left out for now. The place sorts ahead of the line once its time comes, and must be taken within five minutes of it |
 | `DELETE /v1/devices/{rig}/{name}/reservation` | Give the place up |
-| `wss /session` | The standard WebDriver BiDi entry point: `session.new` picks the device by the `vibium:device` capability, else the first online one; then relayed byte for byte like the route below |
-| `wss /v1/devices/{rig}/{name}/bidi` | WebDriver BiDi, byte for byte: the socket is relayed to the rig's own `/session`, authenticated at the upgrade (the bearer token, or the page's cookie from the station's own origin) and authorized for the device, the `bidi` scope and a hold, which is taken on the spot when the device is free. Nothing is inserted or rewritten; the first message is the client's `session.new` |
+| `wss /session` | The standard WebDriver BiDi entry point: `session.new` picks the device by the `vibium:device` capability, else the first online one; then relayed byte for byte like the route below, and the hold is released when the socket closes |
+| `wss /v1/devices/{rig}/{name}/bidi` | WebDriver BiDi, byte for byte: the socket is relayed to the rig's own `/session`, authenticated at the upgrade (the bearer token, or the page's cookie from the station's own origin) and authorized for the device, the `bidi` scope and a hold, which is taken on the spot when the device is free and given back when the socket closes. Nothing is inserted or rewritten; the first message is the client's `session.new` |
 | `/v1/devices/{rig}/{name}/api/{path}` | The rig's REST under `/api`, relayed with a grant carrying the caller's hold scopes (a token's request takes a free device with `input` when the token may control; a person's needs a hold already). The rig's allowlist decides which scope each endpoint needs: HID input, status with `view`, settings and resets with `admin` |
 | `GET /v1/devices/{rig}/{name}/health` | The rig's health, with `view` |
 | `GET /v1/devices/{rig}/{name}/extras.js` | The device's viewer extras, relayed from the path it announced (`extras` on the device), with `view` |
@@ -120,8 +120,11 @@ path, which takes the hold when the device is free) with
 rig, `session.new` first. The relay carries the socket byte for byte;
 the rig's BiDi is what answers, Roadie's for a phone. A hold that ends,
 by release, idle time, a recall or a revocation, closes the socket with
-a WebSocket close, never a BiDi message. Vibium points at it with
-`VIBIUM_CONNECT_URL` and `VIBIUM_CONNECT_API_KEY`.
+a WebSocket close, never a BiDi message. The other way round, a socket
+that took the device gives it back when it closes; a hold taken through
+the hold endpoint first spans as many sockets as the agent opens, until
+it releases the hold or leaves it idle for five minutes. Vibium points
+at it with `VIBIUM_CONNECT_URL` and `VIBIUM_CONNECT_API_KEY`.
 
 `wss://<station>/session` is the standard BiDi-only entry point: open it
 with the token and send `session.new`. The station reads that one
@@ -129,9 +132,10 @@ message to pick the device, named by the `vibium:device` capability
 (`{"capabilities": {"alwaysMatch": {"vibium:device": "rig_3f9a1c02/phone"}}}`,
 the id or just the name), else the first online device, takes the hold,
 opens the rig's own BiDi socket and forwards the message untouched; from
-then on it moves frames both ways without reading them. A device that is
-offline, unknown or held by someone else answers `session.new` with a
-BiDi error (`session not created`) and closes. The device path above
+then on it moves frames both ways without reading them, and releases
+the hold when the socket closes. A device that is offline, unknown or
+held by someone else answers `session.new` with a BiDi error (`session
+not created`) and closes. The device path above
 remains for clients that were handed it. See
 [docs/bidi-conventions.md](docs/bidi-conventions.md) and the tutorial,
 [docs/tutorials/agent-remote-phone.md](docs/tutorials/agent-remote-phone.md).

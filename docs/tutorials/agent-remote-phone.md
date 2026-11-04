@@ -37,6 +37,20 @@ the session or leave it idle for five minutes. A second agent asking for
 the same phone waits in line; a person at the station's viewer can take
 it back (the viewer then says "held by token:laptop" while you have it).
 
+To keep the phone across several sessions, say a CLI run and then the
+MCP server, take the hold yourself first. It is then yours until you
+release it or leave it idle for five minutes, whatever sessions come and
+go on it:
+
+```bash
+curl -s -X POST -H "Authorization: Bearer stk_..." \
+  -d '{"scopes": ["view", "bidi"]}' \
+  https://example.vibium.cloud/v1/devices/<rig>/<name>/hold
+# ... any number of sessions ...
+curl -s -X DELETE -H "Authorization: Bearer stk_..." \
+  https://example.vibium.cloud/v1/devices/<rig>/<name>/hold
+```
+
 ## Three ways the agent drives the phone
 
 ### 1. The Vibium MCP server, for Claude Code or Codex
