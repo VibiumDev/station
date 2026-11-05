@@ -64,7 +64,8 @@ and sends as key commands, so Station's code never names a phone.
 ## Tunnel hello (27700)
 
 The rig's answer to the station's challenge: tags `p` (station) and
-`challenge` (the nonce the station sent). Ephemeral: checked, never stored.
+`challenge` (the nonce the station sent). The hello is ephemeral: it is
+checked and never stored.
 
 ## Device announcement (37700)
 

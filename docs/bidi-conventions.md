@@ -135,7 +135,15 @@ The URL is only the entry point. A genuinely compatible Vibium server should als
 
 Using an `Authorization: Bearer ...` header at the WebSocket handshake is a practical choice for the Vibium CLI, MCP, and Node/Python clients. It is not a BiDi-defined authentication protocol, however, and browser-native WebSocket clients cannot generally set arbitrary headers. Consider that constraint before declaring it the sole supported authentication method.
 
-For agents, optimize for predictable defaults: one canonical endpoint, stable environment variable names, correct protocol behavior, a small copy-pasteable example, and meaningful standard errors. Avoid requiring agents to understand proprietary Vibium-specific paths or special session negotiation merely to begin automation.
+For agents, optimize for predictable defaults:
+
+- one canonical endpoint
+- stable environment variable names
+- correct protocol behavior
+- a small copy-pasteable example
+- meaningful standard errors
+
+Avoid requiring agents to understand proprietary Vibium-specific paths or special session negotiation merely to begin automation.
 
 ### Suggested canonical examples
 
@@ -279,4 +287,4 @@ These are **proposed additions** to the existing milestones, not claims that the
 
 ---
 
-**Bottom line:** standard at the protocol boundary, conventional at the infrastructure boundary, and flexible internally. Use gateways, relays, and cloud orchestration as needed, but avoid making their existence part of the user's automation model.
+**Bottom line:** Vibium should be standard at the protocol boundary and conventional at the infrastructure boundary, while staying flexible internally. Use gateways, relays, and cloud orchestration as needed, but avoid making their existence part of the user's automation model.

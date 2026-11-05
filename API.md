@@ -50,13 +50,13 @@ and the rig both close every connection relayed on it.
 People recall, agents queue: a request with `input`, `bidi` or `admin`
 from a signed-in person takes the device from whoever has it, while the
 same request from a token gets a place in line. When the holder releases
-the device, or its hold ends, the first in line gets a hold of its own,
-which it must use within a minute, by any request or connection on it,
-or the device passes to the next. A place nobody asks about for five
-minutes is dropped. The line lives in memory, so a station restart
-empties it and a waiting agent asks again. A reservation is a place in
-line for a set time, sorting ahead once its time comes; a device sitting
-free at that time goes to it on the next tick.
+the device, or its hold ends, the first in line gets a hold of its own.
+Any request or connection on that hold counts as using it, and if it
+goes unused for a minute the device passes to the next. A place nobody
+asks about for five minutes is dropped. The line lives in memory, so a
+station restart empties it and a waiting agent asks again. A reservation
+is a place in line for a set time, sorting ahead once its time comes; a
+device sitting free at that time goes to it on the next tick.
 
 One observer at a time: a second view-only subject asking for a held
 device gets 409 until the first's grant lapses.
@@ -72,19 +72,21 @@ again every five seconds and shows the next holder's picture.
 `?watch=1` opens the page as a watcher that never asks for control.
 
 A relayed request (`stream`, `screenshot`, `health`, `audio`, `hid`,
-`mic`, `bidi`, `extras.js`, `api/...`) rides on a hold: the caller's
-own, or, for `view`, a seat watching the holder's. A token's request on
-a free device takes one with the scope the endpoint needs, so a single
-screenshot works without a hold call first. A person's request on a free
-device does not: it is `409 {"free": true}`, because people take devices
-through the hold endpoint on purpose, and a page left watching must not
-take the device by polling. Every relayed answer carries `X-Hold`, the
-id of the hold it rode on, and `X-Hold-Observer: 1` when that is someone
-else's; the page uses them to notice the device changing hands.
+`mic`, `bidi`, `extras.js`, `api/...`) rides on a hold, which is the
+caller's own or, for `view`, a seat watching the holder's. A token's
+request on a free device takes one with the scope the endpoint needs, so
+a single screenshot works without a hold call first. A person's request
+on a free device does not: it is `409 {"free": true}`, because people
+take devices through the hold endpoint on purpose, and a page left
+watching must not take the device by polling. Every relayed answer
+carries `X-Hold`, the id of the hold it rode on, and `X-Hold-Observer: 1`
+when that is someone else's; the page uses them to notice the device
+changing hands.
 
-The rig limits every hold: 120 requests and messages a second with a
-burst of 240, one MJPEG stream, one audio socket, one microphone socket,
-one BiDi socket and two input sockets at once; past that it answers 429.
+The rig limits every hold to 120 requests and messages a second with a
+burst of 240, and to one MJPEG stream, one audio socket, one microphone
+socket, one BiDi socket and two input sockets at once; past that it
+answers 429.
 
 ```json
 {
@@ -99,17 +101,22 @@ one BiDi socket and two input sockets at once; past that it answers 429.
 }
 ```
 
-Scopes: `view` (video, speaker audio, screenshots, MJPEG, status), `input`
-(HID and the microphone), `bidi` (WebDriver BiDi), `admin` (the device's
-settings and resets, only where the rig's policy allows it). A read-only
-token gets `view` only.
+The scopes are:
+
+- `view`: video, speaker audio, screenshots, MJPEG, status
+- `input`: HID and the microphone
+- `bidi`: WebDriver BiDi
+- `admin`: the device's settings and resets, only where the rig's policy
+  allows it
+
+A read-only token gets `view` only.
 
 `ice` lists the station's STUN and TURN servers, shaped like the browser's
-`RTCIceServer`, with the hold's own TURN credential, good until the
-hold's maximum time; it is empty when the station runs no TURN server.
-The same servers travel to the rig in the grant's `stun` and `turn` tags,
-so both peers can be reached across NATs. A client that wants to prove
-the relay path sets its ICE transport policy to `relay`.
+`RTCIceServer` and carrying the hold's own TURN credential, which is good
+until the hold's maximum time; it is empty when the station runs no TURN
+server. The same servers travel to the rig in the grant's `stun` and
+`turn` tags, so both peers can be reached across NATs. A client that
+wants to prove the relay path sets its ICE transport policy to `relay`.
 
 ## WebDriver BiDi for agents
 
@@ -128,21 +135,22 @@ at it with `VIBIUM_CONNECT_URL` and `VIBIUM_CONNECT_API_KEY`.
 
 `wss://<station>/session` is the standard BiDi-only entry point: open it
 with the token and send `session.new`. The station reads that one
-message to pick the device, named by the `vibium:device` capability
+message to pick the device, which is the one named by the
+`vibium:device` capability
 (`{"capabilities": {"alwaysMatch": {"vibium:device": "rig_3f9a1c02/phone"}}}`,
-the id or just the name), else the first online device, takes the hold,
-opens the rig's own BiDi socket and forwards the message untouched; from
-then on it moves frames both ways without reading them, and releases
-the hold when the socket closes. A device that is offline, unknown or
-held by someone else answers `session.new` with a BiDi error (`session
-not created`) and closes. The device path above
-remains for clients that were handed it. See
+the id or just the name) or else the first online device. It then takes
+the hold, opens the rig's own BiDi socket and forwards the message
+untouched; from then on it moves frames both ways without reading them,
+and releases the hold when the socket closes. A device that is offline,
+unknown or held by someone else answers `session.new` with a BiDi error
+(`session not created`) and closes. The device path above remains for
+clients that were handed it. See
 [docs/bidi-conventions.md](docs/bidi-conventions.md) and the tutorial,
 [docs/tutorials/agent-through-the-station.md](docs/tutorials/agent-through-the-station.md).
 
-`station-probe -bidi` runs that sequence as a plain BiDi client and,
-with `-bidi-direct ws://<rig>/session`, the same sequence straight at
-the rig, comparing the shape of every reply.
+`station-probe -bidi` runs that sequence as a plain BiDi client, and
+with `-bidi-direct ws://<rig>/session` it runs the same sequence straight
+at the rig as well, comparing the shape of every reply.
 
 ## station-probe
 
@@ -153,16 +161,16 @@ the rig, comparing the shape of every reply.
 station-probe -station https://station.example -token stk_... [-device rig_x/phone] [-t 10s] [-ice relay|all] [-tap 0.5,0.5] [-insecure]
 ```
 
-It lists the devices, takes one with `view` and `input`, connects over
-WebRTC through the station's signaling with the media forced through TURN
-(`-ice relay`, the default), prints the frame rate, bitrate, keyframes,
-the candidate pair and its round trip, taps where `-tap` says (fractions
-of the picture) and compares screenshots before and after, presses the
-device's Home shortcut when it announces one, and releases the hold. It
-exits non-zero when anything fails, including a relay-only run whose
-media did not go through TURN. `-insecure` accepts a LAN station's
-self-signed certificate; on a LAN, relay-only fails by design, since TURN
-refuses private peers.
+It lists the devices and takes one with `view` and `input`, then
+connects over WebRTC through the station's signaling with the media
+forced through TURN (`-ice relay`, the default) and prints the frame
+rate, bitrate, keyframes, the candidate pair and its round trip. It taps
+where `-tap` says (fractions of the picture) and compares screenshots
+before and after, presses the device's Home shortcut when it announces
+one, and then releases the hold. It exits non-zero when anything fails,
+including a relay-only run whose media did not go through TURN.
+`-insecure` accepts a LAN station's self-signed certificate; on a LAN,
+relay-only fails by design, since TURN refuses private peers.
 
 ## Pages
 

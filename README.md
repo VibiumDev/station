@@ -7,17 +7,24 @@ and agents reach the devices through the station's pages and API. The
 station signs every session as a hold grant that the rig checks itself, so
 the rig stays the final gate.
 
-`station` is the single-player binary: one owner, their own rigs, a
-password or a tailnet identity, one SQLite file. The packages it is built
-from take an authenticator, an authorizer and stores as interfaces, so a
+`station` is the single-player binary, which serves one owner and their
+own rigs, lets that owner sign in with a password or a tailnet identity,
+and keeps its store in one SQLite file. The packages it is built from
+take an authenticator, an authorizer and stores as interfaces, so a
 hosted service can embed them instead of forking.
 
-Status: R4 of the [remote spec](docs/remote-spec.md). LAN, tailnet and
-public mode, enrollment, the tunnel, holds and grants, the viewer over
-WebRTC with the embedded TURN server behind it and the MJPEG fallback
-through the station work, and `station-probe` checks a station from
-outside. The REST and BiDi relay for agents (R5) and packaging (R6) are
-next. Progress and numbers are in [docs/progress.md](docs/progress.md).
+Status: R4 of the [remote spec](docs/remote-spec.md). These parts work:
+
+- LAN, tailnet and public mode
+- enrollment
+- the tunnel
+- holds and grants
+- the viewer over WebRTC with the embedded TURN server behind it
+- the MJPEG fallback through the station
+- `station-probe`, which checks a station from outside
+
+The REST and BiDi relay for agents (R5) and packaging (R6) are next.
+Progress and numbers are in [docs/progress.md](docs/progress.md).
 
 ## Run it
 
@@ -48,18 +55,19 @@ grant and never relays to private, loopback, link-local, shared or
 unique-local addresses, nor to `--turn-deny` ranges. On a host where
 secrets are environment variables, `STATION_PASSWORD` sets the owner's
 password at start. [`Dockerfile`](Dockerfile) builds the image and
-[`deploy/fly/fly.toml`](deploy/fly/fly.toml) is a working Fly.io setup:
-TLS at Fly's edge, TURN bound to `fly-global-services` on the app's
-dedicated IPv4, the data directory on a volume.
+[`deploy/fly/fly.toml`](deploy/fly/fly.toml) is a working Fly.io setup,
+in which TLS ends at Fly's edge, TURN binds to `fly-global-services` on
+the app's dedicated IPv4 and the data directory lives on a volume.
 
 The viewer is Roadie's own, served from the `viewer` package by both: a
 rig that announces an `extras` script (Roadie does) gets its own buttons
 and panels added to the page through the relay, and the shell itself
-never names a phone. When WebRTC cannot connect, the viewer falls back to the MJPEG stream
-relayed through the station, capped at a few frames a second on the rig,
-with input over a relayed WebSocket. `?transport=mjpeg` on the viewer's
-URL picks that from the start and `?ice=relay` forces the media through
-TURN, to check the relay path from a browser.
+never names a phone. When WebRTC cannot connect, the viewer falls back
+to the MJPEG stream relayed through the station, which the rig caps at a
+few frames a second, while input goes over a relayed WebSocket.
+`?transport=mjpeg` on the viewer's URL picks that from the start and
+`?ice=relay` forces the media through TURN, to check the relay path from
+a browser.
 
 Then enroll a rig:
 
@@ -82,8 +90,9 @@ NAME`, sent as `Authorization: Bearer`. A read-only token may watch but
 never take control. See [API.md](API.md), and
 [docs/tutorials/agent-through-the-station.md](docs/tutorials/agent-through-the-station.md)
 for pointing Claude Code, Codex, the Vibium CLI or a script at a device
-through the station: the address, the token and the hold. Driving the
-device itself is the rig's tutorial, Roadie's for a phone.
+through the station, which comes down to the address, the token and the
+hold. Driving the device itself is the rig's tutorial, Roadie's for a
+phone.
 [docs/explanation/nostr-keys.md](docs/explanation/nostr-keys.md) explains
 why every station, rig and device key is a Nostr key, what the signed
 events do today, and what they leave open.

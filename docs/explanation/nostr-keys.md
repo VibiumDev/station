@@ -15,11 +15,11 @@ plumbing is, and the plumbing is three ideas:
 1. **Keys, not accounts.** Nobody signs you up. You make a key
    pair on your own machine: a public half you hand out and a secret half
    you keep. Nobody issued it, so nobody can take it away or lock you out.
-2. **A message is a signed event.** An event is a small blob of JSON: who
-   sent it (the public key), when, what kind of message it is, a few
-   tags, some content, and a signature made with the secret half. Anyone
-   holding the public key can check the signature. Nobody can forge an
-   event or change one after the fact.
+2. **A message is a signed event.** An event is a small blob of JSON that
+   says who sent it (the public key), when, and what kind of message it
+   is, and that carries a few tags, some content, and a signature made
+   with the secret half. Anyone holding the public key can check the
+   signature. Nobody can forge an event or change one after the fact.
 3. **Relays pass events around.** A relay is a plain server that stores
    events and hands them out to whoever asks. Anybody can run one.
 
@@ -112,13 +112,19 @@ the rig's policy file and only that key's grants are accepted.
 station naming the rig, the device, the hold, its sequence number, the
 scopes (`view`, `input`, `bidi`, `admin`), and an expiry ten minutes out.
 Every request that reaches Roadie through the tunnel carries one, and
-Roadie checks it itself: the signature against the npubs in its policy,
-the rig and device, the time, the event id against a replay list, the
-sequence number against the highest it has seen, and the hold against the
-revocations it has received. Nothing the station says is taken on the
-station's word. It is believed because the rig can check the signature.
-A station that was broken into still could not forge a rig's
-announcements, and a rig cannot forge a grant.
+Roadie checks it itself:
+
+- the signature against the npubs in its policy
+- the rig and device
+- the time
+- the event id against a replay list
+- the sequence number against the highest it has seen
+- the hold against the revocations it has received
+
+Nothing the station says is taken on the station's word. It is believed
+because the rig can check the signature. A station that was broken into
+still could not forge a rig's announcements, and a rig cannot forge a
+grant.
 
 **The operator's consent travels with the rig.** The policy file on the
 rig lists the stations it accepts, by npub, and for each one the scopes
@@ -152,8 +158,9 @@ get right, and a home-made format is understood by exactly one program.
 Nostr's format is small (one curve, one signature scheme, one event
 layout, one way to spell keys), it is widely implemented, and its
 libraries have been picked over in public. Station uses
-[`fiatjaf.com/nostr`](https://pkg.go.dev/fiatjaf.com/nostr), pure Go, no
-cgo. Any Nostr tool can check an event out of Station's store.
+[`fiatjaf.com/nostr`](https://pkg.go.dev/fiatjaf.com/nostr), which is
+pure Go with no cgo. Any Nostr tool can check an event out of Station's
+store.
 
 The usual alternatives each miss something:
 
@@ -188,10 +195,10 @@ find it by key, and an operator could list a rig by vouching for it.
 interface shaped like a relay's, with kinds in the NIP-01 ranges and
 every party in `p` tags. Turning on a private relay over that store
 (khatru, from the same module) would let rigs that somebody else runs
-read and write their own events and nothing else, logged in by their keys
-(NIP-42), with anything that crosses a third party encrypted (NIP-44).
-Opening the public kinds to public reads later is a policy switch, not a
-rewrite.
+log in by their keys (NIP-42) and read and write their own events and
+nothing else, with anything that crosses a third party encrypted
+(NIP-44). Opening the public kinds to public reads later is a policy
+switch, not a rewrite.
 
 **A phone that keeps its identity.** With a device key, a phone moved to
 a different Pi keeps its npub, its history and, if a hosting service ever
@@ -233,15 +240,20 @@ networks, and a few well-known projects use them the way Station does.
 [Buzz](https://github.com/block/buzz), an open-source, self-hostable
 workspace where people and AI agents share the same channels. Its
 [announcement](https://engineering.block.xyz/blog/buzz) lays out the
-model: an identity is a keypair and every action is a signed event; each
-agent gets its own key; the agent's owner signs a narrowly scoped
-authorization, the agent signs its own work, and removing the owner means
-the agent cannot reconnect. The server you run is a Nostr relay (NIP-01,
-NIP-42 for login, NIP-34 for Git). That is the same shape as Station's
-operator attestation and the agent keys described above, and Block gives
-the same reason: "A protocol anyone can rebuild is a protocol nobody can
-lock you into." Block's CEO, Jack Dorsey, has also funded Nostr
-development personally since 2022.
+model:
+
+- An identity is a keypair and every action is a signed event.
+- Each agent gets its own key.
+- The agent's owner signs a narrowly scoped authorization and the agent
+  signs its own work.
+- Removing the owner means the agent cannot reconnect.
+
+The server you run is a Nostr relay (NIP-01, NIP-42 for login, NIP-34
+for Git). That is the same shape as Station's operator attestation and
+the agent keys described above, and Block gives the same reason: "A
+protocol anyone can rebuild is a protocol nobody can lock you into."
+Block's CEO, Jack Dorsey, has also funded Nostr development personally
+since 2022.
 
 **Bitchat.** The Bluetooth mesh chat app uses Nostr relays as its
 internet transport when Bluetooth is unavailable, and runs its location
@@ -255,11 +267,11 @@ and apps implement it.
 [simulator](https://huggingface.co/spaces/pollen-robotics/microduck-simulator)
 for its small open-source biped shows other visitors' robots live, with
 WebRTC signaled over public Nostr relays through
-[Trystero](https://github.com/dmotz/trystero): the "meeting without a
-tunnel" mechanism above, with no server of its own. Its trust model is
-the opposite of Station's, throwaway identities in a room anyone can
-join, which is exactly what the policy file and the grants are there to
-avoid.
+[Trystero](https://github.com/dmotz/trystero), which is the "meeting
+without a tunnel" mechanism above with no server of its own. Its trust
+model is the opposite of Station's: throwaway identities in a room anyone
+can join, which is exactly what the policy file and the grants are there
+to avoid.
 
 ## Further reading
 
