@@ -13,7 +13,8 @@ and keeps its store in one SQLite file. The packages it is built from
 take an authenticator, an authorizer and stores as interfaces, so a
 hosted service can embed them instead of forking.
 
-Status: R4 of the [remote spec](docs/remote-spec.md). These parts work:
+Status: R5 of the [remote spec](docs/remote-spec.md), under review.
+These parts work:
 
 - LAN, tailnet and public mode
 - enrollment
@@ -21,9 +22,10 @@ Status: R4 of the [remote spec](docs/remote-spec.md). These parts work:
 - holds and grants
 - the viewer over WebRTC with the embedded TURN server behind it
 - the MJPEG fallback through the station
+- the REST and BiDi relay for agents, with `/session` as the entry point
 - `station-probe`, which checks a station from outside
 
-The REST and BiDi relay for agents (R5) and packaging (R6) are next.
+Packaging and hardening (R6) are next.
 Progress and numbers are in [docs/progress.md](docs/progress.md).
 
 ## Run it
