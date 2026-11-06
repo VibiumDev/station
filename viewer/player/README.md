@@ -1,10 +1,11 @@
 # The Record Player, embedded
 
-The files here are the custom-element build of the
-[Vibium Record Player](https://github.com/VibiumDev/record-player) (MIT),
-`vibium-record-player.js` with the assets it loads beside it, served by
-the station at `/viewer/player/` so the Records page can play a
-recording in place. `VERSION` names the player commit they were built
-from. To update them, run `scripts/update-player.sh` from the repository
-root; it clones the player, builds the element and copies the output
+The files under `app/` are the [Vibium Record Player](https://github.com/VibiumDev/record-player)
+(MIT) as it runs at player.vibium.dev, built with its base path set to
+`/viewer/player/app/`, so the station serves the player itself and the
+Records page opens a recording in it with `?record=<sha256>.zip`. The
+player fetches the file from the station's own origin, with the browser's
+session, and nothing leaves the station. `VERSION` names the player commit
+the build came from. To update, run `scripts/update-player.sh` from the
+repository root; it clones the player, builds it and copies the output
 here. Nothing in this directory is edited by hand.

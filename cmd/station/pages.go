@@ -84,7 +84,7 @@ var pages = template.Must(template.New("").Funcs(template.FuncMap{"npub": npub, 
 <div class="helptext" id="help-records" hidden>
 <p>The Record Store keeps the files a session leaves behind: a Vibium <code>record.zip</code> an agent uploads after a run, a recording the rig made of a hold, screenshots and logs. Each file is named by its SHA-256 and tied to the hold it came from, so a recording is always next to who held the device, when, and what the rig said at the time.</p>
 <p><b>Who can see what.</b> You, as the owner, see everything. An agent's token sees what it uploaded and what was recorded on its own holds. A file marked public can be fetched by anyone with its link, which is how a recording is handed to someone without an account here; everything else needs a token, a sign-in, or a short-lived authorization the station signs.</p>
-<p><b>Watching a recording.</b> Play opens a Vibium recording here, in the <a href="https://player.vibium.dev">Vibium Record Player</a> that the station carries with it, step by step with the screen as it was after each one. Download keeps the file, which the player at player.vibium.dev also takes by drag and drop.</p>
+<p><b>Watching a recording.</b> Play opens a Vibium recording in the <a href="https://player.vibium.dev">Vibium Record Player</a>, which this station carries with it and serves itself, so the file is fetched with your session and never leaves the station. Download keeps the file, which the player at player.vibium.dev also takes by drag and drop.</p>
 <p><b>Room.</b> {{.Count}} files, {{.Total}}. A file is at most {{.MaxFile}}; the store keeps {{.MaxTotal}} and {{if .MaxAge}}each file {{.MaxAge}}{{else}}files for ever{{end}}, after which the oldest go. What the station recorded about a file, who uploaded it and on which hold, stays after the file itself is gone. The limits are the station's <code>--records-*</code> flags.</p>
 </div>
 {{if not .Records}}<div class="msg">Nothing here yet. An agent uploads a recording with <code>POST /v1/records/upload-auth</code> and a Blossom <code>PUT /upload</code>; see the API reference.</div>{{end}}
@@ -95,15 +95,8 @@ var pages = template.Must(template.New("").Funcs(template.FuncMap{"npub": npub, 
 <td data-l="File"><b>{{if .Name}}{{.Name}}{{else}}{{slice .SHA256 0 12}}…{{end}}</b><span class="sub">{{.Size}} · {{.Type}}</span></td>
 <td data-l="From">{{.Uploader}}{{if .HoldID}}<span class="sub">{{.HoldID}}</span>{{end}}</td>
 <td data-l="Access">{{if .Public}}public{{else}}private{{end}}{{if .CanEdit}} <form class="inline" method="post" action="/records/public"><input type="hidden" name="csrf" value="{{$.CSRF}}"><input type="hidden" name="sha256" value="{{.SHA256}}"><input type="hidden" name="device" value="{{$.Device}}"><input type="hidden" name="public" value="{{if .Public}}0{{else}}1{{end}}"><button class="link" type="submit">{{if .Public}}make private{{else}}make public{{end}}</button></form>{{end}}</td>
-<td class="act">{{if .CanPlay}}<a class="btn small" href="/records/{{.SHA256}}/play">Play</a> {{end}}<a class="btn small" href="{{.URL}}?download">Download</a>{{if .CanEdit}} <form class="inline" method="post" action="/records/delete"><input type="hidden" name="csrf" value="{{$.CSRF}}"><input type="hidden" name="sha256" value="{{.SHA256}}"><input type="hidden" name="device" value="{{$.Device}}"><button class="small" type="submit">Delete</button></form>{{end}}</td>
+<td class="act">{{if .CanPlay}}<a class="btn small" href="{{.Play}}">Play</a> {{end}}<a class="btn small" href="{{.URL}}?download">Download</a>{{if .CanEdit}} <form class="inline" method="post" action="/records/delete"><input type="hidden" name="csrf" value="{{$.CSRF}}"><input type="hidden" name="sha256" value="{{.SHA256}}"><input type="hidden" name="device" value="{{$.Device}}"><button class="small" type="submit">Delete</button></form>{{end}}</td>
 </tr>{{end}}</tbody></table></div>{{end}}
-</main>{{template "foot" .}}{{end}}
-
-{{define "play"}}{{template "head" (dict "Title" .Title "Name" .Name "Named" .Named)}}{{template "header" .}}
-<main class="wrap play"><p class="lead"><a href="/records{{if .Device}}?device={{.Device}}{{end}}">Records</a> › <b>{{.Title}}</b> <span class="muted">{{.When}} · {{.Size}}{{if .Device}} · {{.Device}}{{end}}</span> <a class="btn small" href="{{.Download}}">Download</a></p>
-<vibium-record-player src="{{.Src}}" recording-title="{{.Title}}" credentials="same-origin"></vibium-record-player>
-<p class="muted small">Played by the <a href="https://github.com/VibiumDev/record-player">Vibium Record Player</a>{{if .PlayerVersion}} ({{slice .PlayerVersion 0 7}}){{end}}, embedded in this station. The recording is fetched from this station with your session and never leaves it.</p>
-<script type="module" src="/viewer/player/vibium-record-player.js"></script>
 </main>{{template "foot" .}}{{end}}
 
 {{define "help"}}<button class="qhelp" type="button" aria-expanded="false" aria-controls="help-{{.}}" aria-label="What this is">?</button>{{end}}

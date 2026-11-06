@@ -14,9 +14,10 @@ func TestPlayerAssets(t *testing.T) {
 	for _, c := range []struct {
 		path, ctype string
 	}{
-		{"/player/vibium-record-player.js", "application/javascript; charset=utf-8"},
+		{"/player/app", "text/html; charset=utf-8"},
+		{"/player/app/index.html", "text/html; charset=utf-8"},
 		{"/player/VERSION", ""},
-		{"/player/third-party/ghostty/LICENSE.txt", "text/plain; charset=utf-8"},
+		{"/player/app/third-party/ghostty/LICENSE.txt", "text/plain; charset=utf-8"},
 		{"/player/nope.js", ""},
 		{"/player/../../etc/passwd", ""},
 	} {
@@ -32,16 +33,15 @@ func TestPlayerAssets(t *testing.T) {
 			t.Errorf("%s: %d %s", c.path, w.Code, w.Header().Get("Content-Type"))
 		}
 	}
-	// Every asset the bundle names must be served.
+	// The page names its script and stylesheet under the station's path,
+	// and carries the player's own policy.
 	w := httptest.NewRecorder()
-	h.ServeHTTP(w, httptest.NewRequest("GET", "/player/vibium-record-player.js", nil))
-	for _, name := range []string{"ghostty-vt", "JetBrainsMono-Regular"} {
-		if !contains(w.Body.String(), "assets/"+name) {
-			t.Errorf("the bundle does not name %s", name)
-		}
+	h.ServeHTTP(w, httptest.NewRequest("GET", "/player/app/", nil))
+	if !contains(w.Body.String(), `src="/viewer/player/app/assets/`) || w.Header().Get("Content-Security-Policy") != PlayerCSP {
+		t.Errorf("the page: %d %q", w.Code, w.Header().Get("Content-Security-Policy"))
 	}
 	w = httptest.NewRecorder()
-	h.ServeHTTP(w, httptest.NewRequest("GET", "/player/assets/"+assetNamed(t, "ghostty-vt"), nil))
+	h.ServeHTTP(w, httptest.NewRequest("GET", "/player/app/assets/"+assetNamed(t, "ghostty-vt"), nil))
 	if w.Code != 200 || w.Header().Get("Content-Type") != "application/wasm" {
 		t.Errorf("wasm asset: %d %s", w.Code, w.Header().Get("Content-Type"))
 	}
@@ -60,7 +60,7 @@ func contains(s, sub string) bool {
 
 func assetNamed(t *testing.T, prefix string) string {
 	t.Helper()
-	entries, err := files.ReadDir("player/assets")
+	entries, err := files.ReadDir("player/app/assets")
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -123,11 +123,15 @@ func Relayed(prefix, deviceID string) Endpoints {
 func Assets() http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		name := path.Base(r.URL.Path)
-		// The player keeps its assets in directories of its own.
+		// The player keeps its files in directories of its own, and its
+		// page is the directory itself.
 		rel := strings.TrimPrefix(path.Clean("/"+r.URL.Path), "/")
 		player := strings.HasPrefix(rel, "player/")
 		if player {
 			name = rel
+			if name == "player/app" {
+				name = "player/app/index.html"
+			}
 		}
 		var ctype string
 		switch {
@@ -143,8 +147,16 @@ func Assets() http.Handler {
 			ctype = "application/wasm"
 		case strings.HasSuffix(name, ".json"):
 			ctype = "application/json"
+		case player && strings.HasSuffix(name, ".html"):
+			ctype = "text/html; charset=utf-8"
 		case player && strings.HasSuffix(name, ".txt"):
 			ctype = "text/plain; charset=utf-8"
+		case player && strings.HasSuffix(name, ".ico"):
+			ctype = "image/x-icon"
+		case player && strings.HasSuffix(name, ".png"):
+			ctype = "image/png"
+		case player && strings.HasSuffix(name, ".svg"):
+			ctype = "image/svg+xml"
 		default:
 			http.NotFound(w, r)
 			return
@@ -155,6 +167,15 @@ func Assets() http.Handler {
 			return
 		}
 		w.Header().Set("Content-Type", ctype)
+		if ctype == "text/html; charset=utf-8" {
+			// The player runs WebAssembly for terminal recordings and draws
+			// frames from blobs, which the station's usual policy does not
+			// allow; its page alone does.
+			w.Header().Set("Content-Security-Policy", PlayerCSP)
+			w.Header().Set("Cache-Control", "no-cache")
+			w.Write(data)
+			return
+		}
 		switch {
 		case player, ctype == "font/woff2":
 			w.Header().Set("Cache-Control", "public, max-age=604800")
@@ -165,8 +186,16 @@ func Assets() http.Handler {
 	})
 }
 
-// PlayerVersion is the Record Player commit the embedded element was
-// built from, or empty when no element is embedded.
+// PlayerCSP is the Content Security Policy the embedded player's page
+// is served with.
+const PlayerCSP = "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' blob:; font-src 'self' data:; worker-src 'self' blob:; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'; object-src 'none'"
+
+// PlayerPath is where the embedded Record Player's page is served, under
+// the assets prefix; a recording opens there with ?record=<sha256>.zip.
+const PlayerPath = "/viewer/player/app/"
+
+// PlayerVersion is the Record Player commit the embedded player was
+// built from, or empty when none is embedded.
 func PlayerVersion() string {
 	v, err := files.ReadFile("player/VERSION")
 	if err != nil {
@@ -175,8 +204,8 @@ func PlayerVersion() string {
 	return strings.TrimSpace(string(v))
 }
 
-// HasPlayer says whether the Record Player element is embedded.
+// HasPlayer says whether the Record Player is embedded.
 func HasPlayer() bool {
-	_, err := files.ReadFile("player/vibium-record-player.js")
+	_, err := files.ReadFile("player/app/index.html")
 	return err == nil
 }
