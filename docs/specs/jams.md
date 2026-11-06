@@ -144,13 +144,14 @@ is the same table Vibium documents.
 
 **The tools** are Vibium's, through `vibium mcp`. The station is the
 MCP client, over standard input and output, and asks the server for its
-tool list at the start of each jam, so the tools follow the device: on
-a Roadie phone they are screenshot, tap, long press, swipe, keys, type
+tool list at the start of each jam. Vibium lists every tool it has
+whatever it is connected to, so the loop narrows the list by the
+device's kind, which the station knows from the rig's announcement: on
+a phone the model gets screenshot, tap, long press, swipe, keys, type
 and the few others a screen allows, and on a future host with a
-document model they would be the map, find, click and fill set the CLI
-uses on a browser. The loop offers the model what Vibium lists, minus
-session, recording and file tools, which stay out of the model's reach
-as they do in Vibium's own check. Vibium is a static Go binary, so the
+document model it would get the map, find, click and fill set the CLI
+uses on a browser. Session, recording and file tools stay out of the
+model's reach on every kind, as they do in Vibium's own check. Vibium is a static Go binary, so the
 station host needs one file beside the station, which the self-host
 guide and the Fly image add; the station finds it on the path or by a
 flag, and the Settings page says when it is missing.
