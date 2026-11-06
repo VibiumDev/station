@@ -4,8 +4,10 @@ Nov 6, 2026 · draft for review
 
 ## Summary and goals
 
-The station's front page is one big prompt. A person signs in, reads
-"What can I check for you?", types a claim or an errand, and an agent
+The station's front page is a prompt box, the kind ChatGPT and Claude
+open on: a few lines tall, wide, growing with what is typed, with a
+send button in its corner. A person signs in, reads "What can I check
+for you?" above it, types a claim or an errand, and an agent
 drives a device on the station to do it, while the page shows the
 agent's steps and the device being driven. When the agent is done the
 answer sits in the transcript, and the recording of what it did sits in
@@ -158,10 +160,11 @@ which is the sandbox runner's milestone to bring.
 
 ## Pages and API
 
-The root page, `/`, becomes the Jams page: the prompt, a device picker
-when more than one device is online, and under it the list of past
-jams, with when, who, the device, the prompt, and the verdict where
-there is one. The list of devices moves to `/devices`, and the docs that
+The root page, `/`, becomes the Jams page: the prompt box, sized and
+placed as the chat products place theirs rather than as a hero, a
+device picker beside it when more than one device is online, and under
+it the list of past jams, with when, who, the device, the prompt, and
+the verdict where there is one. The list of devices moves to `/devices`, and the docs that
 point at it follow. The top bar reads Jams, Devices, Records, Settings,
 and the brand keeps linking to the root. `/jams` serves the same page as
 the root, so the list has a name of its own, and one jam lives at
