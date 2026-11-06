@@ -1,0 +1,21 @@
+# Arguments and secrets for station.service: /etc/default/station.
+# Edit, then: sudo systemctl restart station
+#
+# Tailnet mode, the recommended one: the station joins your tailnet as a
+# node of its own and serves https://station.<tailnet>.ts.net to the
+# tailnet's members, who sign in by identity when --allow lists them.
+STATION_ARGS="--tailnet --hostname station --allow you@example.com"
+#
+# Public mode instead: a Let's Encrypt certificate of its own on :443,
+# with the challenge answered on :80, and TURN on UDP 3478 plus the
+# relay ports (--turn-ports).
+#STATION_ARGS="--public station.example.com --turn-ports 49152-49215"
+#
+# A Tailscale auth key lets a tailnet-mode station join without the
+# one-time login link that otherwise appears in its journal.
+#TS_AUTHKEY=tskey-auth-...
+#
+# The owner's password, applied at every start, for hosts that keep
+# secrets in environment variables. Otherwise set it once with
+# `station passwd` (docs/how-to-guides/self-host.md) and leave this out.
+#STATION_PASSWORD=
