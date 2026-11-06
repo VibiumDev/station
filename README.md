@@ -146,6 +146,7 @@ station starts, for hosts whose secrets are environment variables.
 | `rig` | The rig library: key, policy file, enrollment, the tunnel client, the gate and allowlist |
 | `turn` | The embedded TURN server (pion/turn): per-hold credentials, no relaying to private, loopback, link-local, shared or configured ranges |
 | `sqlite` | The one-file store, pure Go |
+| `sdnotify` | Tells systemd the service is ready, alive (the watchdog) or stopping; a no-op outside systemd |
 | `viewer` | The shell: the one viewer page a station and a Roadie both serve (Roadie's toolbar, settings panel and on-screen keyboard, the MJPEG reader, sound and microphone, input in picture space, WebRTC), told its endpoints by a config and extended by a rig's own extras module |
 | `cmd/station` | The single-player binary |
 | `cmd/station-probe` | A headless check of any station: token, hold, WebRTC through TURN only, a tap and the screenshot it changes |
