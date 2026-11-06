@@ -216,7 +216,7 @@ func (s *server) recordsData(r *http.Request, p station.Principal, extra map[str
 	}
 	count, size, _ := s.db.BlobTotal(r.Context())
 	data := map[string]any{
-		"Page": "records", "Principal": p, "CSRF": s.auth.csrfToken(r), "Records": views, "Device": device, "View": r.FormValue("view"),
+		"Page": "records", "Principal": p, "CSRF": s.auth.csrfToken(r), "Records": views, "Device": device, "Grid": r.FormValue("view") != "list",
 		"DeviceLabel": labels[device], "Count": count, "Total": humanSize(size),
 		"MaxFile": humanSize(s.records.MaxFile), "MaxTotal": humanSize(s.records.MaxTotal), "MaxAge": humanAge(s.records.MaxAge),
 	}
