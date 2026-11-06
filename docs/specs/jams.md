@@ -30,10 +30,10 @@ The goals, in order:
 2. **The same agent as the CLI.** The page runs what `vibium check` and
    `vibium run` run, so a claim behaves the same from a terminal, a
    script and the page, and the recording is the same recording.
-3. **The work can run anywhere.** Where the agent process runs is a
-   choice behind one interface: on the station's host first, in a
-   sandbox per jam later, so a hosted station and a self-hosted one
-   share the page and differ only in the runner.
+3. **The work can run anywhere.** Where the agent runs is a choice
+   behind one interface: a container on the station's host, a Sprite
+   on Fly, or a plain process, so a hosted station and a self-hosted
+   one share the page and differ only in the launcher.
 4. **The rig stays the final gate.** A jam is a hold like any other,
    signed by the station, checked by the rig, limited by the rig's
    policy. Nothing about the agent is trusted by the Pi.
@@ -76,22 +76,23 @@ A person types a prompt and sends it. The station:
 
 1. Makes a jam record with an id, the prompt, the person, the device
    chosen (or the only one), and the time.
-2. Takes a hold on the device under the person's identity, with the jam
-   named in the hold's subject, so the Devices page says who is driving
-   and the rig's recording, when the rig records, lands against that
-   hold.
-3. Mints a token for the jam: control scope, this device only, this jam
+2. Mints a token for the jam: control scope, this device only, this jam
    only, expiring with the jam's time limit. The token never reaches the
    browser.
-4. Starts the runner with the prompt, the device, the token, the
-   station's address and the provider settings, and reads its event
-   stream.
-5. Streams the events to the page: each step the agent took, each
+3. Starts the jam's box with the token, the station's address and the
+   provider settings. The box connects to the station's `/session` with
+   the token, which takes a hold on the device under the person's
+   identity, with the jam named in the hold's subject, so the Devices
+   page says who is driving and the rig's recording, when the rig
+   records, lands against that hold.
+4. Connects to the box's own endpoint, starts a recording, and sends the
+   claim or the goal.
+5. Streams what comes back to the page: each step the agent took, each
    screenshot it looked at, each tool call and its answer, and at the
    end the verdict or the goal's completion, or an error.
-6. When the runner ends, releases the hold, stores the transcript with
-   the jam record, and links the jam to the recording the runner
-   uploaded.
+6. When the result arrives, stops the recording with upload, closes the
+   session, which releases the hold, destroys the box, and stores the
+   transcript with the jam record and the recording's SHA-256.
 
 The page shows the transcript as it arrives, and beside it the device
 viewer in watching mode, which the station already does for a device
@@ -101,47 +102,74 @@ it, and can press Hold to take the device back, which ends the jam.
 ## The runner
 
 The runner is an interface with one job: start a jam and stream its
-events. Two implementations are planned, and the page cannot tell them
-apart.
+events. Behind it there is always the same program in the same kind of
+box, a container most of the time, and only the launcher differs.
 
-**The subprocess runner** starts `vibium check` or `vibium run` on the
-station's own host, with the jam's token, the station's address and the
-provider settings in its environment, and reads the CLI's event output.
-It needs Node and the Vibium CLI installed beside the station, which the
-self-host guide and the Fly image gain as an optional step. It is the
-first implementation, because it is the least machinery, and it serves a
-single-player station completely.
+**The box is the Vibium binary alone.** `vibium check`, `vibium run`,
+the agent loop behind them, the model clients for every provider Vibium
+supports and the `ai.env` loader are all inside the one Go binary that
+the CLI is; the Node package is an SDK that sends that binary BiDi
+commands. A jam therefore needs no Node, no Python and no model library
+of its own. The image is a static binary and the CA certificates, a few
+tens of megabytes with nothing else to patch. Writing a fresh loop
+around an OpenAI-compatible client would duplicate the agent and break
+the second goal, since the page and the CLI could then disagree on a
+verdict.
 
-**The sandbox runner** starts a disposable machine per jam, a Fly
-Machine or a Sprite with the Vibium CLI inside, gives it the same
-environment, and reads the same stream back over the sandbox's
-connection. The sandbox is destroyed when the jam ends. It serves a
-hosted station, where prompts and keys must not share a process with
-the station, and where many jams happen at once.
+**The station sits in the CLI's chair.** The binary is started as
+`vibium daemon start --connect wss://<station>/session`, with the jam's
+token as its connect header and the provider settings in its
+environment, which is how it reaches a phone from a laptop today. It
+then serves its own BiDi endpoint inside the box, and the station
+connects to that as a client, exactly as the CLI does: `session.new`,
+start a recording, `vibium:check.run` with the claim or
+`vibium:run.run` with the goal, stop the recording with upload, read
+the result. A follow-up from the person is another command on the same
+session. The WebSocket the box already speaks is the small server
+between the two, and it is the one transport that works wherever the
+box runs, where stdin and stdout would not reach a Sprite. The
+station's BiDi client exists already in `station-probe` and becomes a
+package.
 
-The rig is not a runner. It has Node and it holds the phone at the
-shortest distance, but it is the operator's machine and the final gate:
-it checks grants and refuses what its policy does not allow, and it may
-belong to someone other than the person typing the prompt. A customer's
-model key and prompt do not go there.
+**Where the box runs** is the launcher's choice, and there are three:
 
-The contract between the station and a runner:
+- *A container on the station's host*, when the station is on a Pi or
+  a PC. Docker or podman starts the image with no volumes, no devices,
+  a read-only root, every capability dropped, a memory limit and
+  network egress only, and removes it when the jam ends. Rootless
+  podman is preferred, because a Docker socket is root on the host and
+  the station should not hold that.
+- *A Sprite on Fly*, when the station is on Fly, where a container
+  cannot start a container. The station asks Fly for a Sprite (or a
+  Machine) from the same image on its private network, with a token
+  scoped to that app kept as a station secret, reaches the box's
+  endpoint over that network, and destroys it when the jam ends. This
+  serves a hosted station too, where many jams run at once and no two
+  share a process.
+- *A plain subprocess*, where there is no container runtime: the same
+  binary under the station's own user. The least isolation, and enough
+  for a single-player station on a laptop.
 
-- Input: the prompt, the device id, the jam's token, the station's URL,
-  and the provider settings as the `VIBIUM_AI_*` variables and the
-  provider's key variable.
-- Output: a stream of events in the order they happen, each with a
-  time, a kind (step, screenshot, tool, verdict, done, error) and its
-  content; and at the end, the SHA-256 of the recording the runner
-  uploaded.
-- Control: stop, which the station sends when the person takes the
-  device back, the time limit passes, or the person signs out.
+The rig is not a launcher. It has the phone at the shortest distance,
+but it is the operator's machine and the final gate: it checks grants
+and refuses what its policy does not allow, and it may belong to
+someone other than the person typing the prompt. A customer's model key
+and prompt do not go there.
 
-The recording is uploaded by the runner itself with the presign flow
-the Record Store already has: the runner asks the station for an upload
-authorization under its jam token, and sends the zip. The station marks
-the file with the jam's hold, so the Records page lists it against the
-jam as it lists the rig's own recording of the same hold.
+The contract between the station and a box:
+
+- Input, at start: the station's `/session` URL, the jam's token, and
+  the provider settings as the `VIBIUM_AI_*` variables and the
+  provider's key variable, in the box's arguments and environment.
+- Output: the box's BiDi endpoint, from which the station reads the
+  result and, once the binary emits them, progress events; and the
+  recording, which the box uploads itself with the presign flow the
+  Record Store already has, under the jam's token, so the Records page
+  lists it against the jam's hold beside the rig's own recording of the
+  same hold.
+- Control: the station closes the session and destroys the box when
+  the result is in, the person takes the device back, the time limit
+  passes, or the person signs out.
 
 ## Provider settings
 
@@ -162,9 +190,9 @@ in its data directory written with mode 0600 like `station.key`, holding
 and `VIBIUM_AI_REASONING_EFFORT`, and the provider's key variable
 (`OPENAI_API_KEY`, `XAI_API_KEY`, `ANTHROPIC_API_KEY` or
 `GOOGLE_API_KEY`). It is the same file `vibium config init` writes for a
-person, so the runner needs nothing new: the station hands the file's
-variables to the runner as its environment, whichever runner it is, and
-the CLI behaves exactly as it would on a laptop. Whatever the page
+person, so the box needs nothing new: the station hands the file's
+variables to the box as its environment, whichever launcher starts it,
+and the binary behaves exactly as it would on a laptop. Whatever the page
 leaves unset, the station host's environment fills in, so a deployment
 that sets the key as a platform secret works without typing it into
 the page. Changing the settings is an owner action and goes in the
@@ -173,8 +201,7 @@ audit table like making a token, without the key.
 In single-player Station there is one owner and so one set of keys. A
 hosted station is bring your own keys per account, with the same
 section on each account's settings, the file replaced by a per-account
-store, and the sandbox runner receiving only that account's variables,
-in the sandbox's environment.
+store, and each Sprite receiving only its own account's variables.
 
 ## Pages and API
 
@@ -213,11 +240,11 @@ A jam is a hold, so the rig's limits apply unchanged: the scopes the
 policy allows, the hours, the longest session the policy permits. Two of
 the station's own rules need care. The idle rule releases a hold
 untouched for five minutes, and an agent waiting on a model can sit
-longer than that between inputs, so the runner's events count as
+longer than that between inputs, so the box's events count as
 activity, and a jam with no event for the idle time is stopped rather
 than silently losing its phone. And a jam has a time limit of its own,
 thirty minutes by default, which the token's expiry enforces even if the
-runner hangs.
+box hangs.
 
 Model cost is the person's, on their own key. The first milestone
 records the tokens the provider reports in the jam's transcript, so the
@@ -228,48 +255,64 @@ per day is the hosted station's concern.
 
 - The model key is a secret the owner typed. It lives in `ai.env` in
   the data directory, readable by the station's user alone, goes to the
-  runner as environment and nowhere else, and never appears in the
+  box as environment and nowhere else, and never appears in the
   database, in a page after it is typed, in a log or in a URL.
+- The box has nothing but the jam: no volumes, no devices, a read-only
+  root, no capabilities, egress only, a memory limit, and a life no
+  longer than the jam. The key reaches it as environment and dies with
+  it.
+- The launcher's own credential is the one new privilege. A Docker
+  socket on a host is root, so podman runs rootless where it can, and
+  the Fly token for Sprites is scoped to the one app and kept as a
+  station secret, never in the config file.
 - A jam's token is scoped to one device and one jam and expires with
   the jam; it travels in a header, never a URL, like every other token.
 - Page content and screenshots the agent reads are data from the device,
   not instructions from the person; the agent's own prompt separates the
   two, and the station does not add the device's output to anything it
   signs.
-- The rig checks the jam's grant like any grant. A runner that
-  misbehaves can do no more than the hold allows, and the rig's
-  recording, when on, records it.
+- The rig checks the jam's grant like any grant. A box that misbehaves
+  can do no more than the hold allows, and the rig's recording, when
+  on, records it.
 - The transcript may contain what the screen showed. It is stored with
   the jam's visibility: the person who started it and admins, like a
   private recording.
 
 ## Milestones and acceptance
 
-- [ ] **R8 Jams on the host**: the Jams page at the root with the
-  prompt, the Devices page at `/devices`, the subprocess runner, the
-  event stream, the watching viewer beside the transcript, the AI
-  section on Settings with provider, model and key and the readiness
-  check, the recording in the Record Store. Gate: a claim
-  typed on the page drives the phone through the station, the verdict
-  shows on the page, and the jam's recording plays on the Records page.
-  The same claim through `vibium check` from a laptop gives the same
-  verdict.
-- [ ] **R9 Jams in a sandbox**: the sandbox runner behind the same
-  interface, chosen by a flag, with the sandbox destroyed after every
-  jam. Gate: the R8 gate passes with the runner switched, and nothing
-  on the station host runs Node.
+- [ ] **R8 Jams in a container**: the Jams page at the root with the
+  prompt, the Devices page at `/devices`, the AI section on Settings
+  with provider, model and key and the readiness check, the image, the
+  container launcher (Docker or podman) with the subprocess launcher as
+  the fallback, the station's BiDi client as a package, the transcript
+  with the watching viewer beside it, the recording in the Record
+  Store. Gate: a claim typed on the dev Pi's station starts a
+  container, drives the phone through the station, the verdict shows
+  on the page, the jam's recording plays on the Records page, and the
+  container is gone afterwards. The same claim through `vibium check`
+  from a laptop gives the same verdict.
+- [ ] **R9 Jams on Fly**: the Sprite launcher behind the same
+  interface, chosen by a flag, with the Sprite destroyed after every
+  jam. Gate: the R8 gate passes on the Fly test station, with the jam
+  in a Sprite and nothing of it in the station's own machine.
 
 ## Open questions
 
-- [ ] Whether `vibium check` and `vibium run` emit an event stream a
-  runner can read today, or whether the CLI gains a `--events` output
-  for it. The transcript the page shows depends on this.
+- [ ] Progress events. `vibium check` and `vibium run` answer once, at
+  the end, with the verdict and the evidence, and emit nothing on the
+  way, so the transcript that fills as the agent works needs the
+  binary to send progress as BiDi events during a check or a run,
+  which is a Vibium change like the upload option. Until then the page
+  shows the viewer's live picture and the final result.
 - [ ] A prompt that names two devices ("on the phone and the laptop").
   The first milestone takes one device per jam.
-- [ ] Node in the station's image for the subprocess runner, on Fly and
-  in the self-host guide: an optional layer, or a second image.
+- [ ] Docker or podman on the dev Pi and in the self-host guide, and
+  whether the station pulls the image itself or expects it present.
 - [ ] The Vibium branch with `vibium record stop --upload`, which the
-  runner's upload leans on, is not merged.
+  box's upload leans on, is not merged.
+- [ ] Follow-up turns: whether a second prompt on the same session
+  should carry the first exchange as the `context` that
+  `vibium:check.run` accepts, or start fresh.
 - [ ] Whether a jam's hold should be refused by rigs that do not allow
   recording, or should simply run unrecorded like any hold.
 - [ ] Whether a station with no model configured should land on Devices
