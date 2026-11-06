@@ -18,6 +18,9 @@ trap 'rm -rf "$TMP"' EXIT
 git clone -q https://github.com/VibiumDev/record-player.git "$TMP/player"
 git -C "$TMP/player" checkout -q "$REF"
 COMMIT=$(git -C "$TMP/player" rev-parse HEAD)
+# The app's router assumes the site root; under the station's path it
+# needs the build's base as its basename, or every page is its 404.
+sed -i 's|<BrowserRouter>|<BrowserRouter basename={import.meta.env.BASE_URL}>|' "$TMP/player/src/App.tsx"
 (cd "$TMP/player" && npm ci --no-audit --no-fund && npx vite build --base=/viewer/player/app/ --outDir dist-app)
 
 find "$DEST" -mindepth 1 ! -name README.md -delete
