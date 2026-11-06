@@ -134,6 +134,8 @@ func (s *server) handler() http.Handler {
 	mux.HandleFunc("POST /v1/enroll", func(w http.ResponseWriter, r *http.Request) { s.enrollNow().ServeEnroll(w, r) })
 	mux.Handle("/v1/tunnel", s.tunnel)
 	mux.Handle("GET /viewer/", http.StripPrefix("/viewer/", viewer.Assets()))
+	mux.HandleFunc("GET /favicon.png", serveIcon)
+	mux.HandleFunc("GET /apple-touch-icon.png", serveIcon)
 	mux.HandleFunc("GET /login", s.loginPage)
 	mux.HandleFunc("POST /login", s.loginPost)
 	mux.HandleFunc("POST /logout", s.logout)
