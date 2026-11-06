@@ -18,14 +18,15 @@ The agent is Vibium's own. `vibium check` verifies a claim and ends with
 a verdict; `vibium run` carries out a goal and ends when it is done. Both
 reach a phone the way the agent tutorial already does, through a station
 token and the relayed BiDi session, and both take their model from the
-same provider settings every Vibium user has. The page puts a front on
-that, and adds nothing to the agent itself.
+same `VIBIUM_AI_*` settings every Vibium user has, which here the
+station's Settings page writes. The page puts a front on that, and adds
+nothing to the agent itself.
 
 The goals, in order:
 
-1. **One prompt, no setup.** Anyone who can sign in to the station and
-   has configured a model for Vibium once can type a sentence and watch
-   a phone act on it.
+1. **One prompt, one key.** Once the owner has picked a model provider
+   and pasted its key on Settings, anyone who can sign in to the
+   station can type a sentence and watch a phone act on it.
 2. **The same agent as the CLI.** The page runs what `vibium check` and
    `vibium run` run, so a claim behaves the same from a terminal, a
    script and the page, and the recording is the same recording.
@@ -127,7 +128,8 @@ model key and prompt do not go there.
 The contract between the station and a runner:
 
 - Input: the prompt, the device id, the jam's token, the station's URL,
-  and the provider settings as the `VIBIUM_AI_*` variables.
+  and the provider settings as the `VIBIUM_AI_*` variables and the
+  provider's key variable.
 - Output: a stream of events in the order they happen, each with a
   time, a kind (step, screenshot, tool, verdict, done, error) and its
   content; and at the end, the SHA-256 of the recording the runner
@@ -143,20 +145,36 @@ jam as it lists the rig's own recording of the same hold.
 
 ## Provider settings
 
-The runner reads the model from the same place the CLI does: the
-`VIBIUM_AI_PROVIDER`, `VIBIUM_AI_MODEL`, `VIBIUM_AI_BASE_URL` and
-`VIBIUM_AI_REASONING_EFFORT` variables and the provider's own key
-variable, with `~/.config/vibium/ai.env` filled in for whatever is
-unset, as `vibium config init` writes it. The station adds nothing of
-its own in the first milestone: the settings are the station host's
-environment and that file, and a person who has run `vibium check` on
-the host has configured the page.
+Jams are bring your own keys. Settings gains an **AI** section where
+the owner picks a provider from the ones Vibium's CLI knows (OpenAI,
+xAI, Anthropic, Google Gemini, an OpenAI-compatible server, or a local
+one), names the model, pastes the provider's API key, and can set the
+base URL and the reasoning effort where the provider takes them. Saving
+runs `vibium ready ai` with those values and shows its result on the
+page, so a wrong key or an unknown model is seen there and not in a
+failed jam. The key is seen once, as it is typed, and never again: the
+page says that one is set, offers Replace and Remove, and nothing a
+browser receives afterwards contains it.
 
-Settings gains an **AI** section that shows the provider and model in
-use and the result of Vibium's readiness check, so a missing key is seen
-there and not in a failed jam. The key itself is never shown and never
-sent to a browser. A hosted station will want settings per account,
-which is the sandbox runner's milestone to bring.
+The station keeps the settings in Vibium's own format, an `ai.env` file
+in its data directory written with mode 0600 like `station.key`, holding
+`VIBIUM_AI_PROVIDER`, `VIBIUM_AI_MODEL`, the optional `VIBIUM_AI_BASE_URL`
+and `VIBIUM_AI_REASONING_EFFORT`, and the provider's key variable
+(`OPENAI_API_KEY`, `XAI_API_KEY`, `ANTHROPIC_API_KEY` or
+`GOOGLE_API_KEY`). It is the same file `vibium config init` writes for a
+person, so the runner needs nothing new: the station hands the file's
+variables to the runner as its environment, whichever runner it is, and
+the CLI behaves exactly as it would on a laptop. Whatever the page
+leaves unset, the station host's environment fills in, so a deployment
+that sets the key as a platform secret works without typing it into
+the page. Changing the settings is an owner action and goes in the
+audit table like making a token, without the key.
+
+In single-player Station there is one owner and so one set of keys. A
+hosted station is bring your own keys per account, with the same
+section on each account's settings, the file replaced by a per-account
+store, and the sandbox runner receiving only that account's variables,
+in the sandbox's environment.
 
 ## Pages and API
 
@@ -208,8 +226,10 @@ per day is the hosted station's concern.
 
 ## Security
 
-- The model key stays where it is: in the host's environment or the
-  sandbox's, never in the station's database and never in a page.
+- The model key is a secret the owner typed. It lives in `ai.env` in
+  the data directory, readable by the station's user alone, goes to the
+  runner as environment and nowhere else, and never appears in the
+  database, in a page after it is typed, in a log or in a URL.
 - A jam's token is scoped to one device and one jam and expires with
   the jam; it travels in a header, never a URL, like every other token.
 - Page content and screenshots the agent reads are data from the device,
@@ -228,7 +248,8 @@ per day is the hosted station's concern.
 - [ ] **R8 Jams on the host**: the Jams page at the root with the
   prompt, the Devices page at `/devices`, the subprocess runner, the
   event stream, the watching viewer beside the transcript, the AI
-  section on Settings, the recording in the Record Store. Gate: a claim
+  section on Settings with provider, model and key and the readiness
+  check, the recording in the Record Store. Gate: a claim
   typed on the page drives the phone through the station, the verdict
   shows on the page, and the jam's recording plays on the Records page.
   The same claim through `vibium check` from a laptop gives the same
