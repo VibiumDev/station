@@ -118,6 +118,8 @@ td b { color: var(--text); font-weight: 600; }
 td code { word-break: break-all; }
 td.act { text-align: right; white-space: nowrap; }
 .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--line-strong); margin-right: 8px; vertical-align: 1px; }
+/* The mark that a host records every session, as the viewer shows it. */
+.rec { color: #e05a4e; cursor: help; }
 .dot.on { background: var(--success); }
 .kv th { width: 180px; color: var(--text-muted); font-weight: 500; background: none; }
 
