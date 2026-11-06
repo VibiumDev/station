@@ -212,3 +212,5 @@ main.play { max-width: none; padding-top: 20px; padding-bottom: 24px; }
 .card.rec .meta { display: flex; flex-direction: column; gap: 4px; padding: 10px 12px 12px; }
 .card.rec .meta b { font-size: 15px; overflow-wrap: anywhere; }
 .card.rec .meta .act { margin-top: 6px; }
+.btn.icon { display: inline-flex; align-items: center; justify-content: center; padding: 6px 9px; vertical-align: middle; }
+.btn.icon svg { display: block; }

@@ -471,7 +471,7 @@ func serve(args []string) int {
 		blobDir = filepath.Join(dir, "blobs")
 	}
 	s.records = &records.Store{Blobs: blob.Disk{Dir: blobDir}, Index: db, Events: db, Holds: db, Devices: db, Signer: records.Key(key),
-		HoldsOf: db.HoldsOf, BaseURL: base, ThumbDir: filepath.Join(blobDir, "thumbs"), MaxFile: maxFile, MaxTotal: maxTotal, MaxAge: *recordsMaxAge, Audit: db}
+		HoldsOf: db.HoldsOf, BaseURL: base, UnpackDir: filepath.Join(blobDir, "unpacked"), MaxFile: maxFile, MaxTotal: maxTotal, MaxAge: *recordsMaxAge, Audit: db}
 	s.recordsDir = blobDir
 	if mode == "lan" && !*noMDNS {
 		_, port, _ := net.SplitHostPort(ln.Addr().String())
@@ -501,6 +501,11 @@ func serve(args []string) int {
 			for _, b := range gone {
 				fmt.Printf("records: retention removed %s %s (%d bytes)\n", b.Name, b.SHA256[:12], b.Size)
 			}
+		}
+		if n, err := s.records.UnpackAll(context.Background()); err != nil {
+			fmt.Println("records: unpacking:", err)
+		} else if n > 0 {
+			fmt.Printf("records: unpacked %d recording(s)\n", n)
 		}
 		sweep()
 		t := time.NewTicker(time.Hour)

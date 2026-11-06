@@ -9,17 +9,18 @@ import (
 	"github.com/VibiumDev/station"
 )
 
-const blobCols = `sha256, size, type, name, uploader, pubkey, hold_id, device_id, rig_id, event_id, public, created_at`
+const blobCols = `sha256, size, type, name, uploader, pubkey, hold_id, device_id, rig_id, event_id, public, created_at, steps, frames, duration_ms, thumb`
 
 func scanBlob(s scanner) (station.Blob, error) {
 	var b station.Blob
 	var public int
-	var created int64
-	if err := s.Scan(&b.SHA256, &b.Size, &b.Type, &b.Name, &b.Uploader, &b.PubKey, &b.HoldID, &b.DeviceID, &b.RigID, &b.EventID, &public, &created); err != nil {
+	var created, duration int64
+	if err := s.Scan(&b.SHA256, &b.Size, &b.Type, &b.Name, &b.Uploader, &b.PubKey, &b.HoldID, &b.DeviceID, &b.RigID, &b.EventID, &public, &created, &b.Steps, &b.Frames, &duration, &b.Thumb); err != nil {
 		return b, err
 	}
 	b.Public = public != 0
 	b.CreatedAt = time.Unix(0, created)
+	b.Duration = time.Duration(duration) * time.Millisecond
 	return b, nil
 }
 
@@ -29,11 +30,13 @@ func (d *DB) PutBlob(ctx context.Context, b station.Blob) error {
 	if b.Public {
 		public = 1
 	}
-	_, err := d.db.ExecContext(ctx, `INSERT INTO blobs (`+blobCols+`) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+	_, err := d.db.ExecContext(ctx, `INSERT INTO blobs (`+blobCols+`) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT(sha256) DO UPDATE SET size = excluded.size, type = excluded.type, name = excluded.name,
 		uploader = excluded.uploader, pubkey = excluded.pubkey, hold_id = excluded.hold_id, device_id = excluded.device_id,
-		rig_id = excluded.rig_id, event_id = excluded.event_id, public = excluded.public, created_at = excluded.created_at`,
-		b.SHA256, b.Size, b.Type, b.Name, b.Uploader, b.PubKey, b.HoldID, b.DeviceID, b.RigID, b.EventID, public, b.CreatedAt.UnixNano())
+		rig_id = excluded.rig_id, event_id = excluded.event_id, public = excluded.public, created_at = excluded.created_at,
+		steps = excluded.steps, frames = excluded.frames, duration_ms = excluded.duration_ms, thumb = excluded.thumb`,
+		b.SHA256, b.Size, b.Type, b.Name, b.Uploader, b.PubKey, b.HoldID, b.DeviceID, b.RigID, b.EventID, public, b.CreatedAt.UnixNano(),
+		b.Steps, b.Frames, b.Duration.Milliseconds(), b.Thumb)
 	return err
 }
 

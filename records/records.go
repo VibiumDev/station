@@ -68,8 +68,9 @@ type Store struct {
 	HoldsOf func(ctx context.Context, subject string, since time.Time) ([]station.Hold, error)
 	// BaseURL is where blobs are fetched: BaseURL/<sha256>.<ext>.
 	BaseURL string
-	// ThumbDir keeps the thumbnails taken out of recordings; empty keeps none.
-	ThumbDir string
+	// UnpackDir keeps each recording unpacked beside its zip; empty keeps
+	// none, and cards then show no picture.
+	UnpackDir string
 	// Limits; zero means none.
 	MaxFile  int64
 	MaxTotal int64
@@ -129,12 +130,22 @@ type Descriptor struct {
 	Device   string `json:"device,omitempty"`
 	Public   bool   `json:"public,omitempty"`
 	Event    string `json:"event,omitempty"`
+	// A recording's contents, once unpacked.
+	Steps      int    `json:"steps,omitempty"`
+	Frames     int    `json:"frames,omitempty"`
+	DurationMS int64  `json:"duration_ms,omitempty"`
+	Files      string `json:"files,omitempty"`
 }
 
 // Describe is a blob's descriptor.
 func (s *Store) Describe(b station.Blob) Descriptor {
-	return Descriptor{URL: s.URL(b), SHA256: b.SHA256, Size: b.Size, Type: b.Type, Uploaded: b.CreatedAt.Unix(),
-		Name: b.Name, Uploader: b.Uploader, Hold: b.HoldID, Device: b.DeviceID, Public: b.Public, Event: b.EventID}
+	d := Descriptor{URL: s.URL(b), SHA256: b.SHA256, Size: b.Size, Type: b.Type, Uploaded: b.CreatedAt.Unix(),
+		Name: b.Name, Uploader: b.Uploader, Hold: b.HoldID, Device: b.DeviceID, Public: b.Public, Event: b.EventID,
+		Steps: b.Steps, Frames: b.Frames, DurationMS: b.Duration.Milliseconds()}
+	if b.Type == "application/zip" && s.UnpackDir != "" {
+		d.Files = strings.TrimSuffix(s.BaseURL, "/") + "/records/" + b.SHA256 + "/files/"
+	}
+	return d
 }
 
 // URL is where a blob is fetched.
@@ -477,6 +488,11 @@ func (s *Store) ServeUpload(w http.ResponseWriter, r *http.Request) {
 		writeError(w, err)
 		return
 	}
+	// A recording is unpacked now, once; a zip that is no recording is
+	// kept as it came.
+	if nb, err := s.Unpacked(ctx, b); err == nil {
+		b = nb
+	}
 	s.audit(ctx, station.AuditEntry{Subject: o.uploader, Action: "upload", DeviceID: o.deviceID, HoldID: o.hold.ID,
 		Detail: fmt.Sprintf("%s %s (%d bytes, %s)", b.Name, sha[:12], size, b.Type)})
 	w.WriteHeader(http.StatusOK)
@@ -644,7 +660,7 @@ func (s *Store) remove(ctx context.Context, b station.Blob, who, action string) 
 	if err := s.Index.DeleteBlob(ctx, b.SHA256); err != nil {
 		return err
 	}
-	s.removeThumb(b.SHA256)
+	s.removeUnpacked(b.SHA256)
 	s.audit(ctx, station.AuditEntry{Subject: who, Action: action, DeviceID: b.DeviceID, HoldID: b.HoldID,
 		Detail: fmt.Sprintf("%s %s (%d bytes)", b.Name, b.SHA256[:12], b.Size)})
 	return nil

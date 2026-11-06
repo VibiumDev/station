@@ -145,6 +145,9 @@ func (s *server) handler() http.Handler {
 	mux.Handle("GET /records/{sha}/thumb.jpg", s.page(station.ActionView, func(w http.ResponseWriter, r *http.Request, p station.Principal) {
 		s.records.ServeThumbnail(w, r, r.PathValue("sha"), &p)
 	}))
+	mux.Handle("GET /records/{sha}/files/{path...}", s.page(station.ActionView, func(w http.ResponseWriter, r *http.Request, p station.Principal) {
+		s.records.ServeFile(w, r, r.PathValue("sha"), r.PathValue("path"), &p)
+	}))
 	mux.Handle("POST /records/public", s.page(station.ActionView, s.recordPublic))
 	mux.Handle("POST /records/delete", s.page(station.ActionView, s.recordDelete))
 	mux.Handle("GET /settings", s.page(station.ActionManage, s.settingsPage))

@@ -86,22 +86,22 @@ var pages = template.Must(template.New("").Funcs(template.FuncMap{"npub": npub, 
 <p>The Record Store keeps the files a session leaves behind: a Vibium <code>record.zip</code> an agent uploads after a run, a recording the rig made of a hold, screenshots and logs. Each file is named by its SHA-256 and tied to the hold it came from, so a recording is always next to who held the device, when, and what the rig said at the time.</p>
 <p><b>Who can see what.</b> You, as the owner, see everything. An agent's token sees what it uploaded and what was recorded on its own holds. A file marked public can be fetched by anyone with its link, which is how a recording is handed to someone without an account here; everything else needs a token, a sign-in, or a short-lived authorization the station signs.</p>
 <p><b>Watching a recording.</b> Play opens a Vibium recording in the <a href="https://player.vibium.dev">Vibium Record Player</a>, which this station carries with it and serves itself, so the file is fetched with your session and never leaves the station. Download keeps the file, which the player at player.vibium.dev also takes by drag and drop.</p>
-<p><b>Room.</b> {{.Count}} files, {{.Total}}. A file is at most {{.MaxFile}}; the store keeps {{.MaxTotal}} and {{if .MaxAge}}each file {{.MaxAge}}{{else}}files for ever{{end}}, after which the oldest go. What the station recorded about a file, who uploaded it and on which hold, stays after the file itself is gone. The limits are the station's <code>--records-*</code> flags.</p>
+<p><b>Room.</b> {{.Count}} files, {{.Total}}. A file is at most {{.MaxFile}}; the store keeps {{.MaxTotal}} and {{if .MaxAge}}each file {{.MaxAge}}{{else}}files for ever{{end}}, after which the oldest go. A recording is also kept unpacked beside its zip, which is what the cards and the thumbnails read, so on disk it takes about twice its size. What the station recorded about a file, who uploaded it and on which hold, stays after the file itself is gone. The limits are the station's <code>--records-*</code> flags.</p>
 </div>
 {{if not .Records}}<div class="msg">Nothing here yet. An agent uploads a recording with <code>POST /v1/records/upload-auth</code> and a Blossom <code>PUT /upload</code>; see the API reference.</div>{{end}}
 {{if and .Records (eq .View "grid")}}<div class="cards">{{range .Records}}<article class="card rec">
 <a class="thumb" href="{{if .CanPlay}}/records/{{.SHA256}}/play{{else}}{{.URL}}?download{{end}}" aria-label="{{if .Name}}{{.Name}}{{else}}{{slice .SHA256 0 12}}{{end}}">{{if .HasThumb}}<img src="/records/{{.SHA256}}/thumb.jpg" alt="" loading="lazy">{{else}}<span class="nothumb">{{.Type}}</span>{{end}}</a>
-<div class="meta"><b>{{if .Name}}{{.Name}}{{else}}{{slice .SHA256 0 12}}…{{end}}</b><span class="sub">{{.When}} · {{.Size}}{{if .Public}} · public{{end}}</span><span class="sub">{{if .DeviceID}}<a href="/records?view=grid&device={{.DeviceID}}">{{if .Label}}{{.Label}}{{else}}{{.DeviceID}}{{end}}</a> · {{end}}{{.Uploader}}</span>
-<span class="act">{{if .CanPlay}}<a class="btn small" href="/records/{{.SHA256}}/play">Play</a> {{end}}<a class="btn small" href="{{.URL}}?download">Download</a></span></div>
+<div class="meta"><b>{{if .Name}}{{.Name}}{{else}}{{slice .SHA256 0 12}}…{{end}}</b><span class="sub">{{.When}} · {{.Size}}{{if .Meta}} · {{.Meta}}{{end}}{{if .Public}} · public{{end}}</span><span class="sub">{{if .DeviceID}}<a href="/records?view=grid&device={{.DeviceID}}">{{if .Label}}{{.Label}}{{else}}{{.DeviceID}}{{end}}</a> · {{end}}{{.Uploader}}</span>
+<span class="act">{{if .CanPlay}}<a class="btn small icon" href="/records/{{.SHA256}}/play" title="Play" aria-label="Play">{{template "icon-play"}}</a> {{end}}<a class="btn small icon" href="{{.URL}}?download" title="Download" aria-label="Download">{{template "icon-download"}}</a></span></div>
 </article>{{end}}</div>{{end}}
 {{if and .Records (ne .View "grid")}}<div class="tablewrap"><table><thead><tr><th>When</th><th>Device</th><th>File</th><th>From</th><th>Access</th><th></th></tr></thead><tbody>
 {{range .Records}}<tr>
 <td data-l="When">{{.When}}</td>
 <td data-l="Device">{{if .DeviceID}}<a href="/records?device={{.DeviceID}}">{{if .Label}}{{.Label}}{{else}}{{.DeviceID}}{{end}}</a>{{else}}<span class="muted">none</span>{{end}}</td>
-<td data-l="File"><b>{{if .Name}}{{.Name}}{{else}}{{slice .SHA256 0 12}}…{{end}}</b><span class="sub">{{.Size}} · {{.Type}}</span></td>
+<td data-l="File"><b>{{if .Name}}{{.Name}}{{else}}{{slice .SHA256 0 12}}…{{end}}</b><span class="sub">{{.Size}} · {{.Type}}{{if .Meta}} · {{.Meta}}{{end}}</span></td>
 <td data-l="From">{{.Uploader}}{{if .HoldID}}<span class="sub">{{.HoldID}}</span>{{end}}</td>
 <td data-l="Access">{{if .Public}}public{{else}}private{{end}}{{if .CanEdit}} <form class="inline" method="post" action="/records/public"><input type="hidden" name="csrf" value="{{$.CSRF}}"><input type="hidden" name="sha256" value="{{.SHA256}}"><input type="hidden" name="device" value="{{$.Device}}"><input type="hidden" name="public" value="{{if .Public}}0{{else}}1{{end}}"><button class="link" type="submit">{{if .Public}}make private{{else}}make public{{end}}</button></form>{{end}}</td>
-<td class="act">{{if .CanPlay}}<a class="btn small" href="/records/{{.SHA256}}/play">Play</a> {{end}}<a class="btn small" href="{{.URL}}?download">Download</a>{{if .CanEdit}} <form class="inline" method="post" action="/records/delete"><input type="hidden" name="csrf" value="{{$.CSRF}}"><input type="hidden" name="sha256" value="{{.SHA256}}"><input type="hidden" name="device" value="{{$.Device}}"><button class="small" type="submit">Delete</button></form>{{end}}</td>
+<td class="act">{{if .CanPlay}}<a class="btn small icon" href="/records/{{.SHA256}}/play" title="Play" aria-label="Play">{{template "icon-play"}}</a> {{end}}<a class="btn small icon" href="{{.URL}}?download" title="Download" aria-label="Download">{{template "icon-download"}}</a>{{if .CanEdit}} <form class="inline" method="post" action="/records/delete"><input type="hidden" name="csrf" value="{{$.CSRF}}"><input type="hidden" name="sha256" value="{{.SHA256}}"><input type="hidden" name="device" value="{{$.Device}}"><button class="small" type="submit">Delete</button></form>{{end}}</td>
 </tr>{{end}}</tbody></table></div>{{end}}
 </main>{{template "foot" .}}{{end}}
 
@@ -109,6 +109,9 @@ var pages = template.Must(template.New("").Funcs(template.FuncMap{"npub": npub, 
 <main class="wrap play"><p class="lead"><a href="/records{{if .Device}}?device={{.Device}}{{end}}">Records</a> › <b>{{.Title}}</b> <span class="muted">{{.When}} · {{.Size}} · {{.Uploader}}{{if .Hold}} · {{.Hold}}{{end}}</span> <a class="btn small" href="{{.Download}}">Download</a> <a class="btn small" href="{{.Player}}" target="_blank" rel="noopener">Full page</a></p>
 <iframe class="player" src="{{.Player}}" title="{{.Title}} in the Record Player" allowfullscreen></iframe>
 </main>{{template "foot" .}}{{end}}
+
+{{define "icon-play"}}<svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M7 4.5v15l12-7.5z" fill="currentColor"/></svg>{{end}}
+{{define "icon-download"}}<svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M12 3v11m0 0-4.5-4.5M12 14l4.5-4.5M4 19.5h16" stroke="currentColor" stroke-width="2.2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>{{end}}
 
 {{define "help"}}<button class="qhelp" type="button" aria-expanded="false" aria-controls="help-{{.}}" aria-label="What this is">?</button>{{end}}
 
@@ -177,7 +180,7 @@ var pages = template.Must(template.New("").Funcs(template.FuncMap{"npub": npub, 
 </table></div>
 
 <h2 class="h2">Record Store {{template "help" "records"}}</h2>
-<p class="helptext" id="help-records" hidden>Where recordings, screenshots and logs are kept: files by their SHA-256 in the directory below, with an index entry and a signed file event for each in the database. The <a href="/records">Records</a> page lists them. The limits are the station's <code>--records-max-file</code>, <code>--records-max-total</code> and <code>--records-max-age</code> flags; past them the oldest files go, and their events stay.</p>
+<p class="helptext" id="help-records" hidden>Where recordings, screenshots and logs are kept: files by their SHA-256 in the directory below, with an index entry and a signed file event for each in the database, and every recording unpacked once beside its zip under <code>unpacked/</code>, so its steps, frames and last picture are read from files rather than the zip; that doubles what a recording takes on disk. The <a href="/records">Records</a> page lists them. The limits are the station's <code>--records-max-file</code>, <code>--records-max-total</code> and <code>--records-max-age</code> flags; past them the oldest files go, and their events stay.</p>
 <div class="tablewrap"><table class="kv">
 <tr><th>Files</th><td>{{.RecordsCount}}, {{.RecordsTotal}}</td></tr>
 <tr><th>Directory</th><td><code>{{.RecordsDir}}</code></td></tr>

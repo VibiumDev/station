@@ -280,6 +280,12 @@ type Blob struct {
 	EventID   string // the file event (kind 1063) the station signed for it
 	Public    bool   // readable without any authorization
 	CreatedAt time.Time
+	// What a recording holds, read once when it is unpacked: its steps,
+	// its frames, how long it ran, and the file of its last frame.
+	Steps    int
+	Frames   int
+	Duration time.Duration
+	Thumb    string
 }
 
 // BlobQuery narrows a listing of blobs; the zero value lists them all,

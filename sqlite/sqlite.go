@@ -125,7 +125,11 @@ CREATE TABLE IF NOT EXISTS blobs (
 	rig_id     TEXT NOT NULL DEFAULT '',
 	event_id   TEXT NOT NULL DEFAULT '',
 	public     INTEGER NOT NULL DEFAULT 0,
-	created_at INTEGER NOT NULL
+	created_at INTEGER NOT NULL,
+	steps      INTEGER NOT NULL DEFAULT 0,
+	frames     INTEGER NOT NULL DEFAULT 0,
+	duration_ms INTEGER NOT NULL DEFAULT 0,
+	thumb      TEXT NOT NULL DEFAULT ''
 );
 CREATE INDEX IF NOT EXISTS blobs_device ON blobs(device_id, created_at);
 CREATE INDEX IF NOT EXISTS blobs_hold ON blobs(hold_id);
@@ -167,6 +171,10 @@ func (d *DB) migrate() error {
 		{"devices", "extras", "TEXT NOT NULL DEFAULT ''"},
 		{"devices", "label", "TEXT NOT NULL DEFAULT ''"},
 		{"devices", "platform", "TEXT NOT NULL DEFAULT ''"},
+		{"blobs", "steps", "INTEGER NOT NULL DEFAULT 0"},
+		{"blobs", "frames", "INTEGER NOT NULL DEFAULT 0"},
+		{"blobs", "duration_ms", "INTEGER NOT NULL DEFAULT 0"},
+		{"blobs", "thumb", "TEXT NOT NULL DEFAULT ''"},
 	} {
 		has, err := d.hasColumn(c.table, c.column)
 		if err != nil {

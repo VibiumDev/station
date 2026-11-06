@@ -148,6 +148,23 @@ type recordView struct {
 	// HasThumb says a picture can be shown: a recording's last frame, or
 	// the image itself.
 	HasThumb bool
+	// Meta is what a recording holds, such as "17 steps · 18 s".
+	Meta string
+}
+
+// recordingMeta words a recording's steps and length.
+func recordingMeta(b station.Blob) string {
+	if b.Steps == 0 && b.Frames == 0 {
+		return ""
+	}
+	parts := []string{}
+	if b.Steps > 0 {
+		parts = append(parts, fmt.Sprintf("%d steps", b.Steps))
+	}
+	if b.Duration > 0 {
+		parts = append(parts, b.Duration.Round(time.Second).String())
+	}
+	return strings.Join(parts, " · ")
 }
 
 // humanAge is a retention age for the pages: empty for none.
@@ -195,7 +212,7 @@ func (s *server) recordsData(r *http.Request, p station.Principal, extra map[str
 	for _, b := range bs {
 		views = append(views, recordView{Blob: b, URL: s.records.URL(b), Play: playURL(b), When: b.CreatedAt.Local().Format("Jan 2 15:04"), Size: humanSize(b.Size),
 			Device: b.DeviceID, Label: labels[b.DeviceID], CanEdit: p.Admin || p.Subject == b.Uploader, CanPlay: viewer.HasPlayer() && (b.Type == "application/zip"),
-			HasThumb: b.Type == "application/zip" || strings.HasPrefix(b.Type, "image/")})
+			HasThumb: b.Type == "application/zip" || strings.HasPrefix(b.Type, "image/"), Meta: recordingMeta(b)})
 	}
 	count, size, _ := s.db.BlobTotal(r.Context())
 	data := map[string]any{
