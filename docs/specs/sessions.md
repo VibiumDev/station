@@ -63,9 +63,16 @@ through a BiDi session, so it is one of the rig's sessions and contains
 one of BiDi's. When the two have to be told apart, the ones described
 here are **chat sessions**, and the low-level ones are **WebDriver BiDi
 sessions**, or BiDi sessions for short. In this document a session with
-no qualifier is a chat session. The API keeps them apart by path: chat
-sessions live under `/v1/sessions`, while `/session`, singular and
-unversioned, stays the BiDi entry point the standard spells out.
+no qualifier is a chat session. The paths use the qualifier, so the
+two never meet in a URL bar: the page is `/chats`, one session is
+`/chats/{id}`, and the API is `/v1/chats`, while `/session`, singular
+and unversioned, stays the BiDi entry point the standard spells out.
+`/sessions` would sit one letter from that endpoint in every link and
+every doc, and a short root such as `/c/` or `/s/` says nothing to
+someone reading a link, which a station with a dozen routes has no
+need to save. The label in the top bar is Sessions all the same; a
+label that differs from its path is ordinary, as GitHub's "Pull
+requests" lives at `/pulls`.
 
 ## How a session goes
 
@@ -160,20 +167,21 @@ account, which is the sandbox runner's milestone to bring.
 ## Pages and API
 
 The top bar reads Devices, Records, Sessions, Settings. The Sessions
-page has the prompt and, under it, the list of past sessions: when,
-who, the device, the prompt, and the verdict where there is one. A
-session page has the transcript, the watching viewer while the session
-is live, and the recording's Play when it is done.
+page, at `/chats`, has the prompt and, under it, the list of past
+sessions: when, who, the device, the prompt, and the verdict where
+there is one. A session page, at `/chats/{id}`, has the transcript,
+the watching viewer while the session is live, and the recording's
+Play when it is done.
 
 The API follows the pages, under the token model R5 built:
 
 | Method and path | What it does |
 | --- | --- |
-| `POST /v1/sessions` | Starts a session: `prompt`, `device`, and `mode` when the caller wants to force check or run. Needs control. Returns the session with its id. |
-| `GET /v1/sessions` | The caller's sessions; every session for an admin. |
-| `GET /v1/sessions/{id}` | One session with its transcript and the recording's SHA-256. |
-| `GET /v1/sessions/{id}/events` | The event stream, as server-sent events, from the start of the session; a finished session replays and closes. |
-| `POST /v1/sessions/{id}/stop` | Ends the session and releases the hold. |
+| `POST /v1/chats` | Starts a session: `prompt`, `device`, and `mode` when the caller wants to force check or run. Needs control. Returns the session with its id. |
+| `GET /v1/chats` | The caller's sessions; every session for an admin. |
+| `GET /v1/chats/{id}` | One session with its transcript and the recording's SHA-256. |
+| `GET /v1/chats/{id}/events` | The event stream, as server-sent events, from the start of the session; a finished session replays and closes. |
+| `POST /v1/chats/{id}/stop` | Ends the session and releases the hold. |
 
 A read-only token sees sessions and their events and starts none. The
 BiDi entry point, `wss /session`, is untouched: an agent that opens a
