@@ -1323,8 +1323,7 @@
   var role = watchOnly ? 'watch' : 'drive';
   var lookAgain = null;
   var holdStatus = $('holdStatus');
-  var recNote = $('recNote');
-  if (recNote && cfg.recorded) recNote.style.display = 'inline-block';
+  var recNote = $('recNote'); // REC while a session is live on a host that records them
   var takeBtn = $('takeBtn'), releaseBtn = $('releaseBtn');
   function holding() { return !station || (!!hold && !released); }
   function driving() { return !station || (holding() && role === 'drive'); }
@@ -1344,6 +1343,7 @@
   function showHold() {
     if (!station) return;
     var watching = hold && observer && role === 'watch';
+    if (recNote) recNote.style.display = cfg.recorded && hold && !released ? 'inline-block' : 'none';
     holdStatus.textContent = watching ? 'watching ' + hold.subject : '';
     holdStatus.title = watching ? 'Watching ' + hold.subject + '’s session' + (watchOnly ? '' : '; press Hold to take the device') : '';
     takeBtn.style.display = role === 'watch' && !watchOnly ? 'flex' : 'none';
