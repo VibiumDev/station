@@ -80,7 +80,8 @@ var pages = template.Must(template.New("").Funcs(template.FuncMap{"npub": npub, 
 </main>{{template "foot" .}}{{end}}
 
 {{define "records"}}{{template "head" (dict "Title" "Records" "Name" .Name "Named" .Named)}}{{template "header" .}}
-<main class="wrap"><p class="lead">{{if .Device}}Recordings of <b>{{if .DeviceLabel}}{{.DeviceLabel}}{{else}}{{.Device}}{{end}}</b> (<a href="/records">all devices</a>).{{else}}Every recording, screenshot and log kept here.{{end}} {{template "help" "records"}}</p>
+<main class="wrap"><p class="lead">{{if .Device}}Recordings of <b>{{if .DeviceLabel}}{{.DeviceLabel}}{{else}}{{.Device}}{{end}}</b> (<a href="/records{{if eq .View "grid"}}?view=grid{{end}}">all devices</a>).{{else}}Every recording, screenshot and log kept here.{{end}} {{template "help" "records"}}</p>
+{{if .Records}}<p class="views"><a href="/records?view=list{{if .Device}}&device={{.Device}}{{end}}"{{if ne .View "grid"}} aria-current="page"{{end}}>List</a><a href="/records?view=grid{{if .Device}}&device={{.Device}}{{end}}"{{if eq .View "grid"}} aria-current="page"{{end}}>Grid</a></p>{{end}}
 <div class="helptext" id="help-records" hidden>
 <p>The Record Store keeps the files a session leaves behind: a Vibium <code>record.zip</code> an agent uploads after a run, a recording the rig made of a hold, screenshots and logs. Each file is named by its SHA-256 and tied to the hold it came from, so a recording is always next to who held the device, when, and what the rig said at the time.</p>
 <p><b>Who can see what.</b> You, as the owner, see everything. An agent's token sees what it uploaded and what was recorded on its own holds. A file marked public can be fetched by anyone with its link, which is how a recording is handed to someone without an account here; everything else needs a token, a sign-in, or a short-lived authorization the station signs.</p>
@@ -88,7 +89,12 @@ var pages = template.Must(template.New("").Funcs(template.FuncMap{"npub": npub, 
 <p><b>Room.</b> {{.Count}} files, {{.Total}}. A file is at most {{.MaxFile}}; the store keeps {{.MaxTotal}} and {{if .MaxAge}}each file {{.MaxAge}}{{else}}files for ever{{end}}, after which the oldest go. What the station recorded about a file, who uploaded it and on which hold, stays after the file itself is gone. The limits are the station's <code>--records-*</code> flags.</p>
 </div>
 {{if not .Records}}<div class="msg">Nothing here yet. An agent uploads a recording with <code>POST /v1/records/upload-auth</code> and a Blossom <code>PUT /upload</code>; see the API reference.</div>{{end}}
-{{if .Records}}<div class="tablewrap"><table><thead><tr><th>When</th><th>Device</th><th>File</th><th>From</th><th>Access</th><th></th></tr></thead><tbody>
+{{if and .Records (eq .View "grid")}}<div class="cards">{{range .Records}}<article class="card rec">
+<a class="thumb" href="{{if .CanPlay}}/records/{{.SHA256}}/play{{else}}{{.URL}}?download{{end}}" aria-label="{{if .Name}}{{.Name}}{{else}}{{slice .SHA256 0 12}}{{end}}">{{if .HasThumb}}<img src="/records/{{.SHA256}}/thumb.jpg" alt="" loading="lazy">{{else}}<span class="nothumb">{{.Type}}</span>{{end}}</a>
+<div class="meta"><b>{{if .Name}}{{.Name}}{{else}}{{slice .SHA256 0 12}}…{{end}}</b><span class="sub">{{.When}} · {{.Size}}{{if .Public}} · public{{end}}</span><span class="sub">{{if .DeviceID}}<a href="/records?view=grid&device={{.DeviceID}}">{{if .Label}}{{.Label}}{{else}}{{.DeviceID}}{{end}}</a> · {{end}}{{.Uploader}}</span>
+<span class="act">{{if .CanPlay}}<a class="btn small" href="/records/{{.SHA256}}/play">Play</a> {{end}}<a class="btn small" href="{{.URL}}?download">Download</a></span></div>
+</article>{{end}}</div>{{end}}
+{{if and .Records (ne .View "grid")}}<div class="tablewrap"><table><thead><tr><th>When</th><th>Device</th><th>File</th><th>From</th><th>Access</th><th></th></tr></thead><tbody>
 {{range .Records}}<tr>
 <td data-l="When">{{.When}}</td>
 <td data-l="Device">{{if .DeviceID}}<a href="/records?device={{.DeviceID}}">{{if .Label}}{{.Label}}{{else}}{{.DeviceID}}{{end}}</a>{{else}}<span class="muted">none</span>{{end}}</td>

@@ -145,6 +145,9 @@ type recordView struct {
 	Label   string
 	CanEdit bool
 	CanPlay bool
+	// HasThumb says a picture can be shown: a recording's last frame, or
+	// the image itself.
+	HasThumb bool
 }
 
 // humanAge is a retention age for the pages: empty for none.
@@ -191,11 +194,12 @@ func (s *server) recordsData(r *http.Request, p station.Principal, extra map[str
 	views := make([]recordView, 0, len(bs))
 	for _, b := range bs {
 		views = append(views, recordView{Blob: b, URL: s.records.URL(b), Play: playURL(b), When: b.CreatedAt.Local().Format("Jan 2 15:04"), Size: humanSize(b.Size),
-			Device: b.DeviceID, Label: labels[b.DeviceID], CanEdit: p.Admin || p.Subject == b.Uploader, CanPlay: viewer.HasPlayer() && (b.Type == "application/zip")})
+			Device: b.DeviceID, Label: labels[b.DeviceID], CanEdit: p.Admin || p.Subject == b.Uploader, CanPlay: viewer.HasPlayer() && (b.Type == "application/zip"),
+			HasThumb: b.Type == "application/zip" || strings.HasPrefix(b.Type, "image/")})
 	}
 	count, size, _ := s.db.BlobTotal(r.Context())
 	data := map[string]any{
-		"Page": "records", "Principal": p, "CSRF": s.auth.csrfToken(r), "Records": views, "Device": device,
+		"Page": "records", "Principal": p, "CSRF": s.auth.csrfToken(r), "Records": views, "Device": device, "View": r.FormValue("view"),
 		"DeviceLabel": labels[device], "Count": count, "Total": humanSize(size),
 		"MaxFile": humanSize(s.records.MaxFile), "MaxTotal": humanSize(s.records.MaxTotal), "MaxAge": humanAge(s.records.MaxAge),
 	}

@@ -197,3 +197,16 @@ main.play { max-width: none; padding-top: 20px; padding-bottom: 24px; }
 .play .lead { max-width: none; font-size: 15px; margin: 0; }
 .play .lead .btn { margin-left: 8px; }
 .play iframe.player { display: block; width: 100%; height: calc(100vh - 170px); min-height: 520px; margin-top: 14px; border: 1px solid var(--line, #8884); border-radius: 8px; background: #000; }
+
+/* Records: the list or the grid, with a picture from each recording. */
+.views { margin: 14px 0 0; font-size: 14px; }
+.views a { margin-right: 14px; color: var(--text-2); text-decoration: none; }
+.views a[aria-current="page"] { color: var(--text); font-weight: 600; text-decoration: underline; text-underline-offset: 4px; }
+.cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 16px; margin-top: 16px; }
+.card.rec { padding: 0; margin: 0; overflow: hidden; display: flex; flex-direction: column; }
+.card.rec .thumb { display: block; aspect-ratio: 3 / 4; background: #000; }
+.card.rec .thumb img { display: block; width: 100%; height: 100%; object-fit: contain; }
+.card.rec .nothumb { display: flex; align-items: center; justify-content: center; height: 100%; color: #999; font-size: 13px; }
+.card.rec .meta { display: flex; flex-direction: column; gap: 4px; padding: 10px 12px 12px; }
+.card.rec .meta b { font-size: 15px; overflow-wrap: anywhere; }
+.card.rec .meta .act { margin-top: 6px; }

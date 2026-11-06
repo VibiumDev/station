@@ -471,7 +471,7 @@ func serve(args []string) int {
 		blobDir = filepath.Join(dir, "blobs")
 	}
 	s.records = &records.Store{Blobs: blob.Disk{Dir: blobDir}, Index: db, Events: db, Holds: db, Devices: db, Signer: records.Key(key),
-		HoldsOf: db.HoldsOf, BaseURL: base, MaxFile: maxFile, MaxTotal: maxTotal, MaxAge: *recordsMaxAge, Audit: db}
+		HoldsOf: db.HoldsOf, BaseURL: base, ThumbDir: filepath.Join(blobDir, "thumbs"), MaxFile: maxFile, MaxTotal: maxTotal, MaxAge: *recordsMaxAge, Audit: db}
 	s.recordsDir = blobDir
 	if mode == "lan" && !*noMDNS {
 		_, port, _ := net.SplitHostPort(ln.Addr().String())

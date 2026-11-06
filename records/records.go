@@ -68,6 +68,8 @@ type Store struct {
 	HoldsOf func(ctx context.Context, subject string, since time.Time) ([]station.Hold, error)
 	// BaseURL is where blobs are fetched: BaseURL/<sha256>.<ext>.
 	BaseURL string
+	// ThumbDir keeps the thumbnails taken out of recordings; empty keeps none.
+	ThumbDir string
 	// Limits; zero means none.
 	MaxFile  int64
 	MaxTotal int64
@@ -642,6 +644,7 @@ func (s *Store) remove(ctx context.Context, b station.Blob, who, action string) 
 	if err := s.Index.DeleteBlob(ctx, b.SHA256); err != nil {
 		return err
 	}
+	s.removeThumb(b.SHA256)
 	s.audit(ctx, station.AuditEntry{Subject: who, Action: action, DeviceID: b.DeviceID, HoldID: b.HoldID,
 		Detail: fmt.Sprintf("%s %s (%d bytes)", b.Name, b.SHA256[:12], b.Size)})
 	return nil
