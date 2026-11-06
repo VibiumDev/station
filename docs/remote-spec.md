@@ -429,7 +429,7 @@ Hosted services run the same probe against their own stations.
 
 ## Milestones and acceptance criteria
 
-Roadie's milestones are R0–R6. Each milestone runs in its own Claude Code session that starts from this spec and `docs/progress.md`, which the agent updates at every checkpoint. If time is short, R4 is the milestone everything else waits on.
+Roadie's milestones are R0–R6. Each milestone runs in its own Claude Code session that starts from this spec and `docs/progress.md`, which the agent updates at every checkpoint (a local file, kept out of git). If time is short, R4 is the milestone everything else waits on.
 
 ### First release
 
@@ -511,7 +511,7 @@ Read station/docs/remote-spec.md in full before writing code. It is the source o
 
 ## How to work
 
-- Work R0 to R6 in order; each has a gate. Plan the steps inside a milestone yourself. At every checkpoint update station/docs/progress.md (done, decisions, numbers, known issues) so a fresh session can continue. At the end of each milestone, stop, report what changed, how you tested it, measured numbers and any deviation from the spec, and wait for approval.
+- Work R0 to R6 in order; each has a gate. Plan the steps inside a milestone yourself. At every checkpoint update station/docs/progress.md (done, decisions, numbers, known issues; a local file, kept out of git) so a fresh session can continue. At the end of each milestone, stop, report what changed, how you tested it, measured numbers and any deviation from the spec, and wait for approval.
 - Keep existing behaviour and tests passing. Add tests for token checks (valid, expired, wrong device, wrong signer, older seq, missing scope, endpoint allowlist, replayed event id, grant outside the rig policy, station not in the policy), enrollment (wrong fingerprint, reused or expired code), the tunnel protocol, TURN lockdown, HID validation, and EventStore filter queries. govulncheck in CI.
 - Prefer the standard library and small dependencies; no cgo; never GStreamer.
 - Never add a remote endpoint that runs commands, reads or writes files, or changes Pi configuration for non-admin tokens.

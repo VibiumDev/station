@@ -25,8 +25,7 @@ These parts work:
 - the REST and BiDi relay for agents, with `/session` as the entry point
 - `station-probe`, which checks a station from outside
 
-Packaging and hardening (R6) are next.
-Progress and numbers are in [docs/progress.md](docs/progress.md).
+Packaging and hardening (R6) are under way.
 
 ## Run it
 

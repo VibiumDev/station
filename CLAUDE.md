@@ -13,6 +13,7 @@ device-neutral from the start.
   Remote and Station). Read it in full before writing code.
 - `docs/progress.md` holds done work, decisions, measured numbers and known
   issues. Update it at every checkpoint so a fresh session can continue.
+  It is a local file, ignored by git and never pushed.
 - Station's event kinds are listed in one file, `docs/kinds.md`.
 - The two repos move in lock step. A `go.work` in the parent directory
   (`~/Projects`) ties them together for development and is never committed.
