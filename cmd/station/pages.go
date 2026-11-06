@@ -29,14 +29,14 @@ func platformName(p string) string {
 // The station's pages, in the look of Vibium's web style guide: the
 // shared stylesheet and theme switch come from the viewer package, so a
 // Roadie's pages are the same. Signed in, the top bar is the station's
-// own name; the brand is on the sign-in page and in every foot.
+// own name; the brand is on the sign-in page.
 var pages = template.Must(template.New("").Funcs(template.FuncMap{"npub": npub, "dict": dict, "platform": platformName}).Parse(`
 {{define "head"}}<!DOCTYPE html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>{{.Title}} · {{if .Named}}{{.Name}}{{else}}Vibium Station{{end}}</title><link rel="icon" type="image/png" href="/favicon.png"><link rel="apple-touch-icon" href="/apple-touch-icon.png">
 <link rel="stylesheet" href="/viewer/pages.css"><script src="/viewer/pages.js"></script></head><body>{{end}}
 
-{{define "theme"}}<button id="themeBtn" class="iconbtn" type="button" aria-label="Switch theme"></button>{{end}}
+{{define "theme"}}<div class="theme" role="group" aria-label="Theme"><button type="button" data-pick="light" aria-label="Light" title="Light"></button><button type="button" data-pick="dark" aria-label="Dark" title="Dark"></button><button type="button" data-pick="system" aria-label="System default" title="System default"></button></div>{{end}}
 
 {{define "header"}}<header class="top"><div class="wrap">
 <a class="brand" href="/"><img class="logo" src="/viewer/vibium-logo.png" alt="Vibium"><span class="wordmark">{{if .Named}}{{.Name}}{{else}}Station{{end}}</span></a>
@@ -45,9 +45,7 @@ var pages = template.Must(template.New("").Funcs(template.FuncMap{"npub": npub, 
 <form class="inline" method="post" action="/logout"><input type="hidden" name="csrf" value="{{.CSRF}}"><button class="link" type="submit">Sign out</button></form></div>
 {{template "theme"}}<span class="break"></span></div></header>{{end}}
 
-{{define "foot"}}<footer class="foot"><div class="wrap"><span class="wordmark">Vibium</span>
-<span class="line">{{.Host}}</span>
-<span><a href="https://vibium.dev">Open source ↗</a></span></div></footer></body></html>{{end}}
+{{define "foot"}}</body></html>{{end}}
 
 {{define "kicker"}}{{if .Named}}<p class="kicker">{{.Name}}</p>{{end}}{{end}}
 

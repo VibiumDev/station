@@ -71,8 +71,8 @@ pre { background: var(--surface); border: 1px solid var(--line-card); border-rad
 .top .pages a[aria-current="page"] { color: var(--text); font-weight: 600; }
 .top .account { display: flex; gap: 16px; align-items: center; margin-left: auto; font-size: 15px; }
 .top .who { color: var(--text-muted); font-family: var(--mono); font-size: 13px; }
-.top .iconbtn { margin-left: auto; }
-.top .account ~ .iconbtn { margin-left: 16px; }
+.top .theme { margin-left: auto; }
+.top .account ~ .theme { margin-left: 16px; }
 .top .break { display: none; flex-basis: 100%; height: 0; }
 
 main { flex: 1; }
@@ -129,6 +129,14 @@ button.link { border: none; background: none; color: var(--link); padding: 0; mi
 button.link:hover { color: var(--link-hover); }
 .iconbtn { width: 36px; height: 36px; min-height: 36px; padding: 0; border-radius: 8px; color: var(--text-2); }
 .iconbtn svg { width: 18px; height: 18px; }
+/* The theme switch: Light, Dark, or the system's choice, as the viewer's
+   menu has it. */
+.theme { display: inline-flex; border: 1px solid var(--line-strong); border-radius: 8px; overflow: hidden; }
+.theme button { width: 36px; height: 34px; min-height: 34px; padding: 0; border: 0; border-radius: 0; background: transparent; color: var(--text-muted); }
+.theme button svg { width: 16px; height: 16px; display: block; }
+.theme button + button { border-left: 1px solid var(--line-strong); }
+.theme button:hover { color: var(--text); }
+.theme button[aria-pressed="true"] { background: var(--surface-2); color: var(--text); }
 label { font-size: 14px; font-weight: 600; color: var(--text); }
 input[type=text], input[type=password] { min-height: 44px; padding: 10px 12px; border-radius: 10px; border: 1px solid var(--line-strong); background: var(--bg); color: var(--text); font: 16px var(--sans); }
 input[type=text]:focus, input[type=password]:focus { outline: 2px solid var(--accent); outline-offset: 1px; border-color: var(--accent); }
@@ -166,12 +174,6 @@ input[type=radio], input[type=checkbox] { accent-color: var(--accent); width: 16
 .login input[type=submit] { width: 100%; }
 
 /* The foot: the wordmark, a mono line, a link. */
-.foot { border-top: 1px solid var(--line); margin-top: 40px; }
-.foot .wrap { display: flex; flex-wrap: wrap; gap: 12px 24px; justify-content: space-between; align-items: center; padding: 24px; font-size: 14px; color: var(--text-muted); }
-.foot .wordmark { font: 700 18px/1 var(--head); color: var(--text); }
-.foot .line { font: 12.5px var(--mono); }
-.foot a { color: var(--text-3); text-decoration: none; }
-.foot a:hover { color: var(--text); }
 
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
 
@@ -184,7 +186,7 @@ input[type=radio], input[type=checkbox] { accent-color: var(--accent); width: 16
      at the left and the account at the right. */
   .top .wrap { padding: 14px 16px; gap: 10px 16px; }
   .top .brand { order: 1; }
-  .top .iconbtn, .top .account ~ .iconbtn { order: 2; margin-left: auto; }
+  .top .theme, .top .account ~ .theme { order: 2; margin-left: auto; }
   .top .break { order: 3; display: block; }
   .top .pages { order: 4; margin-left: 0; gap: 6px 16px; }
   .top .account { order: 5; gap: 12px; }
@@ -199,7 +201,6 @@ input[type=radio], input[type=checkbox] { accent-color: var(--accent); width: 16
   .tablewrap table:not(.kv) td.act { text-align: left; padding-top: 8px; }
   .tablewrap table:not(.kv) td:empty { display: none; }
   .kv th { width: 110px; padding-right: 8px; }
-  .foot .wrap { padding: 20px 16px; }
 }
 @media (max-width: 480px) { th, td { padding: 12px 14px; } .tablewrap table:not(.kv) td { padding: 4px 14px 4px 108px; } .tablewrap table:not(.kv) td[data-l]::before { left: 14px; } }
 
