@@ -217,3 +217,18 @@ main.play { max-width: none; padding-top: 20px; padding-bottom: 24px; }
 .card.rec .meta .act { margin-top: 6px; }
 .btn.icon, button.icon { display: inline-flex; align-items: center; justify-content: center; padding: 6px 9px; vertical-align: middle; }
 .btn.icon svg, button.icon svg { display: block; }
+/* A card narrower than its text drops details rather than wrapping
+   them: first the second line and the step count, then the name. */
+.card.rec { container-type: inline-size; }
+@container (max-width: 190px) {
+  .card.rec .meta .sub:nth-of-type(2) { display: none; }
+  .card.rec .meta b { font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .card.rec .meta .sub { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+}
+@container (max-width: 130px) {
+  .card.rec .meta .sub { display: none; }
+  .card.rec .meta b { display: none; }
+  .card.rec .meta { padding: 8px; }
+  .card.rec .meta .act { margin-top: 0; display: flex; justify-content: center; gap: 6px; }
+  .card.rec .meta .act .btn.icon { padding: 5px 7px; min-height: 32px; }
+}
