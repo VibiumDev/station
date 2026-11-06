@@ -1,6 +1,6 @@
 // Package sqlite is Station's storage: one SQLite file holding the event
-// store, rigs and devices, holds, API tokens, enrollment codes and the
-// audit log. Pure Go through modernc.org/sqlite.
+// store, rigs and devices, holds, the Record Store's index, API tokens,
+// enrollment codes and the audit log. Pure Go through modernc.org/sqlite.
 package sqlite
 
 import (
@@ -113,6 +113,23 @@ CREATE TABLE IF NOT EXISTS enroll_codes (
 	expires_at INTEGER NOT NULL,
 	used_at    INTEGER NOT NULL DEFAULT 0
 );
+CREATE TABLE IF NOT EXISTS blobs (
+	sha256     TEXT PRIMARY KEY,
+	size       INTEGER NOT NULL,
+	type       TEXT NOT NULL,
+	name       TEXT NOT NULL DEFAULT '',
+	uploader   TEXT NOT NULL,
+	pubkey     TEXT NOT NULL,
+	hold_id    TEXT NOT NULL DEFAULT '',
+	device_id  TEXT NOT NULL DEFAULT '',
+	rig_id     TEXT NOT NULL DEFAULT '',
+	event_id   TEXT NOT NULL DEFAULT '',
+	public     INTEGER NOT NULL DEFAULT 0,
+	created_at INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS blobs_device ON blobs(device_id, created_at);
+CREATE INDEX IF NOT EXISTS blobs_hold ON blobs(hold_id);
+CREATE INDEX IF NOT EXISTS blobs_age ON blobs(created_at);
 CREATE TABLE IF NOT EXISTS audit (
 	id        INTEGER PRIMARY KEY AUTOINCREMENT,
 	at        INTEGER NOT NULL,

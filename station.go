@@ -263,3 +263,43 @@ func NewID(prefix string) string {
 	}
 	return prefix + "_" + hex.EncodeToString(b[:])
 }
+
+// Blob is a file in the Record Store, named by its SHA-256: a session
+// recording, a screenshot, a log. The bytes live in a blob store; this
+// is what the station knows about them.
+type Blob struct {
+	SHA256    string
+	Size      int64
+	Type      string // the media type
+	Name      string // a file name hint, such as record.zip
+	Uploader  string // "owner", "token:<name>", a login, or "rig:<rig id>"
+	PubKey    string // hex: the key that signed the upload
+	HoldID    string
+	DeviceID  string
+	RigID     string
+	EventID   string // the file event (kind 1063) the station signed for it
+	Public    bool   // readable without any authorization
+	CreatedAt time.Time
+}
+
+// BlobQuery narrows a listing of blobs; the zero value lists them all,
+// newest first.
+type BlobQuery struct {
+	DeviceID    string
+	HoldID      string
+	PubKey      string
+	Before      time.Time // only blobs stored before this time
+	OldestFirst bool
+	Limit       int
+}
+
+// BlobIndex is the Record Store's index of what the blob store holds.
+type BlobIndex interface {
+	PutBlob(ctx context.Context, b Blob) error
+	Blob(ctx context.Context, sha256 string) (Blob, error)
+	Blobs(ctx context.Context, q BlobQuery) ([]Blob, error)
+	DeleteBlob(ctx context.Context, sha256 string) error
+	SetBlobPublic(ctx context.Context, sha256 string, public bool) error
+	// BlobTotal is how many blobs the index holds and their size in bytes.
+	BlobTotal(ctx context.Context) (count int, size int64, err error)
+}

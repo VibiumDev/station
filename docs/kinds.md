@@ -10,16 +10,28 @@ treat each one correctly if the store ever backs one.
 | Kind | Range | Event | Signed by | Stored |
 |---|---|---|---|---|
 | 0 | metadata | Station profile: `{"name":...}` | Station | Replaced |
+| 1063 | regular | File metadata (NIP-94): a blob in the Record Store | Station | Kept |
 | 7700 | regular | Hold grant (the session token) | Station | Kept |
 | 7701 | regular | Hold revocation | Station | Kept |
 | 7702 | regular | Enrollment request | Rig | Kept |
 | 7703 | regular | Operator attestation ("this rig is mine") | Operator | Kept |
 | 17700 | replaceable | Rig announcement: name, devices | Rig | Newest per rig |
 | 27700 | ephemeral | Tunnel hello: the signed challenge | Rig | Never |
+| 24242 | ephemeral | Blossom authorization (BUD-01): upload, get, list or delete | Station, on an agent's behalf, or Rig | Never |
 | 37700 | addressable, `d` = device id | Device announcement: kind, capabilities, device key | Rig | Newest per device |
 
 Every event names its parties in `p` tags: the station, the rig and, when
 the device has a key, the device. Station's own tags are single words.
+
+## File metadata (1063)
+
+The station's index entry for every file in the Record Store, signed
+with the station key when an upload completes and kept after retention
+removes the bytes. Tags `x` (the SHA-256), `size`, `m` (the media type),
+`url` (where the file is fetched) and `sub` (the uploader: `owner`,
+`token:<name>`, a login, or `rig:<rig id>`), plus `name`, `hold`,
+`dev`, `rig` and `p` (the rig's key) when they are known. `content` is
+the file name.
 
 ## Hold grant (7700)
 
@@ -66,6 +78,17 @@ and sends as key commands, so Station's code never names a phone.
 The rig's answer to the station's challenge: tags `p` (station) and
 `challenge` (the nonce the station sent). The hello is ephemeral: it is
 checked and never stored.
+
+## Blossom authorization (24242)
+
+What an upload, a fetch, a listing or a deletion presents in
+`Authorization: Nostr <base64 event>`. Tags `t` (`upload`, `get`, `list`
+or `delete`), `x` (the SHA-256 it is for; a listing has none) and
+`expiration` (NIP-40). The station signs one on an agent's behalf at
+`POST /v1/records/upload-auth`, adding `size`, `sub`, `hold`, `dev`,
+`rig`, `m`, `name` and a `nonce`, so the upload needs no lookup, and a
+rig signs its own, naming its device in `dev` and the hold in `hold`.
+Checked, and never stored.
 
 ## Device announcement (37700)
 

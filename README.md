@@ -24,8 +24,11 @@ These parts work:
 - the MJPEG fallback through the station
 - the REST and BiDi relay for agents, with `/session` as the entry point
 - `station-probe`, which checks a station from outside
+- the Record Store (R7, under way): recordings and screenshots as
+  Blossom blobs, uploaded with authorizations the station signs for
+  agents or a rig signs itself, listed per device and hold
 
-Packaging and hardening (R6) are under way.
+Packaging and hardening (R6) are under review.
 
 ## Run it
 
@@ -128,6 +131,10 @@ events do today, and what they leave open.
 | `--public-url` | derived | How rigs and browsers reach the station; the tunnel URL follows |
 | `--name` | `station` | The station's name, shown on its pages and told to rigs when they enroll (saved; the Settings page changes it too) |
 | `--no-mdns` | off | Do not advertise on the LAN |
+| `--records-dir` | `blobs/` in the data directory | Where the Record Store keeps its files |
+| `--records-max-file` | `256M` | The largest file the Record Store takes |
+| `--records-max-total` | `2G` | How much it keeps before the oldest files go; `0` for no limit |
+| `--records-max-age` | `720h` | How long it keeps a file; `0` for ever |
 | `--turn` | `auto` | Run the TURN server: `on`, `off`, or `auto` (on in public mode) |
 | `--turn-listen` | `:3478` | TURN's UDP address; `fly-global-services:3478` on Fly.io |
 | `--turn-public-ip` | the `--public` host's address | The public address TURN and its relays are reached at |
@@ -153,6 +160,8 @@ station starts, for hosts whose secrets are environment variables.
 | `turn` | The embedded TURN server (pion/turn): per-hold credentials, no relaying to private, loopback, link-local, shared or configured ranges |
 | `sqlite` | The one-file store, pure Go |
 | `sdnotify` | Tells systemd the service is ready, alive (the watchdog) or stopping; a no-op outside systemd |
+| `blob` | Files by their SHA-256 on disk, hashed as they are written |
+| `records` | The Record Store: Blossom's upload, fetch, list and delete, the authorizations the station signs on an agent's behalf, the file event per blob, and retention |
 | `viewer` | The shell: the one viewer page a station and a Roadie both serve (Roadie's toolbar, settings panel and on-screen keyboard, the MJPEG reader, sound and microphone, input in picture space, WebRTC), told its endpoints by a config and extended by a rig's own extras module |
 | `cmd/station` | The single-player binary |
 | `cmd/station-probe` | A headless check of any station: token, hold, WebRTC through TURN only, a tap and the screenshot it changes |

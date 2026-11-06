@@ -40,7 +40,7 @@ var pages = template.Must(template.New("").Funcs(template.FuncMap{"npub": npub, 
 
 {{define "header"}}<header class="top"><div class="wrap">
 <a class="brand" href="/"><span class="wordmark">{{if .Named}}{{.Name}}{{else}}Station{{end}}</span></a>
-<nav class="pages"><a href="/"{{if eq (printf "%v" .Page) "index"}} aria-current="page"{{end}}>Devices</a>{{if .Principal.Admin}}<a href="/settings"{{if eq (printf "%v" .Page) "settings"}} aria-current="page"{{end}}>Settings</a>{{end}}</nav>
+<nav class="pages"><a href="/"{{if eq (printf "%v" .Page) "index"}} aria-current="page"{{end}}>Devices</a><a href="/records"{{if eq (printf "%v" .Page) "records"}} aria-current="page"{{end}}>Records</a>{{if .Principal.Admin}}<a href="/settings"{{if eq (printf "%v" .Page) "settings"}} aria-current="page"{{end}}>Settings</a>{{end}}</nav>
 <div class="account"><span class="who">{{.Principal.Subject}}</span>
 <form class="inline" method="post" action="/logout"><input type="hidden" name="csrf" value="{{.CSRF}}"><button class="link" type="submit">Sign out</button></form></div>
 {{template "theme"}}<span class="break"></span></div></header>{{end}}
@@ -75,7 +75,27 @@ var pages = template.Must(template.New("").Funcs(template.FuncMap{"npub": npub, 
 <td data-l="Device">{{if .ID}}<b>{{if .Label}}{{.Label}}{{else}}{{.Name}}{{end}}</b><span class="sub">{{.Kind}}{{if .Platform}} · {{platform .Platform}}{{end}}{{if .Label}} · {{.Name}}{{end}}</span>{{else}}<span class="muted">no devices announced</span>{{end}}</td>
 <td data-l="Rig"><b>{{.Rig.Name}}</b><span class="sub">{{.Rig.ID}}</span></td>
 <td data-l="Status">{{if .Online}}<span class="dot on"></span>online{{else}}<span class="dot"></span><span class="muted">offline</span>{{end}}<span class="sub">{{if .Hold}}held by {{.Hold.Subject}}{{else}}available{{end}}{{if .Waiting}} · {{.Waiting}} waiting{{end}}</span></td>
-<td class="act">{{if .ID}}<a class="btn small" href="/devices/{{.ID}}/view">Open</a>{{end}}</td>
+<td class="act">{{if .ID}}<a class="btn small" href="/devices/{{.ID}}/view">Open</a> <a class="btn small" href="/records?device={{.ID}}">Records</a>{{end}}</td>
+</tr>{{end}}</tbody></table></div>{{end}}
+</main>{{template "foot" .}}{{end}}
+
+{{define "records"}}{{template "head" (dict "Title" "Records" "Name" .Name "Named" .Named)}}{{template "header" .}}
+<main class="wrap"><p class="lead">{{if .Device}}Recordings of <b>{{if .DeviceLabel}}{{.DeviceLabel}}{{else}}{{.Device}}{{end}}</b> (<a href="/records">all devices</a>).{{else}}Every recording, screenshot and log kept here.{{end}} {{template "help" "records"}}</p>
+<div class="helptext" id="help-records" hidden>
+<p>The Record Store keeps the files a session leaves behind: a Vibium <code>record.zip</code> an agent uploads after a run, a recording the rig made of a hold, screenshots and logs. Each file is named by its SHA-256 and tied to the hold it came from, so a recording is always next to who held the device, when, and what the rig said at the time.</p>
+<p><b>Who can see what.</b> You, as the owner, see everything. An agent's token sees what it uploaded and what was recorded on its own holds. A file marked public can be fetched by anyone with its link, which is how a recording is handed to someone without an account here; everything else needs a token, a sign-in, or a short-lived authorization the station signs.</p>
+<p><b>Watching a recording.</b> Download the file and drop it on the <a href="https://player.vibium.dev">Vibium Record Player</a>, which plays a Vibium recording step by step.</p>
+<p><b>Room.</b> {{.Count}} files, {{.Total}}. A file is at most {{.MaxFile}}; the store keeps {{.MaxTotal}} and {{if .MaxAge}}each file {{.MaxAge}}{{else}}files for ever{{end}}, after which the oldest go. What the station recorded about a file, who uploaded it and on which hold, stays after the file itself is gone. The limits are the station's <code>--records-*</code> flags.</p>
+</div>
+{{if not .Records}}<div class="msg">Nothing here yet. An agent uploads a recording with <code>POST /v1/records/upload-auth</code> and a Blossom <code>PUT /upload</code>; see the API reference.</div>{{end}}
+{{if .Records}}<div class="tablewrap"><table><thead><tr><th>When</th><th>Device</th><th>File</th><th>From</th><th>Access</th><th></th></tr></thead><tbody>
+{{range .Records}}<tr>
+<td data-l="When">{{.When}}</td>
+<td data-l="Device">{{if .DeviceID}}<a href="/records?device={{.DeviceID}}">{{if .Label}}{{.Label}}{{else}}{{.DeviceID}}{{end}}</a>{{else}}<span class="muted">none</span>{{end}}</td>
+<td data-l="File"><b>{{if .Name}}{{.Name}}{{else}}{{slice .SHA256 0 12}}…{{end}}</b><span class="sub">{{.Size}} · {{.Type}}</span></td>
+<td data-l="From">{{.Uploader}}{{if .HoldID}}<span class="sub">{{.HoldID}}</span>{{end}}</td>
+<td data-l="Access">{{if .Public}}public{{else}}private{{end}}{{if .CanEdit}} <form class="inline" method="post" action="/records/public"><input type="hidden" name="csrf" value="{{$.CSRF}}"><input type="hidden" name="sha256" value="{{.SHA256}}"><input type="hidden" name="device" value="{{$.Device}}"><input type="hidden" name="public" value="{{if .Public}}0{{else}}1{{end}}"><button class="link" type="submit">{{if .Public}}make private{{else}}make public{{end}}</button></form>{{end}}</td>
+<td class="act"><a class="btn small" href="{{.URL}}?download">Download</a>{{if .CanEdit}} <form class="inline" method="post" action="/records/delete"><input type="hidden" name="csrf" value="{{$.CSRF}}"><input type="hidden" name="sha256" value="{{.SHA256}}"><input type="hidden" name="device" value="{{$.Device}}"><button class="small" type="submit">Delete</button></form>{{end}}</td>
 </tr>{{end}}</tbody></table></div>{{end}}
 </main>{{template "foot" .}}{{end}}
 
@@ -143,6 +163,14 @@ var pages = template.Must(template.New("").Funcs(template.FuncMap{"npub": npub, 
 <tr><th>Station key</th><td><code>{{.Npub}}</code> <span class="muted">fingerprint {{.Fingerprint}}</span></td></tr>
 <tr><th>Tailnet identities</th><td>{{if .Allow}}{{range .Allow}}{{.}} {{end}}{{else}}<span class="muted">none (--allow)</span>{{end}}</td></tr>
 <tr><th>TURN</th><td>{{if .TURN}}{{.TURN}}{{else}}<span class="muted">off (--turn on)</span>{{end}}</td></tr>
+</table></div>
+
+<h2 class="h2">Record Store {{template "help" "records"}}</h2>
+<p class="helptext" id="help-records" hidden>Where recordings, screenshots and logs are kept: files by their SHA-256 in the directory below, with an index entry and a signed file event for each in the database. The <a href="/records">Records</a> page lists them. The limits are the station's <code>--records-max-file</code>, <code>--records-max-total</code> and <code>--records-max-age</code> flags; past them the oldest files go, and their events stay.</p>
+<div class="tablewrap"><table class="kv">
+<tr><th>Files</th><td>{{.RecordsCount}}, {{.RecordsTotal}}</td></tr>
+<tr><th>Directory</th><td><code>{{.RecordsDir}}</code></td></tr>
+<tr><th>Limits</th><td>{{.RecordsMaxFile}} a file, {{.RecordsMaxTotal}} in all, {{if .RecordsMaxAge}}{{.RecordsMaxAge}} each{{else}}no age limit{{end}}</td></tr>
 </table></div>
 </main>{{template "foot" .}}{{end}}
 `))

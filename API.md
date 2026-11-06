@@ -152,6 +152,89 @@ clients that were handed it. See
 with `-bidi-direct ws://<rig>/session` it runs the same sequence straight
 at the rig as well, comparing the shape of every reply.
 
+## The Record Store
+
+Recordings, screenshots and logs live in the Record Store as
+[Blossom](https://github.com/hzrd149/blossom) blobs: every file is named
+by its SHA-256, uploaded with a signed authorization, and tied to the hold
+it came from. The station signs that authorization on an agent's behalf,
+so an agent keeps its API token and never holds a key while the store
+still sees an ordinary Blossom upload, and a rig signs its own uploads
+with its rig key. For every file the station signs a file event (kind
+1063, see [docs/kinds.md](docs/kinds.md)) naming the hash, the hold, the
+device and the uploader, and that event stays in the event store after
+retention removes the bytes.
+
+### Uploading
+
+An agent with a `record.zip` from a run hashes it, asks for an
+authorization, and sends the file with it:
+
+```bash
+SHA=$(sha256sum record.zip | cut -c1-64); SIZE=$(stat -c %s record.zip)
+curl -s -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
+  -d "{\"sha256\":\"$SHA\",\"size\":$SIZE,\"type\":\"application/zip\",\"name\":\"record.zip\"}" \
+  https://station.example/v1/records/upload-auth
+# {"authorization":"Nostr eyJ…","upload":"https://station.example/upload","expires":"…"}
+curl -s -X PUT -H "Authorization: Nostr eyJ…" -H 'Content-Type: application/zip' \
+  --data-binary @record.zip https://station.example/upload
+```
+
+`POST /v1/records/upload-auth` takes `sha256` and `size`, and optionally
+`type`, `name` and `hold`; the token must be one that can control
+devices. The hold is the one named, which must be the caller's own.
+Without one the station takes the caller's current hold, or the newest
+of the last day when none is current, and refuses when the caller holds
+several devices at once; the owner may upload with no hold at all. The
+answer carries a kind 24242 event signed by the station key, with
+`t=upload`, `x=<sha256>`, the size, a five-minute expiration and the
+station's own tags (`sub`, `hold`, `dev`, `rig`), ready to send as the
+`Authorization` header. A file over `--records-max-file`, or one that
+would take the store past `--records-max-total`, is refused here with
+413 or 507.
+
+`PUT /upload` is Blossom's upload (BUD-02): the body is the file,
+`Content-Length` its size and `Content-Type` its media type. The bytes
+are hashed as they arrive and refused with 400 when they do not match
+`x`. The answer is the blob descriptor: `url`, `sha256`, `size`, `type`
+and `uploaded`, plus `name`, `uploader`, `hold`, `device`, `public` and
+`event`, the id of the file event. The same bytes uploaded again return
+the first upload's descriptor. A rig uploads with an authorization it
+signs itself, naming its device in a `dev` tag and the hold in a `hold`
+tag, and the station checks that both are the rig's own.
+
+### Fetching
+
+`GET /<sha256>[.ext]`, and `HEAD`, is Blossom's fetch (BUD-01). A public
+file needs nothing. Any other needs the owner's session, a token that
+uploaded it or held the device at the time, or an `Authorization: Nostr`
+event with `t=get` and `x=<sha256>` signed by the station or by the rig
+that uploaded it. `POST /v1/records/{sha256}/download-auth` gives such
+an event to a caller who may read the file, for handing to something
+without a station credential of its own; it lasts five minutes and, as a
+bearer, travels in a header and never in a URL. `?download` adds a
+`Content-Disposition` with the file's name.
+
+`GET /v1/records` lists what the caller may read, newest first, narrowed
+by `?device=<rig>/<name>` or `?hold=<id>`, and
+`GET /v1/devices/{rig}/{name}/recordings` is the same for one device.
+`GET /list/<pubkey hex>` is Blossom's listing of what a key uploaded, for
+the owner or for a `t=list` event signed by that key.
+
+`DELETE /<sha256>` removes the bytes and the index entry, while the file
+event stays, for the owner, the uploader, or a `t=delete` event signed
+by the station or the uploading rig. The Records page does the same, and
+marks a file public or private again.
+
+### Retention
+
+`--records-max-age` (30 days) and `--records-max-total` (2 GB) bound the
+store: past either, the oldest files go, once at start and then every
+hour. `--records-max-file` (256 MB) caps a single upload, and
+`--records-dir` moves the files, which otherwise live in `blobs/` in the
+data directory. The file events remain, so what was recorded, by whom
+and on which hold stays on record after the bytes are gone.
+
 ## station-probe
 
 `station-probe` is the headless check the spec asks for, built from
@@ -177,9 +260,10 @@ relay-only fails by design, since TURN refuses private peers.
 | Page | What the owner does |
 |---|---|
 | `/login` | Sign in with the password; in tailnet mode an allowed identity needs none |
-| `/` | The devices: rig, kind, online, who controls it, Open |
+| `/` | The devices: rig, kind, online, who controls it, Open, Records |
 | `/devices/{rig}/{name}/view` | The viewer: Roadie's shell with the WebRTC picture, sound, touch and keyboard, the mic, the settings panel, the on-screen keyboard, stats, the device's own buttons and panels from its extras, and Hold and Release. One link for driving and watching: a free device is taken, a held one is watched, and Hold takes it; Release ends the hold and returns to the device list. `?watch=1` watches only; on a touchscreen two fingers moving together turn the wheel and a pinch becomes Apple Maps' one-finger zoom on a device whose pointer stands in for touch (see Roadie's `/view`); `?minimal=1`, `?input=`, `?transport=`, `?ice=relay`, `?toolbar=`, `?align=`, `?zoom=` (a percentage, or `fit` for the room the picture has, the default on a phone or tablet) and `?stats=1` as on a Roadie |
-| `/settings` | Enrollment codes, rigs, API tokens, the password, the network |
+| `/records` | The Record Store: every recording, screenshot and log the caller may read, newest first, or one device's with `?device=`; Download, make a file public or private, Delete |
+| `/settings` | Enrollment codes, rigs, API tokens, the password, the network, the Record Store's room and limits |
 
 The viewer's files are at `/viewer/shell.js`, `/viewer/shell.css`,
 `/viewer/webrtc.js` and the audio worklets; a Roadie serves the same

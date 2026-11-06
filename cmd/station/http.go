@@ -19,6 +19,7 @@ import (
 	"github.com/VibiumDev/station"
 	"github.com/VibiumDev/station/enroll"
 	"github.com/VibiumDev/station/hold"
+	"github.com/VibiumDev/station/records"
 	"github.com/VibiumDev/station/relay"
 	"github.com/VibiumDev/station/signal"
 	"github.com/VibiumDev/station/sqlite"
@@ -30,21 +31,23 @@ import (
 
 // server is the single-player station's HTTP side.
 type server struct {
-	cfg       *Config
-	dir       string
-	db        *sqlite.DB
-	key       nostr.SecretKey
-	auth      *auth
-	holds     *hold.Manager
-	tunnel    *tunnel.Server
-	enroll    *enroll.Handler
-	signal    *signal.Handler
-	relay     *relay.Relay
-	turn      *turn.Server // nil when off
-	turnInfo  string
-	publicURL string
-	mode      string
-	mdns      bool
+	cfg        *Config
+	dir        string
+	db         *sqlite.DB
+	key        nostr.SecretKey
+	auth       *auth
+	holds      *hold.Manager
+	tunnel     *tunnel.Server
+	enroll     *enroll.Handler
+	signal     *signal.Handler
+	relay      *relay.Relay
+	turn       *turn.Server // nil when off
+	records    *records.Store
+	recordsDir string
+	turnInfo   string
+	publicURL  string
+	mode       string
+	mdns       bool
 	// The name may change from the Settings page while the station runs.
 	nameMu   sync.RWMutex
 	mdnsStop func() // the LAN advertisement, to redo under a new name
@@ -137,6 +140,9 @@ func (s *server) handler() http.Handler {
 	// Pages.
 	mux.Handle("GET /{$}", s.page(station.ActionView, s.indexPage))
 	mux.Handle("GET /devices/{rig}/{name}/view", s.page(station.ActionView, s.viewPage))
+	mux.Handle("GET /records", s.page(station.ActionView, s.recordsPage))
+	mux.Handle("POST /records/public", s.page(station.ActionView, s.recordPublic))
+	mux.Handle("POST /records/delete", s.page(station.ActionView, s.recordDelete))
 	mux.Handle("GET /settings", s.page(station.ActionManage, s.settingsPage))
 	mux.Handle("POST /settings/name", s.page(station.ActionManage, s.setName))
 	mux.Handle("POST /settings/password", s.page(station.ActionManage, s.setPassword))
@@ -146,6 +152,15 @@ func (s *server) handler() http.Handler {
 	mux.Handle("POST /settings/rigs/remove", s.page(station.ActionManage, s.removeRig))
 	// The API.
 	mux.Handle("GET /v1/devices", s.api(station.ActionView, s.listDevices))
+	// The Record Store: Blossom at the root, the station's own calls under /v1/records.
+	mux.HandleFunc("PUT /upload", func(w http.ResponseWriter, r *http.Request) { s.records.ServeUpload(w, r) })
+	mux.HandleFunc("GET /list/{pubkey}", s.blossomList)
+	mux.HandleFunc("GET /{sha}", s.blossomBlob)
+	mux.HandleFunc("DELETE /{sha}", s.blossomBlob)
+	mux.Handle("GET /v1/records", s.api(station.ActionView, s.listRecords))
+	mux.Handle("POST /v1/records/upload-auth", s.api(station.ActionControl, s.uploadAuth))
+	mux.Handle("POST /v1/records/{sha}/download-auth", s.api(station.ActionView, s.downloadAuth))
+	mux.Handle("GET /v1/devices/{rig}/{name}/recordings", s.api(station.ActionView, s.listRecords))
 	mux.Handle("POST /v1/devices/{rig}/{name}/hold", s.api(station.ActionView, s.takeHold))
 	mux.Handle("DELETE /v1/devices/{rig}/{name}/hold", s.api(station.ActionView, s.releaseHold))
 	mux.Handle("POST /v1/devices/{rig}/{name}/hold/release", s.api(station.ActionView, s.releaseHold))
@@ -718,6 +733,11 @@ func (s *server) settingsData(r *http.Request, p station.Principal, extra map[st
 		"Npub": npub(s.key.Public()), "Fingerprint": enroll.Fingerprint(s.key.Public()), "Allow": s.cfg.Allow,
 		"NoPassword": s.cfg.PasswordHash == "", "TURN": s.turnInfo,
 	}
+	if n, size, err := s.db.BlobTotal(ctx); err == nil {
+		data["RecordsCount"], data["RecordsTotal"] = n, humanSize(size)
+	}
+	data["RecordsDir"], data["RecordsMaxFile"], data["RecordsMaxTotal"], data["RecordsMaxAge"] =
+		s.recordsDir, humanSize(s.records.MaxFile), humanSize(s.records.MaxTotal), humanAge(s.records.MaxAge)
 	for k, v := range extra {
 		data[k] = v
 	}

@@ -25,8 +25,10 @@ import (
 	"golang.org/x/term"
 
 	"github.com/VibiumDev/station"
+	"github.com/VibiumDev/station/blob"
 	"github.com/VibiumDev/station/enroll"
 	"github.com/VibiumDev/station/hold"
+	"github.com/VibiumDev/station/records"
 	"github.com/VibiumDev/station/relay"
 	"github.com/VibiumDev/station/sdnotify"
 	"github.com/VibiumDev/station/signal"
@@ -232,6 +234,10 @@ func serve(args []string) int {
 	name := fs.String("name", "", "the station's name (saved)")
 	allow := fs.String("allow", "", "tailnet logins and tags that may sign in by identity, comma-separated (saved)")
 	noMDNS := fs.Bool("no-mdns", false, "do not advertise on the LAN")
+	recordsDir := fs.String("records-dir", "", "where the Record Store keeps its files (default: blobs/ in the data directory)")
+	recordsMaxFile := fs.String("records-max-file", "256M", "the largest file the Record Store takes (bytes, or K, M, G)")
+	recordsMaxTotal := fs.String("records-max-total", "2G", "how much the Record Store keeps before the oldest files go (0: no limit)")
+	recordsMaxAge := fs.Duration("records-max-age", 30*24*time.Hour, "how long the Record Store keeps a file (0: for ever)")
 	fs.Usage = func() { usage(); fmt.Println(); fs.PrintDefaults() }
 	fs.Parse(args)
 
@@ -448,6 +454,25 @@ func serve(args []string) int {
 				}
 			}},
 	}
+	// The Record Store: files by hash on disk, indexed in the database,
+	// uploads signed by the station key on the account's behalf.
+	maxFile, err := parseSize(*recordsMaxFile)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "--records-max-file:", err)
+		return 1
+	}
+	maxTotal, err := parseSize(*recordsMaxTotal)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "--records-max-total:", err)
+		return 1
+	}
+	blobDir := *recordsDir
+	if blobDir == "" {
+		blobDir = filepath.Join(dir, "blobs")
+	}
+	s.records = &records.Store{Blobs: blob.Disk{Dir: blobDir}, Index: db, Events: db, Holds: db, Devices: db, Signer: records.Key(key),
+		HoldsOf: db.HoldsOf, BaseURL: base, MaxFile: maxFile, MaxTotal: maxTotal, MaxAge: *recordsMaxAge, Audit: db}
+	s.recordsDir = blobDir
 	if mode == "lan" && !*noMDNS {
 		_, port, _ := net.SplitHostPort(ln.Addr().String())
 		var p int
@@ -465,6 +490,30 @@ func serve(args []string) int {
 			fmt.Fprintln(os.Stderr, "mdns:", err)
 		}
 	}
+	// Retention: aged and surplus recordings go, once at start and
+	// then hourly; their file events stay.
+	go func() {
+		sweep := func() {
+			gone, err := s.records.Sweep(context.Background())
+			if err != nil {
+				fmt.Println("records: retention:", err)
+			}
+			for _, b := range gone {
+				fmt.Printf("records: retention removed %s %s (%d bytes)\n", b.Name, b.SHA256[:12], b.Size)
+			}
+		}
+		sweep()
+		t := time.NewTicker(time.Hour)
+		defer t.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-t.C:
+				sweep()
+			}
+		}
+	}()
 	// Holds nobody refreshes end on their own.
 	go func() {
 		t := time.NewTicker(30 * time.Second)
