@@ -61,6 +61,8 @@ pre { background: var(--surface); border: 1px solid var(--line-card); border-rad
 /* The Vibium logo, the size the Record Player draws it, centred on the
    wordmark's capitals, which sit high in Rajdhani's line box. */
 .brand .logo { width: 22px; height: 28px; align-self: center; position: relative; top: -4px; margin-right: 2px; }
+/* Roadie's mark is its icon, square. */
+.brand .logo.square { width: 28px; }
 .brand .wordmark { font: 700 25px/1 var(--head); letter-spacing: 0.01em; }
 .brand .product { font: 13px var(--mono); letter-spacing: 0.08em; text-transform: uppercase; color: var(--text-muted); }
 /* The page links sit by the wordmark; who is signed in and Sign out sit
