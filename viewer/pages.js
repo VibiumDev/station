@@ -1,15 +1,17 @@
-// The theme switch for Vibium's pages, and the "?" help toggles. Light,
-// dark, or whatever the system says: a choice of light or dark is kept
-// in this browser and applied before the first paint, since this loads
-// in the head; "system" keeps nothing and follows the preference. The
-// switch is wired once the page is there, and a choice made in another
-// tab is followed here.
+// The theme switch for Vibium's pages, and the "?" help toggles. One
+// button cycles light, dark, and whatever the system says, showing the
+// current choice: light or dark is kept in this browser and applied
+// before the first paint, since this loads in the head; "system" keeps
+// nothing and follows the preference. The button is wired once the page
+// is there, and a choice made in another tab is followed here.
 (function () {
   var KEY = 'vibium-theme';
   var saved = null;
   try { saved = localStorage.getItem(KEY); } catch (e) {}
   if (saved === 'light' || saved === 'dark') document.documentElement.setAttribute('data-theme', saved);
-  var buttons = [];
+  var btn = null;
+  var NAMES = {light: 'light', dark: 'dark', system: 'the system default'};
+  var NEXT = {light: 'dark', dark: 'system', system: 'light'};
   var ICONS = {
     light: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/></svg>',
     dark: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12.79A9 9 0 1 1 11.21 3a7 7 0 0 0 9.79 9.79z"/></svg>',
@@ -19,7 +21,10 @@
   function applyTheme() {
     if (choice() === 'system') document.documentElement.removeAttribute('data-theme');
     else document.documentElement.setAttribute('data-theme', choice());
-    buttons.forEach(function (b) { b.setAttribute('aria-pressed', b.getAttribute('data-pick') === choice() ? 'true' : 'false'); });
+    if (!btn) return;
+    btn.innerHTML = ICONS[choice()];
+    btn.setAttribute('aria-label', 'Theme: ' + NAMES[choice()] + '. Switch to ' + NAMES[NEXT[choice()]] + '.');
+    btn.title = btn.getAttribute('aria-label');
   }
   function pickTheme(t) {
     saved = t === 'light' || t === 'dark' ? t : null;
@@ -58,11 +63,8 @@
     // arrow keys step through the recording without a click first.
     var player = document.querySelector('iframe.player');
     if (player) player.addEventListener('load', function () { player.focus(); });
-    buttons = Array.prototype.slice.call(document.querySelectorAll('.theme [data-pick]'));
-    buttons.forEach(function (b) {
-      b.innerHTML = ICONS[b.getAttribute('data-pick')] || '';
-      b.addEventListener('click', function () { pickTheme(b.getAttribute('data-pick')); });
-    });
+    btn = document.getElementById('themeBtn');
+    if (btn) btn.addEventListener('click', function () { pickTheme(NEXT[choice()]); });
     applyTheme();
   });
 })();

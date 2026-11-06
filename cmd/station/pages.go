@@ -36,7 +36,7 @@ var pages = template.Must(template.New("").Funcs(template.FuncMap{"npub": npub, 
 <title>{{.Title}} · {{if .Named}}{{.Name}}{{else}}Vibium Station{{end}}</title><link rel="icon" type="image/png" href="/favicon.png"><link rel="apple-touch-icon" href="/apple-touch-icon.png">
 <link rel="stylesheet" href="/viewer/pages.css"><script src="/viewer/pages.js"></script></head><body>{{end}}
 
-{{define "theme"}}<div class="theme" role="group" aria-label="Theme"><button type="button" data-pick="light" aria-label="Light" title="Light"></button><button type="button" data-pick="dark" aria-label="Dark" title="Dark"></button><button type="button" data-pick="system" aria-label="System default" title="System default"></button></div>{{end}}
+{{define "theme"}}<button id="themeBtn" class="iconbtn" type="button" aria-label="Theme"></button>{{end}}
 
 {{define "header"}}<header class="top"><div class="wrap">
 <a class="brand" href="/"><img class="logo" src="/viewer/vibium-logo.png" alt="Vibium"><span class="wordmark">{{if .Named}}{{.Name}}{{else}}Station{{end}}</span></a>
