@@ -110,6 +110,10 @@ var pages = template.Must(template.New("").Funcs(template.FuncMap{"npub": npub, 
 <iframe class="player" src="{{.Player}}" title="{{.Title}} in the Record Player" allowfullscreen></iframe>
 </main>{{template "foot" .}}{{end}}
 
+{{define "playfull"}}{{template "head" (dict "Title" .Title "Name" .Name "Named" .Named)}}
+<iframe class="player full" src="{{.Player}}" title="{{.Title}} in the Record Player" allowfullscreen></iframe>
+</body></html>{{end}}
+
 {{define "icon-play"}}<svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M7 4.5v15l12-7.5z" fill="currentColor"/></svg>{{end}}
 {{define "icon-delete"}}<svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M4 7h16M9 7V4.5h6V7M7 7l1 13h8l1-13M10 11v6M14 11v6" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>{{end}}
 {{define "icon-download"}}<svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M12 3v11m0 0-4.5-4.5M12 14l4.5-4.5M4 19.5h16" stroke="currentColor" stroke-width="2.2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>{{end}}

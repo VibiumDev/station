@@ -45,6 +45,10 @@
         try { localStorage.setItem('station-card-size', size.value); } catch (e) {}
       });
     }
+    // A framed Record Player gets the keyboard once it has loaded, so the
+    // arrow keys step through the recording without a click first.
+    var player = document.querySelector('iframe.player');
+    if (player) player.addEventListener('load', function () { player.focus(); });
     var btn = document.getElementById('themeBtn');
     if (!btn) return;
     paint(btn);

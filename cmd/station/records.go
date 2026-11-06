@@ -244,17 +244,23 @@ func (s *server) playPage(w http.ResponseWriter, r *http.Request, p station.Prin
 	if name == "" {
 		name = sha[:12]
 	}
-	s.render(w, "play", map[string]any{"Page": "records", "Principal": p, "CSRF": s.auth.csrfToken(r), "Title": name,
-		"Player": playURL(b) + "&chrome=hidden", "Full": playURL(b), "Download": s.records.URL(b) + "?download", "Device": b.DeviceID, "Hold": b.HoldID, "Uploader": b.Uploader,
-		"When": b.CreatedAt.Local().Format("Jan 2, 2006 15:04"), "Size": humanSize(b.Size)})
+	data := map[string]any{"Page": "records", "Principal": p, "CSRF": s.auth.csrfToken(r), "Title": name,
+		"Player": playURL(b), "Full": "/records/" + sha + "/play?full", "Download": s.records.URL(b) + "?download", "Device": b.DeviceID, "Hold": b.HoldID, "Uploader": b.Uploader,
+		"When": b.CreatedAt.Local().Format("Jan 2, 2006 15:04"), "Size": humanSize(b.Size)}
+	// ?full is the same frame filling the window, without the bar.
+	if r.URL.Query().Has("full") {
+		s.render(w, "playfull", data)
+		return
+	}
+	s.render(w, "play", data)
 }
 
-// playURL opens a blob in the embedded player. Framed under the station's
-// bar the page adds chrome=hidden, which drops the player's own logo, title
-// and theme switch; the player takes the station's colors and theme from the
-// framing page by itself.
+// playURL opens a blob in the embedded player, framed by a station page:
+// chrome=hidden drops the player's own logo, title and theme switch, and
+// the player takes the station's colors and theme from the framing page
+// by itself.
 func playURL(b station.Blob) string {
-	return viewer.PlayerPath + "?record=" + url.QueryEscape(b.SHA256+blob.Extension(b.Type))
+	return viewer.PlayerPath + "?record=" + url.QueryEscape(b.SHA256+blob.Extension(b.Type)) + "&chrome=hidden"
 }
 
 func (s *server) recordsPage(w http.ResponseWriter, r *http.Request, p station.Principal) {
