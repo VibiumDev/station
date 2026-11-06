@@ -12,7 +12,9 @@ import (
 	"time"
 
 	"github.com/VibiumDev/station"
+	"github.com/VibiumDev/station/blob"
 	"github.com/VibiumDev/station/records"
+	"github.com/VibiumDev/station/viewer"
 )
 
 // --- The Record Store: recordings, screenshots and logs as Blossom blobs ---
@@ -141,6 +143,7 @@ type recordView struct {
 	Device  string
 	Label   string
 	CanEdit bool
+	CanPlay bool
 }
 
 // humanAge is a retention age for the pages: empty for none.
@@ -187,7 +190,7 @@ func (s *server) recordsData(r *http.Request, p station.Principal, extra map[str
 	views := make([]recordView, 0, len(bs))
 	for _, b := range bs {
 		views = append(views, recordView{Blob: b, URL: s.records.URL(b), When: b.CreatedAt.Local().Format("Jan 2 15:04"), Size: humanSize(b.Size),
-			Device: b.DeviceID, Label: labels[b.DeviceID], CanEdit: p.Admin || p.Subject == b.Uploader})
+			Device: b.DeviceID, Label: labels[b.DeviceID], CanEdit: p.Admin || p.Subject == b.Uploader, CanPlay: viewer.HasPlayer() && (b.Type == "application/zip")})
 	}
 	count, size, _ := s.db.BlobTotal(r.Context())
 	data := map[string]any{
@@ -200,6 +203,33 @@ func (s *server) recordsData(r *http.Request, p station.Principal, extra map[str
 	}
 	return data, nil
 }
+
+// playPage is GET /records/{sha}/play: the recording in the embedded
+// Record Player, which fetches the file with the page's own session.
+func (s *server) playPage(w http.ResponseWriter, r *http.Request, p station.Principal) {
+	sha := r.PathValue("sha")
+	b, err := s.db.Blob(r.Context(), sha)
+	if err != nil || !s.records.MayRead(r.Context(), b, p) {
+		http.Error(w, "no such recording", http.StatusNotFound)
+		return
+	}
+	if !viewer.HasPlayer() {
+		http.Redirect(w, r, s.records.URL(b)+"?download", http.StatusSeeOther)
+		return
+	}
+	name := b.Name
+	if name == "" {
+		name = sha[:12]
+	}
+	// The player runs WebAssembly for terminal recordings, which the
+	// station's usual policy does not allow; this page alone does.
+	w.Header().Set("Content-Security-Policy", "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' blob:; font-src 'self' data:; worker-src 'self' blob:; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'; object-src 'none'")
+	s.render(w, "play", map[string]any{"Page": "records", "Principal": p, "CSRF": s.auth.csrfToken(r), "Blob": b, "Title": name,
+		"Src": "/" + b.SHA256 + blobExt(b.Type), "Download": s.records.URL(b) + "?download", "Device": b.DeviceID,
+		"When": b.CreatedAt.Local().Format("Jan 2, 2006 15:04"), "Size": humanSize(b.Size), "PlayerVersion": viewer.PlayerVersion()})
+}
+
+func blobExt(mediaType string) string { return blob.Extension(mediaType) }
 
 func (s *server) recordsPage(w http.ResponseWriter, r *http.Request, p station.Principal) {
 	data, err := s.recordsData(r, p, nil)

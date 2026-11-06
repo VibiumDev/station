@@ -191,3 +191,9 @@ input[type=radio], input[type=checkbox] { accent-color: var(--accent); width: 16
   .foot .wrap { padding: 20px 16px; }
 }
 @media (max-width: 480px) { th, td { padding: 12px 14px; } .tablewrap table:not(.kv) td { padding: 4px 14px 4px 108px; } .tablewrap table:not(.kv) td[data-l]::before { left: 14px; } }
+
+/* The play page: the Record Player gets the room. */
+main.play { max-width: none; padding-top: 24px; }
+.play .lead { max-width: none; font-size: 16px; }
+vibium-record-player { display: block; min-height: 75vh; margin-top: 16px; }
+.play .small { font-size: 13px; margin-top: 12px; }

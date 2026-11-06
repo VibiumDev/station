@@ -141,6 +141,7 @@ func (s *server) handler() http.Handler {
 	mux.Handle("GET /{$}", s.page(station.ActionView, s.indexPage))
 	mux.Handle("GET /devices/{rig}/{name}/view", s.page(station.ActionView, s.viewPage))
 	mux.Handle("GET /records", s.page(station.ActionView, s.recordsPage))
+	mux.Handle("GET /records/{sha}/play", s.page(station.ActionView, s.playPage))
 	mux.Handle("POST /records/public", s.page(station.ActionView, s.recordPublic))
 	mux.Handle("POST /records/delete", s.page(station.ActionView, s.recordDelete))
 	mux.Handle("GET /settings", s.page(station.ActionManage, s.settingsPage))

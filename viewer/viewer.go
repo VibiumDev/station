@@ -18,7 +18,7 @@ import (
 	"github.com/VibiumDev/station"
 )
 
-//go:embed webrtc.js shell.js shell.css shell.html pcm-player.js pcm-sender.js pages.css pages.js plex-sans.woff2 plex-mono-400.woff2 plex-mono-500.woff2 rajdhani-600.woff2 rajdhani-700.woff2
+//go:embed webrtc.js shell.js shell.css shell.html pcm-player.js pcm-sender.js pages.css pages.js plex-sans.woff2 plex-mono-400.woff2 plex-mono-500.woff2 rajdhani-600.woff2 rajdhani-700.woff2 player
 var files embed.FS
 
 func mustRead(name string) []byte {
@@ -118,10 +118,17 @@ func Relayed(prefix, deviceID string) Endpoints {
 }
 
 // Assets serves the module files; mount it at "<prefix>/viewer/" with the
-// prefix stripped, so the page's script tags resolve.
+// prefix stripped, so the page's script tags resolve. The embedded Record
+// Player's files are under player/.
 func Assets() http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		name := path.Base(r.URL.Path)
+		// The player keeps its assets in directories of its own.
+		rel := strings.TrimPrefix(path.Clean("/"+r.URL.Path), "/")
+		player := strings.HasPrefix(rel, "player/")
+		if player {
+			name = rel
+		}
 		var ctype string
 		switch {
 		case strings.HasSuffix(name, ".js"):
@@ -130,6 +137,14 @@ func Assets() http.Handler {
 			ctype = "text/css; charset=utf-8"
 		case strings.HasSuffix(name, ".woff2"):
 			ctype = "font/woff2"
+		case strings.HasSuffix(name, ".ttf"):
+			ctype = "font/ttf"
+		case strings.HasSuffix(name, ".wasm"):
+			ctype = "application/wasm"
+		case strings.HasSuffix(name, ".json"):
+			ctype = "application/json"
+		case player && strings.HasSuffix(name, ".txt"):
+			ctype = "text/plain; charset=utf-8"
 		default:
 			http.NotFound(w, r)
 			return
@@ -140,11 +155,28 @@ func Assets() http.Handler {
 			return
 		}
 		w.Header().Set("Content-Type", ctype)
-		if ctype == "font/woff2" {
+		switch {
+		case player, ctype == "font/woff2":
 			w.Header().Set("Cache-Control", "public, max-age=604800")
-		} else {
+		default:
 			w.Header().Set("Cache-Control", "no-cache")
 		}
 		w.Write(data)
 	})
+}
+
+// PlayerVersion is the Record Player commit the embedded element was
+// built from, or empty when no element is embedded.
+func PlayerVersion() string {
+	v, err := files.ReadFile("player/VERSION")
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(string(v))
+}
+
+// HasPlayer says whether the Record Player element is embedded.
+func HasPlayer() bool {
+	_, err := files.ReadFile("player/vibium-record-player.js")
+	return err == nil
 }

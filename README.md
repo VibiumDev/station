@@ -26,7 +26,8 @@ These parts work:
 - `station-probe`, which checks a station from outside
 - the Record Store (R7, under way): recordings and screenshots as
   Blossom blobs, uploaded with authorizations the station signs for
-  agents or a rig signs itself, listed per device and hold
+  agents or a rig signs itself, listed per device and hold, and
+  played in place by the embedded Record Player
 
 Packaging and hardening (R6) are under review.
 
@@ -162,7 +163,7 @@ station starts, for hosts whose secrets are environment variables.
 | `sdnotify` | Tells systemd the service is ready, alive (the watchdog) or stopping; a no-op outside systemd |
 | `blob` | Files by their SHA-256 on disk, hashed as they are written |
 | `records` | The Record Store: Blossom's upload, fetch, list and delete, the authorizations the station signs on an agent's behalf, the file event per blob, and retention |
-| `viewer` | The shell: the one viewer page a station and a Roadie both serve (Roadie's toolbar, settings panel and on-screen keyboard, the MJPEG reader, sound and microphone, input in picture space, WebRTC), told its endpoints by a config and extended by a rig's own extras module |
+| `viewer` | The shell: the one viewer page a station and a Roadie both serve, plus the embedded Record Player under `player/` (built from the [record-player](https://github.com/VibiumDev/record-player) repository by `scripts/update-player.sh`) (Roadie's toolbar, settings panel and on-screen keyboard, the MJPEG reader, sound and microphone, input in picture space, WebRTC), told its endpoints by a config and extended by a rig's own extras module |
 | `cmd/station` | The single-player binary |
 | `cmd/station-probe` | A headless check of any station: token, hold, WebRTC through TURN only, a tap and the screenshot it changes |
 
