@@ -203,8 +203,9 @@ main.play { max-width: none; padding-top: 20px; padding-bottom: 24px; }
 .views a { margin-right: 14px; color: var(--text-2); text-decoration: none; }
 .views a[aria-current="page"] { color: var(--text); font-weight: 600; text-decoration: underline; text-underline-offset: 4px; }
 .cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(var(--card, 140px), 1fr)); gap: 16px; margin-top: 16px; }
-/* The grid may take the whole window, however wide. */
-.wrap.wide { max-width: none; }
+/* The grid may take the whole window, however wide, behind a gutter
+   that grows with it. */
+.wrap.wide { max-width: none; padding-left: clamp(24px, 4vw, 80px); padding-right: clamp(24px, 4vw, 80px); }
 .views .size { display: inline-flex; align-items: center; gap: 8px; margin-left: 10px; color: var(--text-2); }
 .views .size input { width: 140px; accent-color: var(--accent); }
 .card.rec { padding: 0; margin: 0; overflow: hidden; display: flex; flex-direction: column; }
