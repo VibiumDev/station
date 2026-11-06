@@ -183,7 +183,8 @@ and prompt do not go there.
 
 ## Provider settings
 
-Jams are bring your own keys. Settings gains an **AI** section where
+Jams are bring your own keys. Settings gains an **AI** section that
+opens with what it is for, a model provider turns on Jams, and where
 the owner picks a provider (OpenAI, xAI, Anthropic, Google Gemini, an
 OpenAI-compatible server, or a local one), names the model, pastes the
 provider's API key, and can set the base URL and the reasoning effort
@@ -230,14 +231,15 @@ is live, and the recording's Play when it is done.
 
 Jams exist only once a provider is set. Until then the station looks
 as it does today, Devices at the root and no Jams in the top bar, and
-the owner sees one line on the Devices page, under the hosts, saying
-that a model provider on Settings turns on a prompt that drives these
-devices for them. That is as much advertising as a feature that needs
-a key deserves, and it reaches the one person who can act on it.
-Setting the provider turns Jams on and moves it to the root; a switch
-beside the provider turns Jams off again without forgetting the key,
-for a station that is only a broker and wants its devices on the front
-page. While Jams is off, its pages and its API answer 404 with a line
+the only mention is where the owner will act on it: the AI section on
+Settings opens with a line saying that a model provider turns on
+Jams, a prompt on the front page that drives the station's devices.
+The owner is on Settings before anything can be jammed, to enroll a
+rig, so the line is seen in time without being shown to anyone who
+cannot act on it. Setting the provider turns Jams on and moves it to
+the root; the switch beside the provider turns Jams off again without
+forgetting the key, for a station that is only a broker and wants its
+devices on the front page. While Jams is off, its pages and its API answer 404 with a line
 saying so. A greyed-out prompt with a polite note was the alternative,
 and it would sit on the front page of every station that never means
 to jam, apologising to people who cannot fix it.
