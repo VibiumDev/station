@@ -76,6 +76,9 @@ type Config struct {
 	// Minimal says the toolbar is hidden: a page in a frame or driven by
 	// a script, which gets a top-left picture rather than a centered one.
 	Minimal bool `json:"minimal,omitempty"`
+	// Recorded says the host records every hold on this device and
+	// uploads it to the station's Record Store; the toolbar says so.
+	Recorded bool `json:"recorded,omitempty"`
 }
 
 // Page is what the shell page is rendered with.

@@ -454,3 +454,17 @@ func TestEnrollAndRun(t *testing.T) {
 		t.Error("revocation did not end the hold")
 	}
 }
+
+func TestAnnounceSaysRecorded(t *testing.T) {
+	r := &Rig{Key: nostr.Generate()}
+	st := nostr.Generate().Public()
+	for _, record := range []bool{false, true} {
+		events, err := r.announce(&StationEntry{RigID: "rig_test", Record: record}, st)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got := events[0].Tags.Find("record") != nil; got != record {
+			t.Errorf("record %v: tag present %v", record, got)
+		}
+	}
+}

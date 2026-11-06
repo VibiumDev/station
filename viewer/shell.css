@@ -99,4 +99,7 @@
     text-overflow:ellipsis; white-space:nowrap; text-align:center; }
   body.tb-top #holdStatus, body.tb-bottom #holdStatus { max-width:none; }
   #holdStatus:empty { display:none; }
+  /* The note that the host records holds, beside the hold status. */
+  #recNote { color:#e05a4e; font-family:monospace; font-size:0.8em; padding:2px 6px; max-width:36px; overflow:hidden; white-space:nowrap; cursor:help; }
+  body.tb-top #recNote, body.tb-bottom #recNote { max-width:none; }
   .tbtn.held { color:var(--ui-accent); }

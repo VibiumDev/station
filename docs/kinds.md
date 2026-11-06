@@ -68,7 +68,9 @@ same shape as the announcements below.
 ## Rig announcement (17700)
 
 Sent on every tunnel connect and whenever the devices change. Tags `p`
-(station), `name`, and one `d`-less `dev` tag per device id. `content` is the
+(station), `name`, one `d`-less `dev` tag per device id, and `record`
+(`holds`) when the rig records every hold from this station, which the
+station's pages then tell people holding its devices. `content` is the
 JSON list of devices: `{"id":"pi-0007/phone","kind":"phone","caps":["video","audio","hid","bidi","mjpeg"],"shortcuts":[{"label":"Home","keys":"GUI+h"}]}`.
 `shortcuts` are device-provided toolbar buttons the shared viewer renders
 and sends as key commands, so Station's code never names a phone.

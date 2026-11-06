@@ -45,6 +45,8 @@ type conn struct {
 	cmu     sync.Mutex // the control stream's writer
 	control net.Conn
 	done    chan struct{}
+
+	record bool // the rig records every hold from this station, by its last announcement
 }
 
 func (s *Server) logf(format string, args ...any) {
@@ -72,6 +74,16 @@ func (s *Server) IsOnline(rigID string) bool {
 	defer s.mu.Unlock()
 	_, ok := s.rigs[rigID]
 	return ok
+}
+
+// RecordsHolds says whether a rig with a tunnel up has announced that it
+// records every hold from this station and uploads it to the Record
+// Store, which the pages tell people holding its devices.
+func (s *Server) RecordsHolds(rigID string) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	c, ok := s.rigs[rigID]
+	return ok && c.record
 }
 
 // ErrOffline says the rig has no tunnel up.
@@ -258,6 +270,10 @@ func (s *Server) announce(ctx context.Context, c *conn, events []nostr.Event) er
 					return fmt.Errorf("device %d: id %q is not under %s", i, d.ID, c.rigID)
 				}
 			}
+			record := ev.Tags.Find("record") != nil
+			s.mu.Lock()
+			c.record = record
+			s.mu.Unlock()
 			found = true
 		case token.KindDeviceAnnounce:
 		default:

@@ -1323,6 +1323,8 @@
   var role = watchOnly ? 'watch' : 'drive';
   var lookAgain = null;
   var holdStatus = $('holdStatus');
+  var recNote = $('recNote');
+  if (recNote && cfg.recorded) recNote.style.display = 'inline-block';
   var takeBtn = $('takeBtn'), releaseBtn = $('releaseBtn');
   function holding() { return !station || (!!hold && !released); }
   function driving() { return !station || (holding() && role === 'drive'); }

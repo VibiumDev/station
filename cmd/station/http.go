@@ -362,6 +362,7 @@ type deviceView struct {
 	Platform  string             `json:"platform,omitempty"`
 	Rig       rigView            `json:"rig"`
 	Online    bool               `json:"online"`
+	Recorded  bool               `json:"recorded,omitempty"` // the rig records every hold, by its announcement
 	Hold      *holdView          `json:"hold"`
 }
 
@@ -388,9 +389,10 @@ func (s *server) devices(ctx context.Context) ([]deviceView, error) {
 	var out []deviceView
 	for _, rg := range rigs {
 		online := s.tunnel.IsOnline(rg.ID)
+		recorded := s.tunnel.RecordsHolds(rg.ID)
 		for _, d := range rg.Devices {
 			v := deviceView{ID: d.ID, Name: d.Name(), Kind: d.Kind, Caps: d.Caps, Shortcuts: d.Shortcuts, Input: d.Input, Extras: d.Extras,
-				Label: d.Label, Platform: d.Platform, Rig: rigView{ID: rg.ID, Name: rg.Name, Npub: npub(rg.PubKey)}, Online: online}
+				Label: d.Label, Platform: d.Platform, Rig: rigView{ID: rg.ID, Name: rg.Name, Npub: npub(rg.PubKey)}, Online: online, Recorded: recorded}
 			if l, err := s.db.Current(ctx, d.ID); err == nil {
 				v.Hold = &holdView{ID: l.ID, Seq: l.Seq, Subject: l.Subject, Scopes: station.ScopeStrings(l.Scopes), Since: l.CreatedAt, Expires: l.ExpiresAt}
 			}
@@ -713,7 +715,7 @@ func (s *server) viewPage(w http.ResponseWriter, r *http.Request, p station.Prin
 		label = dev.Label
 	}
 	cfg := viewer.Config{Mode: "station", Device: dev.ID, Name: rg.Name + " / " + label, API: viewer.Relayed("", dev.ID),
-		InputMode: dev.Input, Shortcuts: dev.Shortcuts, CSRF: s.auth.csrfToken(r), WebRTC: true}
+		InputMode: dev.Input, Shortcuts: dev.Shortcuts, CSRF: s.auth.csrfToken(r), WebRTC: true, Recorded: s.tunnel.RecordsHolds(rg.ID)}
 	for _, c := range dev.Caps {
 		if c == station.CapVideo {
 			cfg.WebRTC = true

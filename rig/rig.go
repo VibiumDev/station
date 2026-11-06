@@ -137,6 +137,10 @@ func (r *Rig) announce(e *StationEntry, st nostr.PubKey) ([]nostr.Event, error) 
 	for _, d := range devices {
 		tags = append(tags, nostr.Tag{"dev", d.ID})
 	}
+	// The station shows people that their holds are recorded here.
+	if e.Record {
+		tags = append(tags, nostr.Tag{"record", "holds"})
+	}
 	ev := nostr.Event{Kind: token.KindRigAnnounce, CreatedAt: nostr.Now(), Tags: tags, Content: string(content)}
 	if err := ev.Sign(r.Key); err != nil {
 		return nil, err
