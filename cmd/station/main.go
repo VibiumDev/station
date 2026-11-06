@@ -28,12 +28,16 @@ import (
 	"github.com/VibiumDev/station/enroll"
 	"github.com/VibiumDev/station/hold"
 	"github.com/VibiumDev/station/relay"
+	"github.com/VibiumDev/station/sdnotify"
 	"github.com/VibiumDev/station/signal"
 	"github.com/VibiumDev/station/sqlite"
 	"github.com/VibiumDev/station/token"
 	"github.com/VibiumDev/station/tunnel"
 	"github.com/VibiumDev/station/turn"
 )
+
+// version is stamped by the release build (-X main.version=...).
+var version = "dev"
 
 func main() {
 	if len(os.Args) > 1 && !strings.HasPrefix(os.Args[1], "-") {
@@ -48,7 +52,8 @@ func usage() {
        station enroll                  make a one-time enrollment code for a rig
        station token create NAME [--read-only]
        station token list | revoke NAME
-       station key                     show the station's key`)
+       station key                     show the station's key
+       station version                 show the build's version`)
 }
 
 // openDB opens the station's database in the data directory.
@@ -75,6 +80,10 @@ func runCommand(name string, args []string) int {
 		}
 		words = append(words, args[0])
 		args = args[1:]
+	}
+	if name == "version" {
+		fmt.Println(version)
+		return 0
 	}
 	dir, err := dataDir(*dirFlag)
 	if err != nil {
@@ -477,10 +486,14 @@ func serve(args []string) int {
 	srv := &http.Server{Handler: s.handler(), ReadHeaderTimeout: 30 * time.Second}
 	go func() {
 		<-ctx.Done()
+		sdnotify.Stopping()
 		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
 		srv.Shutdown(shutdownCtx)
 	}()
+	// Under systemd with a watchdog: alive for as long as the handler
+	// still answers, so a wedged station is restarted rather than kept.
+	go sdnotify.Keep(ctx, func() bool { return answers(srv.Handler) })
 	fmt.Printf("%s: %s mode at %s\n", cfg.Name, mode, base)
 	fmt.Printf("   key %s, rigs enroll at %s\n", npub(key.Public()), tunnelURL)
 	if turnInfo != "" {
@@ -489,9 +502,38 @@ func serve(args []string) int {
 	if cfg.PasswordHash == "" {
 		fmt.Println("   no password yet: run `station passwd` to sign in by password")
 	}
+	sdnotify.Ready()
 	if err := srv.Serve(ln); err != nil && !errors.Is(err, http.ErrServerClosed) {
 		fmt.Fprintln(os.Stderr, err)
 		return 1
 	}
 	return 0
 }
+
+// answers reports whether the handler still replies to a request, with any
+// status at all, within a few seconds: the watchdog's measure of alive.
+func answers(h http.Handler) bool {
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		req, err := http.NewRequest(http.MethodGet, "/v1/devices", nil)
+		if err != nil {
+			return
+		}
+		req.RemoteAddr = "127.0.0.1:0"
+		h.ServeHTTP(discardResponse{http.Header{}}, req)
+	}()
+	select {
+	case <-done:
+		return true
+	case <-time.After(5 * time.Second):
+		return false
+	}
+}
+
+// discardResponse is a ResponseWriter that keeps nothing.
+type discardResponse struct{ h http.Header }
+
+func (d discardResponse) Header() http.Header         { return d.h }
+func (d discardResponse) Write(b []byte) (int, error) { return len(b), nil }
+func (d discardResponse) WriteHeader(int)             {}
