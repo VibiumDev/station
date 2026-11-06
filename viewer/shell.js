@@ -794,17 +794,32 @@
     setupTransport.show = show;
   }
 
-  // --- Theme ---
+  // --- Theme: the same choice as the host's pages, kept under the
+  // vibium-theme key (light or dark; nothing means the system's), so the
+  // viewer and the pages around it agree. A choice this viewer saved in
+  // its own settings before counts until one is made here or there.
+  var THEME_KEY = 'vibium-theme';
   var themeBtns = {dark: $('themeDarkBtn'), light: $('themeLightBtn'), system: $('themeSystemBtn')};
-  function applyTheme(t) {
+  function themeChoice() {
+    var t = null;
+    try { t = localStorage.getItem(THEME_KEY); } catch (e) {}
+    if (t === 'light' || t === 'dark') return t;
+    return t === null && (saved.theme === 'light' || saved.theme === 'dark') ? saved.theme : 'system';
+  }
+  function showTheme(t) {
     document.documentElement.setAttribute('data-theme', t);
     for (var k in themeBtns) themeBtns[k].classList.toggle('on', k === t);
-    saveSettings({theme: t});
+  }
+  function applyTheme(t) {
+    try { if (t === 'system') localStorage.removeItem(THEME_KEY); else localStorage.setItem(THEME_KEY, t); } catch (e) {}
+    if (saved.theme) saveSettings({theme: undefined});
+    showTheme(t);
   }
   themeBtns.dark.onclick = function () { applyTheme('dark'); };
   themeBtns.light.onclick = function () { applyTheme('light'); };
   themeBtns.system.onclick = function () { applyTheme('system'); };
-  applyTheme(saved.theme || 'system');
+  showTheme(themeChoice());
+  window.addEventListener('storage', function (e) { if (e.key === THEME_KEY || e.key === null) showTheme(themeChoice()); });
 
   // --- Input to the device, over the WebRTC "hid" channel when it is up,
   // otherwise the input socket. Held back while the host is busy.

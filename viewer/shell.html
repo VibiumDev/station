@@ -6,6 +6,7 @@
 <title>{{.Title}}</title>
 <link rel="icon" type="image/png" href="/favicon.png"><link rel="apple-touch-icon" href="/apple-touch-icon.png">
 <link rel="stylesheet" href="{{.Assets}}/viewer/shell.css">
+<script src="{{.Assets}}/viewer/pages.js"></script>
 {{if .Minimal}}<style>#toolbar { display:none !important; }</style>
 {{end}}</head>
 <body class="tb-left" style="margin:0; display:flex; height:100vh; height:100dvh; overscroll-behavior:none;" data-config="{{.ConfigJSON}}">
