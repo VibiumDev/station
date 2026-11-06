@@ -5,8 +5,11 @@
 #   scripts/update-player.sh [REF]      default: main
 #
 # Needs git, node and npm. Clones the player into a temporary directory,
+# applies scripts/player-station.patch (the router's base path, a
+# chrome=hidden switch and the station's colors read from the framing page),
 # builds it for the station's path, copies the output over viewer/player
-# (keeping README.md) and writes the commit to viewer/player/VERSION.
+# (keeping README.md) and writes the commit to viewer/player/VERSION. When
+# the patch stops applying, refresh it against the new commit.
 
 set -euo pipefail
 REF=${1:-main}
@@ -18,9 +21,7 @@ trap 'rm -rf "$TMP"' EXIT
 git clone -q https://github.com/VibiumDev/record-player.git "$TMP/player"
 git -C "$TMP/player" checkout -q "$REF"
 COMMIT=$(git -C "$TMP/player" rev-parse HEAD)
-# The app's router assumes the site root; under the station's path it
-# needs the build's base as its basename, or every page is its 404.
-sed -i 's|<BrowserRouter>|<BrowserRouter basename={import.meta.env.BASE_URL}>|' "$TMP/player/src/App.tsx"
+git -C "$TMP/player" apply "$ROOT/scripts/player-station.patch"
 (cd "$TMP/player" && npm ci --no-audit --no-fund && npx vite build --base=/viewer/player/app/ --outDir dist-app)
 
 find "$DEST" -mindepth 1 ! -name README.md -delete

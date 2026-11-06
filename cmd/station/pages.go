@@ -106,7 +106,7 @@ var pages = template.Must(template.New("").Funcs(template.FuncMap{"npub": npub, 
 </main>{{template "foot" .}}{{end}}
 
 {{define "play"}}{{template "head" (dict "Title" .Title "Name" .Name "Named" .Named)}}{{template "header" .}}
-<main class="wrap play"><p class="lead"><a href="/records{{if .Device}}?device={{.Device}}{{end}}">Records</a> › <b>{{.Title}}</b> <span class="muted">{{.When}} · {{.Size}} · {{.Uploader}}{{if .Hold}} · {{.Hold}}{{end}}</span> <a class="btn small" href="{{.Download}}">Download</a> <a class="btn small" href="{{.Player}}" target="_blank" rel="noopener">Full page</a></p>
+<main class="wrap play"><p class="lead"><a href="/records{{if .Device}}?device={{.Device}}{{end}}">Records</a> › <b>{{.Title}}</b> <span class="muted">{{.When}} · {{.Size}} · {{.Uploader}}{{if .Hold}} · {{.Hold}}{{end}}</span> <a class="btn small" href="{{.Download}}">Download</a> <a class="btn small" href="{{.Full}}" target="_blank" rel="noopener">Full page</a></p>
 <iframe class="player" src="{{.Player}}" title="{{.Title}} in the Record Player" allowfullscreen></iframe>
 </main>{{template "foot" .}}{{end}}
 

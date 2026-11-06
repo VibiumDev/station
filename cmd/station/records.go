@@ -245,11 +245,14 @@ func (s *server) playPage(w http.ResponseWriter, r *http.Request, p station.Prin
 		name = sha[:12]
 	}
 	s.render(w, "play", map[string]any{"Page": "records", "Principal": p, "CSRF": s.auth.csrfToken(r), "Title": name,
-		"Player": playURL(b), "Download": s.records.URL(b) + "?download", "Device": b.DeviceID, "Hold": b.HoldID, "Uploader": b.Uploader,
+		"Player": playURL(b) + "&chrome=hidden", "Full": playURL(b), "Download": s.records.URL(b) + "?download", "Device": b.DeviceID, "Hold": b.HoldID, "Uploader": b.Uploader,
 		"When": b.CreatedAt.Local().Format("Jan 2, 2006 15:04"), "Size": humanSize(b.Size)})
 }
 
-// playURL opens a blob in the embedded player.
+// playURL opens a blob in the embedded player. Framed under the station's
+// bar the page adds chrome=hidden, which drops the player's own logo, title
+// and theme switch; the player takes the station's colors and theme from the
+// framing page by itself.
 func playURL(b station.Blob) string {
 	return viewer.PlayerPath + "?record=" + url.QueryEscape(b.SHA256+blob.Extension(b.Type))
 }
