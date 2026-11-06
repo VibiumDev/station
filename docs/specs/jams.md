@@ -4,8 +4,8 @@ Nov 6, 2026 · draft for review
 
 ## Summary and goals
 
-The station's front page is a prompt box, the kind ChatGPT and Claude
-open on: a few lines tall, wide, growing with what is typed, with a
+The station's front page, once the owner has set a model provider, is
+a prompt box, the kind ChatGPT and Claude open on: a few lines tall, wide, growing with what is typed, with a
 send button in its corner. A person signs in, reads "What can I check
 for you?" above it, types a claim or an errand, and an agent drives a
 device on the station to do it, while the page shows the agent's steps
@@ -192,7 +192,9 @@ those values and shows the answer on the page, so a wrong key or an
 unknown model is seen there and not in a failed jam. The key is seen
 once, as it is typed, and never again: the page says that one is set,
 offers Replace and Remove, and nothing a browser receives afterwards
-contains it.
+contains it. The section also holds the Jams switch, on by default once
+a provider is set, which is what puts Jams in the top bar and the
+prompt on the front page.
 
 The station keeps the settings in Vibium's own format, an `ai.env` file
 in its data directory written with mode 0600 like `station.key`, holding
@@ -224,9 +226,21 @@ Records, Settings, and the brand keeps linking to the root. `/jams`
 serves the same page as the root, so the list has a name of its own,
 and one jam lives at `/jams/{id}`, with the transcript, the prompt box
 for the next turn while the jam is open, the watching viewer while it
-is live, and the recording's Play when it is done. A station with no
-model configured still lands on the prompt, which says so and points at
-Settings, so that the first screen is what the station is for.
+is live, and the recording's Play when it is done.
+
+Jams exist only once a provider is set. Until then the station looks
+as it does today, Devices at the root and no Jams in the top bar, and
+the owner sees one line on the Devices page, under the hosts, saying
+that a model provider on Settings turns on a prompt that drives these
+devices for them. That is as much advertising as a feature that needs
+a key deserves, and it reaches the one person who can act on it.
+Setting the provider turns Jams on and moves it to the root; a switch
+beside the provider turns Jams off again without forgetting the key,
+for a station that is only a broker and wants its devices on the front
+page. While Jams is off, its pages and its API answer 404 with a line
+saying so. A greyed-out prompt with a polite note was the alternative,
+and it would sit on the front page of every station that never means
+to jam, apologising to people who cannot fix it.
 
 The API follows the pages, under the token model R5 built:
 
@@ -339,6 +353,3 @@ database with the jam.
   jam's verdict should say it came from the station's loop.
 - [ ] Whether a jam's hold should be refused by rigs that do not allow
   recording, or should simply run with the loop's own recording alone.
-- [ ] Whether a station with no model configured should land on Devices
-  until one is, rather than on the prompt with a pointer to Settings as
-  written above.
