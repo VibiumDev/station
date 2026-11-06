@@ -31,6 +31,20 @@
         q.setAttribute('aria-expanded', open ? 'true' : 'false');
       });
     });
+    // The Records grid: a slider sets the card size, kept per browser.
+    var size = document.getElementById('cardSize');
+    var cards = document.querySelector('.cards');
+    if (size && cards) {
+      var apply = function (px) { cards.style.setProperty('--card', px + 'px'); };
+      var kept = null;
+      try { kept = localStorage.getItem('station-card-size'); } catch (e) {}
+      if (kept && +kept >= +size.min && +kept <= +size.max) { size.value = kept; }
+      apply(size.value);
+      size.addEventListener('input', function () {
+        apply(size.value);
+        try { localStorage.setItem('station-card-size', size.value); } catch (e) {}
+      });
+    }
     var btn = document.getElementById('themeBtn');
     if (!btn) return;
     paint(btn);
