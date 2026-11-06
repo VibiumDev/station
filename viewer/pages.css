@@ -83,6 +83,13 @@ main.wrap { padding-top: 56px; padding-bottom: 88px; }
 .h2:first-of-type { margin-top: 40px; }
 main > .h2:first-child { margin-top: 0; }
 .lead { margin: 16px 0 0; font-size: 18px; color: var(--text-2); max-width: 640px; }
+/* A short list of links: the path, then what it is. */
+.links { list-style: none; margin: 20px 0 0; padding: 0; max-width: 640px; }
+.links li { padding: 7px 0; border-bottom: 1px solid var(--line); }
+.links li:last-child { border-bottom: 0; }
+.links a { font: 500 15px var(--mono); text-decoration: none; }
+.links a:hover { text-decoration: underline; }
+.links span { margin-left: 10px; color: var(--text-muted); font-size: 15px; }
 main > .lead:first-child { margin-top: 0; }
 .section { margin-top: 40px; }
 
