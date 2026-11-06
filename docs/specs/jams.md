@@ -302,8 +302,13 @@ per day is the hosted station's concern.
   the end, with the verdict and the evidence, and emit nothing on the
   way, so the transcript that fills as the agent works needs the
   binary to send progress as BiDi events during a check or a run,
-  which is a Vibium change like the upload option. Until then the page
-  shows the viewer's live picture and the final result.
+  which is a Vibium change like the upload option. The events are per
+  step and come from the binary's own loop, not from the provider:
+  the model APIs are one request and one reply per turn, with the
+  reply streamed in pieces at most, and no channel back while the
+  model works, so the binary is the only party that knows when a step
+  starts, what it asked, what came back and what it did. Until then
+  the page shows the viewer's live picture and the final result.
 - [ ] A prompt that names two devices ("on the phone and the laptop").
   The first milestone takes one device per jam.
 - [ ] Docker or podman on the dev Pi and in the self-host guide, and
