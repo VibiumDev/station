@@ -38,6 +38,7 @@ type StationEntry struct {
 	Admin      bool     `json:"admin"`                 // whether admin grants are accepted
 	MaxSession string   `json:"max_session,omitempty"` // a duration such as "8h"
 	Hours      string   `json:"hours,omitempty"`       // "09:00-18:00", local time, when holds are allowed
+	Record     bool     `json:"record,omitempty"`      // record each hold (screenshots per input) and upload it to the station
 }
 
 // PubKey decodes the entry's npub.
