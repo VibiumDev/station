@@ -100,10 +100,12 @@ A person types a prompt and sends it. The station:
    `/session` URL and the jam's token in its environment, the way the
    tutorials set `VIBIUM_CONNECT_URL` and `VIBIUM_CONNECT_API_KEY` for
    a laptop, speaks MCP to it over its standard input and output, and
-   has it open the session. That takes a hold on the device under the
-   person's identity, with the jam named in the hold's subject, so the
-   Devices page says who is driving and the rig's recording, when the
-   rig records, lands against that hold.
+   has it open the session. That takes a hold on the device in the jam
+   token's name, so the hold's subject names the jam while the jam
+   record names the person. The Devices page then shows the jam as the
+   holder, the rig's recording, when the rig records, lands against that
+   hold, and because the hold belongs to a token and the owner is a
+   person, the owner's Hold button can take the device back.
 4. Runs the loop: sends the model the instruction, the prompt and the
    tools Vibium offers for this device; executes each tool call the
    model returns through Vibium; takes a screenshot after each action
