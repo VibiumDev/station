@@ -36,7 +36,7 @@ func TestRenderAndAssets(t *testing.T) {
 	}
 	srv := httptest.NewServer(http.StripPrefix("/viewer/", Assets()))
 	defer srv.Close()
-	for name, ctype := range map[string]string{"webrtc.js": "application/javascript", "shell.js": "application/javascript", "shell.css": "text/css", "pcm-player.js": "application/javascript"} {
+	for name, ctype := range map[string]string{"webrtc.js": "application/javascript", "shell.js": "application/javascript", "shell.css": "text/css", "pcm-player.js": "application/javascript", "vibium-logo.png": "image/png"} {
 		resp, err := http.Get(srv.URL + "/viewer/" + name)
 		if err != nil || resp.StatusCode != 200 || !strings.HasPrefix(resp.Header.Get("Content-Type"), ctype) {
 			t.Errorf("%s: %v %v", name, resp, err)

@@ -18,7 +18,7 @@ import (
 	"github.com/VibiumDev/station"
 )
 
-//go:embed webrtc.js shell.js shell.css shell.html pcm-player.js pcm-sender.js pages.css pages.js plex-sans.woff2 plex-mono-400.woff2 plex-mono-500.woff2 rajdhani-600.woff2 rajdhani-700.woff2 player
+//go:embed webrtc.js shell.js shell.css shell.html pcm-player.js pcm-sender.js pages.css pages.js vibium-logo.png plex-sans.woff2 plex-mono-400.woff2 plex-mono-500.woff2 rajdhani-600.woff2 rajdhani-700.woff2 player
 var files embed.FS
 
 func mustRead(name string) []byte {
@@ -153,7 +153,7 @@ func Assets() http.Handler {
 			ctype = "text/plain; charset=utf-8"
 		case player && strings.HasSuffix(name, ".ico"):
 			ctype = "image/x-icon"
-		case player && strings.HasSuffix(name, ".png"):
+		case strings.HasSuffix(name, ".png"):
 			ctype = "image/png"
 		case player && strings.HasSuffix(name, ".svg"):
 			ctype = "image/svg+xml"
@@ -177,7 +177,7 @@ func Assets() http.Handler {
 			return
 		}
 		switch {
-		case player, ctype == "font/woff2":
+		case player, ctype == "font/woff2", ctype == "image/png":
 			w.Header().Set("Cache-Control", "public, max-age=604800")
 		default:
 			w.Header().Set("Cache-Control", "no-cache")
