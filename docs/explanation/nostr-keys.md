@@ -210,7 +210,9 @@ Vibium's `record.zip` traces are files, not events. Blossom, Nostr's file
 protocol, names a file by its SHA-256 and allows uploads and downloads
 with signed events from the same keys. A recording would be downloadable
 by the hold's parties and nobody else, and its link would survive the
-file moving between servers.
+file moving between servers. An agent needs no key for this: the
+station signs a short-lived upload permission on the account's behalf,
+and the agent sends it along with the file under its usual token.
 
 **The important keys off the box.** NIP-46 lets a key live in a "bunker"
 that signs on request. The keys that sign rarely and matter most (an
