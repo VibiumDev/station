@@ -26,7 +26,12 @@ func recordingZip(t *testing.T, frames ...string) []byte {
 	tr.Write([]byte(`{"version":8,"type":"context-options","libraryName":"vibium"}` + "\n"))
 	for i, f := range frames {
 		tr.Write([]byte(`{"type":"before","callId":"call@1"}` + "\n"))
-		tr.Write([]byte(`{"type":"screencast-frame","pageId":"page@screen","sha1":"` + f + `","width":4,"height":4,"timestamp":` + string(rune('0'+i)) + `}` + "\n"))
+		if i%2 == 0 {
+			tr.Write([]byte(`{"type":"screencast-frame","pageId":"page@screen","sha1":"` + f + `","width":4,"height":4,"timestamp":` + string(rune('0'+i)) + `}` + "\n"))
+		} else {
+			// Roadie's order: the keys alphabetical, sha1 before type.
+			tr.Write([]byte(`{"height":4,"pageId":"page@screen","sha1":"` + f + `","timestamp":` + string(rune('0'+i)) + `,"type":"screencast-frame","width":4}` + "\n"))
+		}
 	}
 	for i, f := range frames {
 		w, _ := zw.Create("resources/" + f)

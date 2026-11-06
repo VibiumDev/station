@@ -20,7 +20,12 @@ import (
 // ErrNoThumbnail says a blob has no picture to show for it.
 var ErrNoThumbnail = errors.New("no thumbnail")
 
-var frameLine = regexp.MustCompile(`"type"\s*:\s*"screencast-frame".*?"sha1"\s*:\s*"([^"]+)"`)
+// A frame line names its file in sha1; the keys come in any order (Vibium
+// writes type first, Roadie alphabetically).
+var (
+	frameLine = regexp.MustCompile(`"type"\s*:\s*"screencast-frame"`)
+	frameName = regexp.MustCompile(`"sha1"\s*:\s*"([^"]+)"`)
+)
 
 // Thumbnail is a picture for a blob: a screenshot is its own, and a
 // recording's is the last frame its trace names, taken out of the zip
@@ -95,7 +100,11 @@ func lastFrame(store blob.Store, sha string) ([]byte, string, error) {
 		sc := bufio.NewScanner(rc)
 		sc.Buffer(make([]byte, 1<<20), 16<<20)
 		for sc.Scan() {
-			if m := frameLine.FindSubmatch(sc.Bytes()); m != nil {
+			line := sc.Bytes()
+			if !frameLine.Match(line) {
+				continue
+			}
+			if m := frameName.FindSubmatch(line); m != nil {
 				last = string(m[1])
 			}
 		}
