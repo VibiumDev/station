@@ -191,3 +191,9 @@ input[type=radio], input[type=checkbox] { accent-color: var(--accent); width: 16
   .foot .wrap { padding: 20px 16px; }
 }
 @media (max-width: 480px) { th, td { padding: 12px 14px; } .tablewrap table:not(.kv) td { padding: 4px 14px 4px 108px; } .tablewrap table:not(.kv) td[data-l]::before { left: 14px; } }
+
+/* The play page: the station's bar on top, the Record Player below. */
+main.play { max-width: none; padding-top: 20px; padding-bottom: 24px; }
+.play .lead { max-width: none; font-size: 15px; margin: 0; }
+.play .lead .btn { margin-left: 8px; }
+.play iframe.player { display: block; width: 100%; height: calc(100vh - 170px); min-height: 520px; margin-top: 14px; border: 1px solid var(--line, #8884); border-radius: 8px; background: #000; }

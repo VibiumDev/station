@@ -205,9 +205,9 @@ func (s *server) recordsData(r *http.Request, p station.Principal, extra map[str
 	return data, nil
 }
 
-// playPage is GET /records/{sha}/play: a stable link that opens the
-// recording in the embedded Record Player, which fetches the file from
-// this station with the browser's own session.
+// playPage is GET /records/{sha}/play: the recording in the embedded
+// Record Player, framed under the station's own top bar. The player
+// fetches the file from this station with the browser's own session.
 func (s *server) playPage(w http.ResponseWriter, r *http.Request, p station.Principal) {
 	sha := r.PathValue("sha")
 	b, err := s.db.Blob(r.Context(), sha)
@@ -219,7 +219,13 @@ func (s *server) playPage(w http.ResponseWriter, r *http.Request, p station.Prin
 		http.Redirect(w, r, s.records.URL(b)+"?download", http.StatusSeeOther)
 		return
 	}
-	http.Redirect(w, r, playURL(b), http.StatusSeeOther)
+	name := b.Name
+	if name == "" {
+		name = sha[:12]
+	}
+	s.render(w, "play", map[string]any{"Page": "records", "Principal": p, "CSRF": s.auth.csrfToken(r), "Title": name,
+		"Player": playURL(b), "Download": s.records.URL(b) + "?download", "Device": b.DeviceID, "Hold": b.HoldID, "Uploader": b.Uploader,
+		"When": b.CreatedAt.Local().Format("Jan 2, 2006 15:04"), "Size": humanSize(b.Size)})
 }
 
 // playURL opens a blob in the embedded player.

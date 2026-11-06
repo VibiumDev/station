@@ -187,8 +187,9 @@ func Assets() http.Handler {
 }
 
 // PlayerCSP is the Content Security Policy the embedded player's page
-// is served with.
-const PlayerCSP = "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' blob:; font-src 'self' data:; worker-src 'self' blob:; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'; object-src 'none'"
+// is served with: the station's, plus what the player needs, and it may
+// be framed by the station's own pages.
+const PlayerCSP = "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' blob:; font-src 'self' data:; worker-src 'self' blob:; connect-src 'self'; frame-ancestors 'self'; base-uri 'none'; form-action 'self'; object-src 'none'"
 
 // PlayerPath is where the embedded Record Player's page is served, under
 // the assets prefix; a recording opens there with ?record=<sha256>.zip.
