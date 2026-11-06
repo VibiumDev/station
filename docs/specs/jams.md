@@ -217,27 +217,29 @@ settings.
 
 ## Pages and API
 
-The root page, `/`, becomes the Jams page: the prompt box, sized and
-placed as the chat products place theirs rather than as a hero, a
-device picker beside it when more than one device is online, and under
-it the list of past jams, with when, who, the device, the prompt, and
-the verdict where there is one. The list of devices moves to `/devices`,
-and the docs that point at it follow. The top bar reads Jams, Devices,
-Records, Settings, and the brand keeps linking to the root. `/jams`
-serves the same page as the root, so the list has a name of its own,
-and one jam lives at `/jams/{id}`, with the transcript, the prompt box
-for the next turn while the jam is open, the watching viewer while it
-is live, and the recording's Play when it is done.
+`/` becomes a redirect: to `/devices` by default, and to `/jams` once a
+provider is set and Jams is on, so each page has one address and the
+front page is whichever the station is for right now. The Jams page,
+at `/jams`, has the prompt box, sized and placed as the chat products
+place theirs rather than as a hero, a device picker beside it when more
+than one device is online, and under it the list of past jams, with
+when, who, the device, the prompt, and the verdict where there is one.
+The list of devices moves to `/devices`, and the docs that point at it
+follow. The top bar reads Jams, Devices, Records, Settings, and the
+brand keeps linking to `/`. One jam lives at `/jams/{id}`, with the
+transcript, the prompt box for the next turn while the jam is open, the
+watching viewer while it is live, and the recording's Play when it is
+done.
 
 Jams exist only once a provider is set. Until then the station looks
-as it does today, Devices at the root and no Jams in the top bar, and
+as it does today, `/` sending to `/devices` and no Jams in the top bar, and
 the only mention is where the owner will act on it: the AI section on
 Settings opens with a line saying that a model provider turns on
 Jams, a prompt on the front page that drives the station's devices.
 The owner is on Settings before anything can be jammed, to enroll a
 rig, so the line is seen in time without being shown to anyone who
-cannot act on it. Setting the provider turns Jams on and moves it to
-the root; the switch beside the provider turns Jams off again without
+cannot act on it. Setting the provider turns Jams on and points `/` at
+`/jams`; the switch beside the provider turns Jams off again without
 forgetting the key, for a station that is only a broker and wants its
 devices on the front page. While Jams is off, its pages and its API answer 404 with a line
 saying so. A greyed-out prompt with a polite note was the alternative,
@@ -319,8 +321,9 @@ database with the jam.
 
 ## Milestones and acceptance
 
-- [ ] **R8 Jams on a phone**: the Jams page at the root with the
-  prompt, the Devices page at `/devices`, the AI section on Settings
+- [ ] **R8 Jams on a phone**: the Jams page at `/jams` with the
+  prompt, the Devices page at `/devices`, `/` sending to whichever is
+  on, the AI section on Settings
   with provider, model and key and the readiness request, the `jam`
   package with the loop, the OpenAI-compatible client and the MCP
   client, `vibium mcp` beside the station on the Pi and in the Fly
