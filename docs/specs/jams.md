@@ -5,14 +5,25 @@ Nov 6, 2026 · draft for review
 ## Summary and goals
 
 The station's front page, once the owner has set a model provider, is
-a prompt box, the kind ChatGPT and Claude open on: a few lines tall, wide, growing with what is typed, with a
-send button in its corner. A person signs in, reads "What can I check
-for you?" above it, types a claim or an errand, and an agent drives a
-device on the station to do it, while the page shows the agent's steps
-and the device being driven. When the agent is done the answer sits in
-the transcript, and the recording of what it did sits in the Record
-Store, playable from the Records page like any other. Each of these is
-a jam session, a jam for short.
+a prompt box, the kind ChatGPT and Claude open on: a few lines tall,
+wide, growing with what is typed, with a send button in its corner. A
+person signs in, reads "What can I check for you?" above it, types a
+claim or an errand, and an agent drives a device on the station to do
+it, while the page shows the agent's steps and the device being driven.
+When the agent is done the answer sits in the transcript, and the
+recording of what it did sits in the Record Store, playable from the
+Records page like any other. Each of these is a jam session, a jam for
+short.
+
+The point is a station that can show what it is for on its own. Most
+use of a station is an agent on a laptop or in a pipeline, Claude Code,
+Codex or the Vibium CLI, driving a device headlessly through `/session`
+with a token, and nothing here changes for them. A jam is for the
+other case: a demo, a quick question about a phone, a first try after
+enrolling a rig, where there is no laptop set up and the station itself
+should be enough. That sets the ambition. The agent is small, the
+first milestone is modest, and anything a remote agent already does
+better stays with the remote agent.
 
 The agent is what a person does today when they point Claude Code or
 Codex at a phone through Vibium: a model, a loop, and Vibium's tools.
@@ -69,9 +80,12 @@ an API session, so it is one of the rig's sessions and contains one of
 the API's. In this document a session with no qualifier is the
 lower-level kind, and the thing this spec adds is always a jam.
 
-The page does not ask whether a prompt is a check or an errand. The agent
-infers it from the phrasing, as the CLI's two commands do by being two
-commands, and the jam's header says which it took: checking, or doing.
+The page does not ask whether a prompt is a check or an errand. The
+loop offers the model two result tools, one that delivers a verdict
+and one that delivers a result, and the model calls the one that fits
+the prompt, which is the whole of the inference; the jam's header then
+says which it took: checking, or doing. A caller who wants to force it
+can, through the API's `mode`.
 
 ## How a jam goes
 
@@ -85,8 +99,8 @@ A person types a prompt and sends it. The station:
 3. Starts `vibium mcp` as a subprocess with the station's own
    `/session` URL and the jam's token in its environment, the way the
    tutorials set `VIBIUM_CONNECT_URL` and `VIBIUM_CONNECT_API_KEY` for
-   a laptop, and speaks MCP to it over its standard input and output.
-   Vibium opens the session, which takes a hold on the device under the
+   a laptop, speaks MCP to it over its standard input and output, and
+   has it open the session. That takes a hold on the device under the
    person's identity, with the jam named in the hold's subject, so the
    Devices page says who is driving and the rig's recording, when the
    rig records, lands against that hold.
@@ -151,10 +165,11 @@ a phone the model gets screenshot, tap, long press, swipe, keys, type
 and the few others a screen allows, and on a future host with a
 document model it would get the map, find, click and fill set the CLI
 uses on a browser. Session, recording and file tools stay out of the
-model's reach on every kind, as they do in Vibium's own check. Vibium is a static Go binary, so the
-station host needs one file beside the station, which the self-host
-guide and the Fly image add; the station finds it on the path or by a
-flag, and the Settings page says when it is missing.
+model's reach on every kind, as they do in Vibium's own check. Vibium
+is a static Go binary, so the station host needs one file beside the
+station, which the self-host guide and the Fly image add; the station
+finds it on the path or by a flag, and the Settings page says when it
+is missing.
 
 Why not Vibium's own `check` and `run`, which are the same loop with the
 same discipline? Because they were built for a browser the binary
@@ -171,9 +186,9 @@ Why not a container, or a Sprite on Fly? Because there is nothing left
 to isolate. The loop is station code, the model is a web service, and
 Vibium is a subprocess under the station's own user that holds a
 WebSocket and no secret: the key stays in the loop, and Vibium gets only
-the jam's token, which the hold already bounds. A box earns its keep
-when the agent is a large runtime of someone else's, which is the later
-case below, not this one.
+the jam's token, which the hold already bounds. A box would earn its
+keep only for an agent that is a large runtime of someone else's, and
+that agent is better run where it lives, remotely, through `/session`.
 
 The rig is never the agent. It has the phone at the shortest distance,
 but it is the operator's machine and the final gate: it checks grants
@@ -222,29 +237,30 @@ provider is set and Jams is on, so each page has one address and the
 front page is whichever the station is for right now. The Jams page,
 at `/jams`, has the prompt box, sized and placed as the chat products
 place theirs rather than as a hero, a device picker beside it when more
-than one device is online, and under it the list of past jams, with
-when, who, the device, the prompt, and the verdict where there is one.
-The list of devices moves to `/devices`, and the docs that point at it
-follow. The top bar reads Jams, Devices, Records, Settings, and the
-brand keeps linking to `/`. One jam lives at `/jams/{id}`, with the
-transcript, the prompt box for the next turn while the jam is open, the
-watching viewer while it is live, and the recording's Play when it is
-done.
+than one device is online, two or three example prompts under it for
+the device's kind, which a demo can click and a first-time visitor can
+learn from, and below that the list of past jams, with when, who, the
+device, the prompt, and the verdict where there is one. The list of
+devices moves to `/devices`, and the docs that point at it follow. The
+top bar reads Jams, Devices, Records, Settings, and the brand keeps
+linking to `/`. One jam lives at `/jams/{id}`, with the transcript,
+the prompt box for the next turn while the jam is open, the watching
+viewer while it is live, and the recording's Play when it is done.
 
 Jams exist only once a provider is set. Until then the station looks
-as it does today, `/` sending to `/devices` and no Jams in the top bar, and
-the only mention is where the owner will act on it: the AI section on
-Settings opens with a line saying that a model provider turns on
-Jams, a prompt on the front page that drives the station's devices.
-The owner is on Settings before anything can be jammed, to enroll a
-rig, so the line is seen in time without being shown to anyone who
-cannot act on it. Setting the provider turns Jams on and points `/` at
-`/jams`; the switch beside the provider turns Jams off again without
-forgetting the key, for a station that is only a broker and wants its
-devices on the front page. While Jams is off, its pages and its API answer 404 with a line
-saying so. A greyed-out prompt with a polite note was the alternative,
-and it would sit on the front page of every station that never means
-to jam, apologising to people who cannot fix it.
+as it does today, `/` sending to `/devices` and no Jams in the top bar,
+and the only mention is where the owner will act on it: the AI section
+on Settings opens with a line saying that a model provider turns on
+Jams, a prompt on the front page that drives the station's devices. The
+owner is on Settings before anything can be jammed, to enroll a rig, so
+the line is seen in time without being shown to anyone who cannot act
+on it. Setting the provider turns Jams on and points `/` at `/jams`;
+the switch beside the provider turns Jams off again without forgetting
+the key, for a station that is only a broker and wants its devices on
+the front page. While Jams is off, its pages and its API answer 404
+with a line saying so. A greyed-out prompt with a polite note was the
+alternative, and it would sit on the front page of every station that
+never means to jam, apologising to people who cannot fix it.
 
 The API follows the pages, under the token model R5 built:
 
@@ -272,8 +288,8 @@ untouched for five minutes, and an agent waiting on a model can sit
 longer than that between inputs, so the loop's steps count as activity,
 and a jam with no step for the idle time is stopped rather than
 silently losing its phone. And a jam has limits of its own: thirty
-minutes and a few hundred actions by default, which the loop enforces
-and the token's expiry backs even if the loop hangs.
+minutes and a hundred actions by default, which the loop enforces and
+the token's expiry backs even if the loop hangs.
 
 Model cost is the person's, on their own key. The first milestone
 records the tokens the provider reports in the jam's transcript, so
@@ -282,17 +298,15 @@ and per day is the hosted station's concern.
 
 ## Recordings
 
-A jam leaves a recording in the Record Store, tied to its hold like any
-other, and the Records page lists it against the jam. The rig's
-recording of the hold, where the rig records, is the stronger one: it
-shows what the phone showed and received, and the agent cannot alter
-it. The loop also saves its own: each action with its arguments and the
-screenshot that followed, in Vibium's recording format, which the
-Record Player already plays and Roadie already writes, so the writer
-becomes a package both share. That recording exists whether or not the
-rig records, and it carries the model's text beside the pictures. The
-transcript itself, with the token counts, stays in the station's
-database with the jam.
+A jam's recording is the rig's recording of its hold, which the Record
+Store already ties to the hold and the Records page already lists, so
+the jam's page links to it with nothing new. It is the stronger
+recording in any case: it shows what the phone showed and received, and
+the agent cannot alter it. The transcript, with the model's text, the
+tool calls and the token counts, stays in the station's database with
+the jam, and the jam's page shows the two side by side. A rig that does
+not record leaves a jam with its transcript alone, which is an open
+question below until the loop records for itself.
 
 ## Security
 
@@ -319,42 +333,53 @@ database with the jam.
   the jam's visibility: the person who started it and admins, like a
   private recording.
 
-## Milestones and acceptance
+## Milestone and acceptance
 
-- [ ] **R8 Jams on a phone**: the Jams page at `/jams` with the
-  prompt, the Devices page at `/devices`, `/` sending to whichever is
-  on, the AI section on Settings
-  with provider, model and key and the readiness request, the `jam`
-  package with the loop, the OpenAI-compatible client and the MCP
-  client, `vibium mcp` beside the station on the Pi and in the Fly
-  image, the event stream, the transcript with the watching viewer
-  beside it, follow-up turns, the jam's own recording in the Record
-  Store. Gate: a claim typed on the page drives the phone through the
-  station, each step shows as it happens, the verdict shows at the
-  end, a follow-up prompt continues on the same phone, and the jam's
-  recording plays on the Records page. The same on the Fly test
+- [ ] **R8 Jams on a phone**: the Jams page at `/jams` with the prompt
+  and the example prompts, the Devices page at `/devices`, `/` sending
+  to whichever is on, the AI section on Settings with provider, model,
+  key, the readiness request and the Jams switch, the `jam` package
+  with the loop, the OpenAI-compatible client and the MCP client,
+  `vibium mcp` beside the station on the Pi and in the Fly image, the
+  event stream, the transcript with the watching viewer beside it,
+  follow-up turns, the rig's recording linked from the jam. Gate: a
+  claim typed on the page drives the phone through the station, each
+  step shows as it happens, the verdict shows at the end, a follow-up
+  prompt continues on the same phone, and the jam's recording plays
+  from the jam's page and the Records page. The same on the Fly test
   station, with nothing changed but the address.
-- [ ] **R9 Bring your own agent**: a jam whose brain is not the
-  station's loop but a full agent, Claude Code, Codex or `vibium check`
-  once it runs on a screen, in a container on a Pi or a PC and a Sprite
-  on Fly, speaking the same event stream to the same page. The box
-  earns its keep here, because the runtime is large and someone
-  else's. Gate: the R8 gate passes with the agent switched, and nothing
-  of it runs in the station's own process.
+
+## Later, if wanted
+
+None of these is in R8, and each is a separate decision.
+
+- The loop recording for itself, in Vibium's format, so a jam on a rig
+  that does not record still leaves a recording, and so the model's
+  text can sit beside the pictures in the Record Player. Roadie already
+  writes the format, so the writer would become a package both share.
+- Native clients for providers whose OpenAI-compatible endpoints fall
+  short.
+- A budget per jam and per day, for a hosted station.
+- Vibium's own `check` learning a screen, so a jam's verdict and the
+  CLI's are the same code. A Vibium decision, not the station's.
+- A full agent as the jam's brain, Claude Code or Codex in a container
+  or a Sprite, speaking the same event stream to the same page. Noted
+  because it was considered; the framing above says such an agent is
+  better run where it lives.
 
 ## Open questions
 
 - [ ] Whether the OpenAI-compatible endpoints Anthropic and Google
   serve carry everything the loop sends, tool calls with image inputs
   in particular, or whether those two need native clients from the
-  start.
+  start. A demo with Claude depends on the answer.
+- [ ] What `vibium mcp` does on its first tool call when connected to
+  a station: which tool opens the session, and whether the hold is
+  taken then or at start. The first day of R8 settles it.
 - [ ] A prompt that names two devices ("on the phone and the laptop").
   The first milestone takes one device per jam.
 - [ ] Whether the station should download the Vibium binary itself
   when it is missing, pinned to a version it was tested with, or leave
   that to the self-host guide and the image.
-- [ ] Whether Vibium's `check` should learn a screen, so that a jam's
-  verdict and the CLI's are the same code; and until then, whether a
-  jam's verdict should say it came from the station's loop.
-- [ ] Whether a jam's hold should be refused by rigs that do not allow
-  recording, or should simply run with the loop's own recording alone.
+- [ ] Whether a jam should be refused on a rig that does not record,
+  or run with its transcript alone, until the loop records for itself.
