@@ -41,8 +41,14 @@ go build ./cmd/station
 ./station --http :8080 --public-url https://station.example.com --turn-public-ip 203.0.113.9   # behind your own TLS proxy
 ```
 
-To run one on Fly.io, see
-[docs/how-to-guides/deploy-to-fly.md](docs/how-to-guides/deploy-to-fly.md).
+Each release carries static binaries for linux/amd64 and linux/arm64
+as tarballs, with the systemd unit inside, and a Docker image at
+`ghcr.io/vibiumdev/station`.
+[docs/how-to-guides/self-host.md](docs/how-to-guides/self-host.md)
+installs one as a sandboxed systemd service on a Linux host of your
+own, and
+[docs/how-to-guides/deploy-to-fly.md](docs/how-to-guides/deploy-to-fly.md)
+puts one on Fly.io.
 
 The first run makes the station's key and prints its `npub`. Tailnet mode
 joins your tailnet as a node named `station` through `tsnet` and prints a
@@ -108,6 +114,7 @@ events do today, and what they leave open.
 | `station enroll` | Print a one-time enrollment code |
 | `station token create NAME [--read-only]`, `token list`, `token revoke NAME` | API tokens |
 | `station key` | The station's key as npub, hex and fingerprint |
+| `station version` | The build's version |
 
 | Flag | Default | Meaning |
 |---|---|---|
