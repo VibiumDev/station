@@ -108,7 +108,7 @@ var pages = template.Must(template.New("").Funcs(template.FuncMap{"npub": npub, 
 {{define "jams"}}{{template "head" (dict "Title" "Jams" "Name" .Name "Named" .Named)}}{{template "header" .}}
 <main class="wrap jams">
 {{if .Message}}<div class="msg error" role="alert">{{.Message}}</div>{{end}}
-<h1 class="h1 ask">What can I check for you? {{template "help" "jams"}}</h1>
+<h1 class="ask">{{.Ask}} {{template "help" "jams"}}</h1>
 <div class="helptext" id="help-jams" hidden>
 <p>Type a claim about a device, or an errand to run on it, and a jam session begins: a model the owner set up on Settings drives the device through Vibium's tools, the way an agent on a laptop would through this station's API, and the page shows each step as it happens. A claim ends with a verdict, PASS, FAIL or REVIEW, and an errand with a result, COMPLETED or NOT COMPLETED. Which one the model took shows in the jam's header.</p>
 <p><b>Device and model.</b> With one device online and one agent model set, there is nothing to choose. Otherwise pick them beside the prompt. The examples under the box fill it in for the device's kind.</p>

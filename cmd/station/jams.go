@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math/rand/v2"
 	"net/http"
 	"net/url"
 	"os"
@@ -91,6 +92,29 @@ var examples = map[string][]string{
 		"Is a page open, and what is its title?",
 		"Open example.com and tell me what the page says.",
 	},
+}
+
+// greetings rotate above the prompt box, as the chat products' do; the
+// device's kind fills the blank.
+var greetings = []string{
+	"What can I check for you?",
+	"What should the %s do?",
+	"What are we checking today?",
+	"Ready when you are.",
+	"Name a claim, and I'll check it on the %s.",
+	"Tell me what to try on the %s.",
+	"What would you like to know about the %s?",
+}
+
+func greeting(kind string) string {
+	g := greetings[rand.IntN(len(greetings))]
+	if strings.Contains(g, "%s") {
+		if kind == "" {
+			kind = "device"
+		}
+		g = fmt.Sprintf(g, kind)
+	}
+	return g
 }
 
 func examplesFor(kind string) []string {
@@ -515,7 +539,7 @@ func (s *server) jamsData(r *http.Request, p station.Principal, extra map[string
 	}
 	list, _ := s.db.Jams(ctx, subject, 100)
 	agents := s.jams.models.OfRole(jam.RoleAgent)
-	data := map[string]any{"Page": "jams", "Principal": p, "CSRF": s.auth.csrfToken(r), "Devices": online, "Models": agents, "Examples": examplesFor(kind), "Jams": jamViews(list, devs)}
+	data := map[string]any{"Page": "jams", "Principal": p, "CSRF": s.auth.csrfToken(r), "Devices": online, "Models": agents, "Examples": examplesFor(kind), "Jams": jamViews(list, devs), "Ask": greeting(kind)}
 	for k, v := range extra {
 		data[k] = v
 	}
