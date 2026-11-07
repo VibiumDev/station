@@ -112,7 +112,7 @@ var pages = template.Must(template.New("").Funcs(template.FuncMap{"npub": npub, 
 <h1 class="ask">{{.Ask}} {{template "help" "jams"}}</h1>
 <div class="helptext" id="help-jams" hidden>
 <p>Type something to check or try, and a jam session begins. A model set up on Settings drives the device through Vibium's tools, and the page shows each step as it happens. A check ends with a verdict, PASS, FAIL or REVIEW. A try ends with a result, COMPLETED or NOT COMPLETED. The session's header shows which one it was.</p>
-<p><b>Device and model.</b> With one device online and one agent model set, there is nothing to choose. Otherwise pick them beside the prompt. The examples under the box fill it in for the device's kind.</p>
+<p><b>Device and model.</b> If more than one device is online, or more than one agent model is set up, pick which to use beside the prompt. The examples under the box match the kind of device that is online.</p>
 <p><b>While it runs.</b> The session holds the device, so Devices shows it as the holder. Taking the device from there ends the session at once. If the host records holds, the recording is linked from the session when it ends. A follow-up prompt continues the same conversation from where the model left off, for five minutes after a result.</p>
 <p><b>Cost.</b> Model calls go to the provider on the key the model was set up with, and the session's page shows the tokens used. A session ends after thirty minutes or a hundred actions.</p>
 </div>
