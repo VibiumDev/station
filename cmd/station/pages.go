@@ -110,13 +110,13 @@ var pages = template.Must(template.New("").Funcs(template.FuncMap{"npub": npub, 
 {{if .Message}}<div class="msg error" role="alert">{{.Message}}</div>{{end}}
 <h1 class="ask">{{.Ask}} {{template "help" "jams"}}</h1>
 <div class="helptext" id="help-jams" hidden>
-<p>Type a claim about a device, or an errand to run on it, and a jam session begins: a model the owner set up on Settings drives the device through Vibium's tools, the way an agent on a laptop would through this station's API, and the page shows each step as it happens. A claim ends with a verdict, PASS, FAIL or REVIEW, and an errand with a result, COMPLETED or NOT COMPLETED. Which one the model took shows in the jam's header.</p>
+<p>Type something to check on a device, or something to try on it, and a jam session begins: a model the owner set up on Settings drives the device through Vibium's tools, the way an agent on a laptop would through this station's API, and the page shows each step as it happens. Something to check ends with a verdict, PASS, FAIL or REVIEW, and something to try with a result, COMPLETED or NOT COMPLETED. Which one the model took shows in the jam's header.</p>
 <p><b>Device and model.</b> With one device online and one agent model set, there is nothing to choose. Otherwise pick them beside the prompt. The examples under the box fill it in for the device's kind.</p>
 <p><b>While it runs.</b> The jam holds the device like anyone else, so the Devices page shows it as the holder, and the host's recording of the hold, when the host records, is linked from the jam when it ends. Open the device from Devices and take it to end the jam at once. A follow-up prompt on the jam's page continues the same conversation with the device where the model left it, for five minutes after a result.</p>
 <p><b>Cost.</b> Model calls go to the provider on the key the model was set up with, and the jam's page shows the tokens it used. A jam ends after thirty minutes or a hundred actions.</p>
 </div>
 <form class="promptbox" method="post" action="/jams"><input type="hidden" name="csrf" value="{{.CSRF}}">
-<textarea name="prompt" class="prompt" rows="3" placeholder="A claim to check, or an errand to run, on the device" required maxlength="4000" aria-label="Prompt">{{.Prompt}}</textarea>
+<textarea name="prompt" class="prompt" rows="3" placeholder="Something to check, or something to try" required maxlength="4000" aria-label="Prompt">{{.Prompt}}</textarea>
 <div class="promptbar">
 {{if gt (len .Devices) 1}}<select name="device" aria-label="Device">{{range .Devices}}<option value="{{.ID}}">{{if .Label}}{{.Label}}{{else}}{{.Name}}{{end}}</option>{{end}}</select>{{else}}{{range .Devices}}<input type="hidden" name="device" value="{{.ID}}"><span class="muted">{{if .Label}}{{.Label}}{{else}}{{.Name}}{{end}}</span>{{else}}<span class="muted">no device is online</span>{{end}}{{end}}
 {{if gt (len .Models) 1}}<select name="model" aria-label="Model">{{range .Models}}<option value="{{.Name}}"{{if .Default}} selected{{end}}>{{.Name}}</option>{{end}}</select>{{end}}
