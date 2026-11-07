@@ -32,9 +32,8 @@ is one the owner set up on Settings, picked at the prompt when there is
 more than one. The tools are Vibium's own, served by `vibium mcp`
 running beside the station and connected to the station's `/session`
 with the jam's token, so a jam reaches the phone the way every other
-agent does, under a hold the rig checks, plus a few of the station's
-own for what Vibium's do not reach, the phone's sound first. Nothing is
-added to Vibium, and nothing in Vibium sees a key.
+agent does, under a hold the rig checks. Nothing is added to Vibium
+for a jam's sake, and the agent's key never reaches Vibium.
 
 The goals, in order:
 
@@ -46,9 +45,8 @@ The goals, in order:
    does with `vibium mcp` on the same phone, through the same tools
    with the same schemas, so a step that works from a laptop works from
    the page, and when a host with a document model appears, a browser
-   VM or an emulator, Vibium's tools for it come along. Where a device
-   offers something Vibium's tools do not reach, the station adds a
-   tool of its own beside them, in the same list and the same shape.
+   VM or an emulator, Vibium's tools for it come along. Hearing and
+   speaking come the same way, once Vibium has `listen` and `say`.
 3. **The agent is a conversation.** The loop keeps the exchange, so a
    second prompt continues where the first left off and where the
    phone is, and the transcript fills as the agent works, because the
@@ -112,12 +110,11 @@ A person types a prompt and sends it. The station:
    holder, the rig's recording, when the rig records, lands against that
    hold, and because the hold belongs to a token and the owner is a
    person, the owner's Hold button can take the device back.
-4. Runs the loop: sends the model the instruction, the prompt, the
-   tools Vibium offers for this device and the station's own for it;
-   executes each tool call the model returns, through Vibium or in the
-   station; takes a screenshot after each action and sends it back as
-   the observation; repeats until the model delivers a verdict or a
-   result, or a limit stops it.
+4. Runs the loop: sends the model the instruction, the prompt and the
+   tools Vibium offers for this device; executes each tool call the
+   model returns through Vibium; takes a screenshot after each action
+   and sends it back as the observation; repeats until the model
+   delivers a verdict or a result, or a limit stops it.
 5. Shows each step on the page as it happens: the tool call and its
    arguments, the observation, the screenshot, the model's visible
    text, and at the end the verdict or the goal's completion, or an
@@ -136,8 +133,7 @@ ended starts a new one.
 
 ## The agent
 
-The agent has three parts, and the new code is the first and a corner
-of the third.
+The agent has three parts, and only the first is new code.
 
 **The loop** is a package in the station, `jam`, of the shape every
 tool-calling agent has: a conversation, a tool list, a model request, a
@@ -165,9 +161,9 @@ Vibium's names, `VIBIUM_AI_PROVIDER`, `VIBIUM_AI_MODEL`,
 key variable, so a person's existing `ai.env` carries over, and the
 provider table the station keeps (name, default base URL, key variable)
 is the same table Vibium documents. A jam has one agent model, the one
-picked at the prompt, and the loop reaches other models by role for
-what the agent does not do itself: in the first milestone nothing, and
-in the next, hearing, through the station's listen tool below.
+picked at the prompt, and that is the only model the loop talks to.
+The models for hearing and speaking go to Vibium, which makes those
+calls itself, below.
 
 **Vibium's tools** come through `vibium mcp`. The station is the
 MCP client, over standard input and output, and asks the server for its
@@ -184,23 +180,23 @@ station, which the self-host guide and the Fly image add; the station
 finds it on the path or by a flag, and the Settings page says when it
 is missing.
 
-**The station's tools** cover what a device offers and Vibium's tools
-do not reach. The loop puts them in the model's list beside Vibium's,
-in the same shape, and runs them itself. A station tool uses the jam's
-hold the way the viewer uses a person's: through the station's own
-device routes, under the jam's token, so it needs no second credential
-and nothing new on the rig. The first is `listen`. The station already
-relays the phone's speaker as a stream of 48 kHz stereo float PCM under
-view scope, so the tool opens it for the seconds the model asks, up to
-thirty, downmixes and resamples the clip to 16 kHz mono WAV, sends it to
-the transcribe model, and returns the text with the duration. Text,
-because every agent model reads it; an audio-native agent hearing the
-clip itself is a later option. The tool is offered only when a
-transcribe model is set and the device announces audio, and is absent
-otherwise, like a tool for a kind the device is not, with the example
-prompts about sound hidden along with it. A `say` tool, speech into the
-phone's microphone, which the station relays too, is the natural second
-and waits in the list at the end.
+**Ears and a voice** are Vibium's too. Vibium is getting `listen`, a
+command that hears the device and returns what was said, and `say`,
+one that speaks a sentence into it, each calling a speech model of its
+own, and both will be tools in `vibium mcp` like tap and screenshot.
+A jam gets them the way it gets every other tool, and the station adds
+no tool of its own. What the two commands ask of a remote device goes
+over the API session as a BiDi command, which Roadie answers from the
+phone's speaker and into its microphone, the same sound the viewer's
+audio tracks carry, and the station's relay forwards the bytes without
+looking, as it does for a screenshot. The models the two commands call
+are set on Settings like the agent's, under their own roles, and the
+station puts their variables in the subprocess's environment under the
+names Vibium gives them, so Vibium makes those calls with its own
+client and the loop never sees sound at all: a listen returns text, and
+every agent model reads text. The tools appear only when the role's
+model is set and the device announces audio, and the example prompts
+about sound stay hidden with them.
 
 Why not Vibium's own `check` and `run`, which are the same loop with the
 same discipline? Because they were built for a browser the binary
@@ -216,8 +212,9 @@ for that.
 Why not a container, or a Sprite on Fly? Because there is nothing left
 to isolate. The loop is station code, the model is a web service, and
 Vibium is a subprocess under the station's own user that holds a
-WebSocket and no secret: the key stays in the loop, and Vibium gets only
-the jam's token, which the hold already bounds. A box would earn its
+WebSocket and no secret of the agent's: that key stays in the loop, and
+Vibium gets the jam's token, which the hold already bounds, plus the
+speech models' keys when it hears and speaks. A box would earn its
 keep only for an agent that is a large runtime of someone else's, and
 that agent is better run where it lives, remotely, through `/session`.
 
@@ -237,13 +234,13 @@ a local one), the provider's name for the model, the provider's API
 key, and where the provider takes them a base URL and a reasoning
 effort. The role says what a model is for. An **agent** model is a
 jam's brain: it reasons, sees the screenshots and calls the tools, and
-one is picked at jam start. A **transcribe** model turns the phone's
-sound into text for the listen tool: OpenAI's transcription endpoint, a
-local whisper.cpp or faster-whisper server, or anything else that
-speaks that path, since Anthropic has none, so a Claude demo that
-listens needs a second key. Roles for speaking and for live audio are
-reserved at the end. Each role has a default, the one model of that
-role until the owner marks another. Adding a model sends one small
+one is picked at jam start. A **listen** model turns the phone's sound
+into text for `vibium listen`, and a **say** model turns text into
+speech for `vibium say`: OpenAI's audio endpoints, a local whisper or
+TTS server, or anything else Vibium's client reaches, since Anthropic
+has neither, so a Claude demo that listens needs a second key. A role
+for live audio is reserved at the end. Each role has a default, the
+one model of that role until the owner marks another. Adding a model sends one small
 request with its values and shows the answer on the page, so a wrong
 key or an unknown model is seen there and not in a failed jam. The key
 is seen once, as it is typed, and never again: the row says that one is
@@ -349,8 +346,8 @@ longer than that between inputs, so the loop's steps count as activity,
 and a jam with no step for the idle time is stopped rather than
 silently losing its phone. And a jam has limits of its own: thirty
 minutes and a hundred actions by default, which the loop enforces and
-the token's expiry backs even if the loop hangs. A listen counts as
-an action, and its seconds count against the clock.
+the token's expiry backs even if the loop hangs. A listen or a say
+counts as an action, and its seconds count against the clock.
 
 Model cost falls on the key the model was set up with. The first
 milestone records the tokens the provider reports in the jam's
@@ -372,13 +369,15 @@ question below until the loop records for itself.
 ## Security
 
 - A model's key is a secret the owner typed. It lives in the model's
-  file in the `ai` directory, readable by the station's user alone, is
-  read by the loop and sent only to that provider's endpoint over
-  HTTPS, and never appears in the database, in a page after it is
-  typed, in a log, in a URL, or in Vibium's environment.
+  file in the `ai` directory, readable by the station's user alone, and
+  never appears in the database, in a page after it is typed, in a log
+  or in a URL. The agent model's key is read by the loop, sent only to
+  that provider's endpoint over HTTPS, and never reaches Vibium's
+  environment. The listen and say models' keys go into Vibium's
+  environment, since Vibium makes those calls, and nowhere else.
 - The jam's token is scoped to one device and one jam and expires with
   the jam; it travels in a header, never a URL, like every other token,
-  and it is the only credential Vibium receives.
+  and it is the only credential of the station's that Vibium receives.
 - What the screen shows, and what the speaker plays, is data from the
   device, not instructions from the person. The system instruction
   says so, the loop puts every observation, a screenshot or a
@@ -414,26 +413,29 @@ question below until the loop records for itself.
   says which one did it, and the jam's recording plays from the jam's
   page and the Records page. The same on the Fly test station, with
   nothing changed but the address.
-- [ ] **R9 Jams can listen**: the transcribe role on Settings, the
-  `listen` tool in the station, offered when a transcribe model is set
-  and the device announces audio, an example prompt that uses it, and
-  the transcript showing what was heard. Gate: "Open YouTube, play the
+- [ ] **R9 Jams can listen**: once Vibium has `listen` and Roadie
+  answers it. The listen role on Settings, its variables passed to the
+  subprocess, the tool offered when a listen model is set and the
+  device announces audio, an example prompt that uses it, and the
+  transcript showing what was heard. Gate: "Open YouTube, play the
   first video and tell me what is said in its first ten seconds" typed
   on the page plays the video on the phone, the jam listens, and the
   result quotes what it heard; the same with a local whisper server as
-  the transcribe model.
+  the listen model.
+- [ ] **R10 Jams can speak**: once Vibium has `say`. The say role, the
+  tool, and an example prompt that talks to the phone. Gate: "Ask the
+  phone's assistant what time it is and tell me what it answers" says
+  the question into the phone's microphone, the assistant answers out
+  loud, the jam listens, and the result quotes the answer.
 
 ## Later, if wanted
 
-None of these is in R8 or R9, and each is a separate decision.
+None of these is in R8, R9 or R10, and each is a separate decision.
 
-- A `say` tool and a **speak** role: text to speech pushed into the
-  phone's microphone, which the station already relays, so a jam can
-  talk to a phone's voice assistant. After it a **realtime** role, a
-  model that takes and returns audio live, which is a session of a
-  different shape than the loop and the full-duplex call the naming
-  section leaves room for.
-- An audio-native agent model hearing the clip itself instead of a
+- A **realtime** role: a model that takes and returns audio live,
+  which is a session of a different shape than the loop and the
+  full-duplex call the naming section leaves room for.
+- An audio-native agent model hearing the sound itself instead of a
   transcript of it.
 - A person's own models beside the station's, as the provider settings
   describe, when Station has accounts.
@@ -460,10 +462,11 @@ None of these is in R8 or R9, and each is a separate decision.
 - [ ] What `vibium mcp` does on its first tool call when connected to
   a station: which tool opens the session, and whether the hold is
   taken then or at start. The first day of R8 settles it.
-- [ ] Which transcription servers beyond OpenAI's take its request
-  shape. whisper.cpp's server and faster-whisper's do; Gemini hears
-  audio through its own API, and whether its compatible endpoint does
-  is to find out.
+- [ ] What `vibium listen` and `vibium say` ask of a remote device
+  over BiDi, which Roadie then answers from the speaker and into the
+  microphone, and under which variable names Vibium takes their
+  models, which the station passes through. Both are Vibium's to
+  decide; the station follows.
 - [ ] A prompt that names two devices ("on the phone and the laptop").
   The first milestone takes one device per jam.
 - [ ] Whether the station should download the Vibium binary itself
