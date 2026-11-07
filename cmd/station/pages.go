@@ -110,10 +110,10 @@ var pages = template.Must(template.New("").Funcs(template.FuncMap{"npub": npub, 
 {{if .Message}}<div class="msg error" role="alert">{{.Message}}</div>{{end}}
 <h1 class="ask">{{.Ask}} {{template "help" "jams"}}</h1>
 <div class="helptext" id="help-jams" hidden>
-<p>Type something to check on a device, or something to try on it, and a jam session begins: a model the owner set up on Settings drives the device through Vibium's tools, the way an agent on a laptop would through this station's API, and the page shows each step as it happens. Something to check ends with a verdict, PASS, FAIL or REVIEW, and something to try with a result, COMPLETED or NOT COMPLETED. Which one the model took shows in the jam's header.</p>
+<p>Type something to check or try, and a jam session begins. A model set up on Settings drives the device through Vibium's tools, and the page shows each step as it happens. A check ends with a verdict, PASS, FAIL or REVIEW. A try ends with a result, COMPLETED or NOT COMPLETED. The session's header shows which one it was.</p>
 <p><b>Device and model.</b> With one device online and one agent model set, there is nothing to choose. Otherwise pick them beside the prompt. The examples under the box fill it in for the device's kind.</p>
-<p><b>While it runs.</b> The jam holds the device like anyone else, so the Devices page shows it as the holder, and the host's recording of the hold, when the host records, is linked from the jam when it ends. Open the device from Devices and take it to end the jam at once. A follow-up prompt on the jam's page continues the same conversation with the device where the model left it, for five minutes after a result.</p>
-<p><b>Cost.</b> Model calls go to the provider on the key the model was set up with, and the jam's page shows the tokens it used. A jam ends after thirty minutes or a hundred actions.</p>
+<p><b>While it runs.</b> The session holds the device, so Devices shows it as the holder. Taking the device from there ends the session at once. If the host records holds, the recording is linked from the session when it ends. A follow-up prompt continues the same conversation from where the model left off, for five minutes after a result.</p>
+<p><b>Cost.</b> Model calls go to the provider on the key the model was set up with, and the session's page shows the tokens used. A session ends after thirty minutes or a hundred actions.</p>
 </div>
 <form class="promptbox" method="post" action="/jams"><input type="hidden" name="csrf" value="{{.CSRF}}">
 <textarea name="prompt" class="prompt" rows="3" placeholder="Something to check, or something to try" required maxlength="4000" aria-label="Prompt">{{.Prompt}}</textarea>
@@ -185,9 +185,9 @@ var pages = template.Must(template.New("").Funcs(template.FuncMap{"npub": npub, 
 <h2 class="h2">AI {{template "help" "ai"}}</h2>
 <div class="helptext" id="help-ai" hidden>
 <p>A model provider turns on Jams: a prompt on the front page that drives the station's devices. Bring your own keys: each model here is a name of your choosing, a role, a provider, the provider's name for the model, and its API key, which is seen once as it is typed and kept in a file only the station's user can read, under <code>ai/</code> in the data directory, in Vibium's own <code>ai.env</code> format.</p>
-<p><b>Roles.</b> An <i>agent</i> model is a jam's brain: it reasons, sees the screenshots and calls the tools, and one is picked when a jam starts, the default unless there are several to choose from. A <i>listen</i> model turns the device's sound into text and a <i>say</i> model turns text into speech, for Vibium's listen and say, which make those calls themselves; their settings go to Vibium, never the agent's key.</p>
-<p><b>Saving.</b> An agent model is asked for one word when it is saved, so a wrong key or an unknown model is seen here and not in a failed jam. Saving a name again changes its settings and keeps its key unless a new one is typed. A model named <i>host</i> is the station's own environment, when it carries Vibium's variables, and is set there.</p>
-<p><b>Jams.</b> On by itself once an agent model is set, which puts Jams in the top bar and the prompt on the front page; off keeps the keys and puts the devices back on the front page. Jams drive devices through <code>vibium mcp</code>, so the station needs the Vibium binary on its PATH or named with <code>--vibium</code>.</p>
+<p><b>Roles.</b> An <i>agent</i> model is the brain of a jam session: it reasons, sees the screenshots and calls the tools. One is picked when a session starts, the default unless there are several to choose from. A <i>listen</i> model turns the device's sound into text and a <i>say</i> model turns text into speech, for Vibium's listen and say, which make those calls themselves; their settings go to Vibium, never the agent's key.</p>
+<p><b>Saving.</b> An agent model is asked for one word when it is saved, so a wrong key or an unknown model is seen here and not in a failed session. Saving a name again changes its settings and keeps its key unless a new one is typed. A model named <i>host</i> is the station's own environment, when it carries Vibium's variables, and is set there.</p>
+<p><b>Jams.</b> On by itself once an agent model is set, which puts Jams in the top bar and the prompt on the front page; off keeps the keys and puts the devices back on the front page. Sessions drive devices through <code>vibium mcp</code>, so the station needs the Vibium binary on its PATH or named with <code>--vibium</code>.</p>
 </div>
 <p class="muted">A model provider turns on Jams: a prompt on the front page that drives the station's devices. Bring your own keys.</p>
 {{if .Models}}<div class="tablewrap"><table><thead><tr><th>Model</th><th>Role</th><th>Provider</th><th>Key</th><th></th></tr></thead><tbody>
@@ -207,7 +207,7 @@ var pages = template.Must(template.New("").Funcs(template.FuncMap{"npub": npub, 
 <input class="primary" type="submit" value="Add model"></div></form>
 <div class="tablewrap"><table class="kv">
 <tr><th>Jams</th><td>{{if .JamsPossible}}<form class="inline" method="post" action="/settings/jams"><input type="hidden" name="csrf" value="{{.CSRF}}"><input type="hidden" name="on" value="{{if .JamsOn}}0{{else}}1{{end}}">{{if .JamsOn}}on <button class="link" type="submit">turn off</button>{{else}}off <button class="link" type="submit">turn on</button>{{end}}</form>{{else}}<span class="muted">off until an agent model is set</span>{{end}}</td></tr>
-<tr><th>Vibium</th><td>{{if .Vibium}}<code>{{.Vibium}}</code>{{else}}<span class="muted">not found ({{.VibiumMissing}}); jams drive devices through <code>vibium mcp</code>, so put the binary on the station's PATH or pass <code>--vibium</code></span>{{end}}</td></tr>
+<tr><th>Vibium</th><td>{{if .Vibium}}<code>{{.Vibium}}</code>{{else}}<span class="muted">not found ({{.VibiumMissing}}); jam sessions drive devices through <code>vibium mcp</code>, so put the binary on the station's PATH or pass <code>--vibium</code></span>{{end}}</td></tr>
 </table></div>
 
 <h2 class="h2">Enroll a rig {{template "help" "enroll"}}</h2>
