@@ -8,6 +8,7 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
@@ -162,6 +163,9 @@ type Principal struct {
 	Subject  string // "owner", "token:<name>", or a login such as you@example.com
 	ReadOnly bool   // may view, never control
 	Admin    bool   // may enroll and remove rigs, make codes and tokens
+	// Device, when set, is the one device the principal may act on: a
+	// token minted for a jam carries the jam's device.
+	Device string
 }
 
 // Hold is control of one device by one subject, numbered per device so
@@ -262,6 +266,43 @@ func NewID(prefix string) string {
 		panic(err)
 	}
 	return prefix + "_" + hex.EncodeToString(b[:])
+}
+
+// Jam is one jam session: a prompt a person typed on the station, driven
+// on a device by a model through the station's own loop. See
+// docs/specs/jams.md.
+type Jam struct {
+	ID        string    `json:"id"`
+	Subject   string    `json:"subject"` // who started it
+	DeviceID  string    `json:"device"`  // "<rig id>/<name>"
+	Model     string    `json:"model"`   // the agent model's name on Settings
+	Prompt    string    `json:"prompt"`  // the first prompt
+	Mode      string    `json:"mode"`    // "check", "run", or "" when the model picks
+	Status    string    `json:"status"`  // running, done, stopped, failed
+	Took      string    `json:"took"`    // "check" or "run", once the model has chosen
+	Verdict   string    `json:"verdict"` // passed, failed, inconclusive, completed, not_completed
+	Summary   string    `json:"summary"` // the model's explanation of the verdict
+	HoldID    string    `json:"hold"`    // the hold the jam drove the device on
+	Actions   int       `json:"actions"` // tool calls made
+	TokensIn  int       `json:"tokens_in"`
+	TokensOut int       `json:"tokens_out"`
+	Error     string    `json:"error,omitempty"`
+	CreatedAt time.Time `json:"created"`
+	EndedAt   time.Time `json:"ended,omitempty"`
+}
+
+// Open says whether the jam is still running.
+func (j Jam) Open() bool { return j.Status == "running" }
+
+// JamEvent is one step of a jam as the page shows it and the transcript
+// keeps it: a prompt, the model's text, a tool call and its result, a
+// screenshot, the verdict, an error, the end.
+type JamEvent struct {
+	JamID string          `json:"-"`
+	Seq   int             `json:"seq"`
+	At    time.Time       `json:"at"`
+	Kind  string          `json:"kind"`
+	Data  json.RawMessage `json:"data"`
 }
 
 // Blob is a file in the Record Store, named by its SHA-256: a session

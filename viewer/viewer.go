@@ -18,7 +18,7 @@ import (
 	"github.com/VibiumDev/station"
 )
 
-//go:embed webrtc.js shell.js shell.css shell.html pcm-player.js pcm-sender.js pages.css pages.js vibium-logo.png plex-sans.woff2 plex-mono-400.woff2 plex-mono-500.woff2 rajdhani-600.woff2 rajdhani-700.woff2 player
+//go:embed webrtc.js shell.js shell.css shell.html pcm-player.js pcm-sender.js pages.css pages.js jam.js vibium-logo.png plex-sans.woff2 plex-mono-400.woff2 plex-mono-500.woff2 rajdhani-600.woff2 rajdhani-700.woff2 player
 var files embed.FS
 
 func mustRead(name string) []byte {

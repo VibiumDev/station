@@ -34,13 +34,13 @@ var pages = template.Must(template.New("").Funcs(template.FuncMap{"npub": npub, 
 {{define "head"}}<!DOCTYPE html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>{{.Title}} · {{if .Named}}{{.Name}}{{else}}Vibium Station{{end}}</title><link rel="icon" type="image/png" href="/favicon.png"><link rel="apple-touch-icon" href="/apple-touch-icon.png">
-<link rel="stylesheet" href="/viewer/pages.css"><script src="/viewer/pages.js"></script></head><body>{{end}}
+<link rel="stylesheet" href="/viewer/pages.css"><script src="/viewer/pages.js"></script><script src="/viewer/jam.js" defer></script></head><body>{{end}}
 
 {{define "theme"}}<button id="themeBtn" class="iconbtn" type="button" aria-label="Theme"></button>{{end}}
 
 {{define "header"}}<header class="top"><div class="wrap">
 <a class="brand" href="/"><img class="logo" src="/viewer/vibium-logo.png" alt="Vibium"><span class="wordmark">{{if .Named}}{{.Name}}{{else}}Station{{end}}</span></a>
-<nav class="pages"><a href="/"{{if eq (printf "%v" .Page) "index"}} aria-current="page"{{end}}>Devices</a><a href="/records"{{if eq (printf "%v" .Page) "records"}} aria-current="page"{{end}}>Records</a>{{if .Principal.Admin}}<a href="/settings"{{if eq (printf "%v" .Page) "settings"}} aria-current="page"{{end}}>Settings</a>{{end}}</nav>
+<nav class="pages">{{if .JamsOn}}<a href="/jams"{{if eq (printf "%v" .Page) "jams"}} aria-current="page"{{end}}>Jams</a>{{end}}<a href="/devices"{{if eq (printf "%v" .Page) "index"}} aria-current="page"{{end}}>Devices</a><a href="/records"{{if eq (printf "%v" .Page) "records"}} aria-current="page"{{end}}>Records</a>{{if .Principal.Admin}}<a href="/settings"{{if eq (printf "%v" .Page) "settings"}} aria-current="page"{{end}}>Settings</a>{{end}}</nav>
 <div class="account"><span class="who">{{.Principal.Subject}}</span>
 <form class="inline" method="post" action="/logout"><input type="hidden" name="csrf" value="{{.CSRF}}"><button class="link" type="submit">Sign out</button></form></div>
 {{template "theme"}}<span class="break"></span></div></header>{{end}}
@@ -72,7 +72,7 @@ var pages = template.Must(template.New("").Funcs(template.FuncMap{"npub": npub, 
 {{range .Devices}}<tr>
 <td data-l="Device">{{if .ID}}<b>{{if .Label}}{{.Label}}{{else}}{{.Name}}{{end}}</b><span class="sub">{{.Kind}}{{if .Platform}} · {{platform .Platform}}{{end}}{{if .Label}} · {{.Name}}{{end}}</span>{{else}}<span class="muted">no devices announced</span>{{end}}</td>
 <td data-l="Host"><b>{{.Rig.Name}}</b><span class="sub">{{.Rig.ID}}{{if .Recorded}} · <span class="rec" title="This host records every session on the device: each input, and a frame of the screen after each burst of input, kept in the Record Store when the session ends.">records sessions</span>{{end}}</span></td>
-<td data-l="Status">{{if .Online}}<span class="dot on"></span>online{{else}}<span class="dot"></span><span class="muted">offline</span>{{end}}<span class="sub">{{if .Hold}}held by {{.Hold.Subject}}{{else}}available{{end}}{{if .Waiting}} · {{.Waiting}} waiting{{end}}</span></td>
+<td data-l="Status">{{if .Online}}<span class="dot on"></span>online{{else}}<span class="dot"></span><span class="muted">offline</span>{{end}}<span class="sub">{{if .Hold}}held by {{if .Hold.JamID}}<a href="/jams/{{.Hold.JamID}}">jam {{.Hold.JamID}}</a>{{else}}{{.Hold.Subject}}{{end}}{{else}}available{{end}}{{if .Waiting}} · {{.Waiting}} waiting{{end}}</span></td>
 <td class="act">{{if .ID}}<a class="btn small" href="/devices/{{.ID}}/view">Open</a> <a class="btn small" href="/records?device={{.ID}}">Records</a>{{end}}</td>
 </tr>{{end}}</tbody></table></div>{{end}}
 </main>{{template "foot" .}}{{end}}
@@ -103,6 +103,61 @@ var pages = template.Must(template.New("").Funcs(template.FuncMap{"npub": npub, 
 </tr>{{end}}</tbody></table></div>{{end}}
 </main>{{template "foot" .}}{{end}}
 
+{{define "icon-send"}}<svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M12 20V5m0 0-6 6m6-6 6 6" stroke="currentColor" stroke-width="2.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>{{end}}
+
+{{define "jams"}}{{template "head" (dict "Title" "Jams" "Name" .Name "Named" .Named)}}{{template "header" .}}
+<main class="wrap jams">
+{{if .Message}}<div class="msg error" role="alert">{{.Message}}</div>{{end}}
+<h1 class="h1 ask">What can I check for you? {{template "help" "jams"}}</h1>
+<div class="helptext" id="help-jams" hidden>
+<p>Type a claim about a device, or an errand to run on it, and a jam session begins: a model the owner set up on Settings drives the device through Vibium's tools, the way an agent on a laptop would through this station's API, and the page shows each step as it happens. A claim ends with a verdict, PASS, FAIL or REVIEW, and an errand with a result, COMPLETED or NOT COMPLETED. Which one the model took shows in the jam's header.</p>
+<p><b>Device and model.</b> With one device online and one agent model set, there is nothing to choose. Otherwise pick them beside the prompt. The examples under the box fill it in for the device's kind.</p>
+<p><b>While it runs.</b> The jam holds the device like anyone else, so the Devices page shows it as the holder, and the host's recording of the hold, when the host records, is linked from the jam when it ends. Open the device from Devices and take it to end the jam at once. A follow-up prompt on the jam's page continues the same conversation with the device where the model left it, for five minutes after a result.</p>
+<p><b>Cost.</b> Model calls go to the provider on the key the model was set up with, and the jam's page shows the tokens it used. A jam ends after thirty minutes or a hundred actions.</p>
+</div>
+<form class="promptbox" method="post" action="/jams"><input type="hidden" name="csrf" value="{{.CSRF}}">
+<textarea name="prompt" class="prompt" rows="3" placeholder="A claim to check, or an errand to run, on the device" required maxlength="4000" aria-label="Prompt">{{.Prompt}}</textarea>
+<div class="promptbar">
+{{if gt (len .Devices) 1}}<select name="device" aria-label="Device">{{range .Devices}}<option value="{{.ID}}">{{if .Label}}{{.Label}}{{else}}{{.Name}}{{end}}</option>{{end}}</select>{{else}}{{range .Devices}}<input type="hidden" name="device" value="{{.ID}}"><span class="muted">{{if .Label}}{{.Label}}{{else}}{{.Name}}{{end}}</span>{{else}}<span class="muted">no device is online</span>{{end}}{{end}}
+{{if gt (len .Models) 1}}<select name="model" aria-label="Model">{{range .Models}}<option value="{{.Name}}"{{if .Default}} selected{{end}}>{{.Name}}</option>{{end}}</select>{{end}}
+<button class="primary send" type="submit" aria-label="Send">{{template "icon-send"}}</button>
+</div></form>
+<p class="examples">{{range .Examples}}<button class="example" type="button">{{.}}</button>{{end}}</p>
+{{if .Jams}}<div class="tablewrap"><table><thead><tr><th>When</th><th>Who</th><th>Device</th><th>Model</th><th>Prompt</th><th>Verdict</th></tr></thead><tbody>
+{{range .Jams}}<tr><td data-l="When"><a href="/jams/{{.ID}}">{{.When}}</a></td><td data-l="Who">{{.Subject}}</td><td data-l="Device">{{.Label}}</td><td data-l="Model">{{.Model}}</td><td data-l="Prompt">{{.Prompt}}</td>
+<td data-l="Verdict">{{if .Open}}<span class="dot on"></span>running{{else if .Word}}<b class="verdict {{.Verdict}}">{{.Word}}</b>{{else}}<span class="muted">{{.Status}}</span>{{end}}</td></tr>{{end}}
+</tbody></table></div>{{end}}
+</main>{{template "foot" .}}{{end}}
+
+{{define "jam"}}{{template "head" (dict "Title" "Jam" "Name" .Name "Named" .Named)}}{{template "header" .}}
+<main class="wrap jam{{if .Watch}} watching{{end}}">
+<p class="lead"><a href="/jams">Jams</a> › <b>{{.Jam.ID}}</b> <span class="muted">{{.When}} · {{.Jam.Subject}} · {{.DeviceLabel}} · {{.Jam.Model}}{{if .Took}} · {{.Took}}{{end}}{{if .Word}} · {{end}}</span>{{if .Word}}<b class="verdict {{.Jam.Verdict}}">{{.Word}}</b>{{end}}
+{{if .Open}} <form class="inline" method="post" action="/jams/{{.Jam.ID}}/stop"><input type="hidden" name="csrf" value="{{.CSRF}}"><button class="small" type="submit">Stop</button></form>{{end}}
+{{if .Play}} <a class="btn small" href="{{.Play}}">Play the recording</a>{{end}} <a class="btn small" href="/devices/{{.Jam.DeviceID}}/view">Open the device</a></p>
+{{if .Message}}<div class="msg error" role="alert">{{.Message}}</div>{{end}}
+<div class="jamgrid">
+<div class="transcript" id="transcript" data-jam="{{.Jam.ID}}" data-after="{{.Last}}"{{if .Open}} data-open="1"{{end}}>
+{{range .Events}}{{template "event" .}}{{end}}
+</div>
+{{if .Watch}}<iframe class="watch" src="{{.Watch}}" title="Watching {{.DeviceLabel}}" allow="autoplay"></iframe>{{end}}
+</div>
+{{if .Open}}<form class="promptbox" method="post" action="/jams/{{.Jam.ID}}/turns"><input type="hidden" name="csrf" value="{{.CSRF}}">
+<textarea name="prompt" class="prompt" rows="2" placeholder="A follow-up, once the result is in" required maxlength="4000" aria-label="Follow-up prompt"></textarea>
+<div class="promptbar"><button class="primary send" type="submit" aria-label="Send">{{template "icon-send"}}</button></div></form>
+{{else}}<p class="muted">{{.Jam.Status}}{{if .Jam.Error}}: {{.Jam.Error}}{{end}} · {{.Jam.Actions}} actions · {{.Jam.TokensIn}} tokens in, {{.Jam.TokensOut}} out</p>{{end}}
+</main>{{template "foot" .}}{{end}}
+
+{{define "event"}}{{if eq .Kind "turn"}}<div class="ev turn"><span class="t">{{.When}}</span><div class="body"><b>Prompt</b><p>{{.Text}}</p></div></div>
+{{else if eq .Kind "start"}}<div class="ev start"><span class="t">{{.When}}</span><div class="body muted">{{.Text}}</div></div>
+{{else if eq .Kind "text"}}<div class="ev text"><span class="t">{{.When}}</span><div class="body"><p>{{.Text}}</p></div></div>
+{{else if eq .Kind "call"}}<div class="ev call"><span class="t">{{.When}}</span><div class="body"><code>{{.Tool}}{{if .Args}} {{.Args}}{{end}}</code></div></div>
+{{else if eq .Kind "result"}}<div class="ev result{{if .Error}} error{{end}}"><span class="t">{{.When}}</span><div class="body">{{.Text}}</div></div>
+{{else if eq .Kind "shot"}}<div class="ev shot"><span class="t">{{.When}}</span><div class="body">{{if .Image}}<a href="{{.Image}}" target="_blank" rel="noopener"><img src="{{.Image}}" alt="Screenshot {{.Tool}}" loading="lazy"></a>{{end}}</div></div>
+{{else if eq .Kind "verdict"}}<div class="ev verdict"><span class="t">{{.When}}</span><div class="body"><b class="verdict {{.Verdict.Status}}">{{.Word}}</b> {{.Verdict.Summary}}{{if .Verdict.Evidence}}<ul>{{range .Verdict.Evidence}}<li>{{.}}</li>{{end}}</ul>{{end}}{{if .Verdict.Reason}}<span class="muted">{{.Verdict.Reason}}</span>{{end}}</div></div>
+{{else if eq .Kind "error"}}<div class="ev error"><span class="t">{{.When}}</span><div class="body">{{.Text}}</div></div>
+{{else if eq .Kind "end"}}<div class="ev end"><span class="t">{{.When}}</span><div class="body muted">{{.Text}}</div></div>
+{{end}}{{end}}
+
 {{define "play"}}{{template "head" (dict "Title" .Title "Name" .Name "Named" .Named)}}{{template "header" .}}
 <main class="wrap play"><p class="lead"><a href="/records{{if .Device}}?device={{.Device}}{{end}}">Records</a> › <b>{{.Title}}</b> <span class="muted">{{.When}} · {{.Size}} · {{.Uploader}}{{if .Hold}} · {{.Hold}}{{end}}</span> <a class="btn small" href="{{.Download}}">Download</a> <a class="btn small" href="{{.Full}}" target="_blank" rel="noopener">Full page</a></p>
 <iframe class="player" src="{{.Player}}" title="{{.Title}} in the Record Player" allowfullscreen></iframe>
@@ -126,6 +181,34 @@ var pages = template.Must(template.New("").Funcs(template.FuncMap{"npub": npub, 
 <p class="helptext" id="help-name" hidden>What this station is called: in the top bar and the tab title here, and what a rig records when it enrolls. The <code>--name</code> flag sets it too.</p>
 <form class="row" method="post" action="/settings/name"><input type="hidden" name="csrf" value="{{.CSRF}}">
 <input type="text" name="name" value="{{.Name}}" aria-label="Station name" maxlength="60" required> <input type="submit" value="Save"></form>
+
+<h2 class="h2">AI {{template "help" "ai"}}</h2>
+<div class="helptext" id="help-ai" hidden>
+<p>A model provider turns on Jams: a prompt on the front page that drives the station's devices. Bring your own keys: each model here is a name of your choosing, a role, a provider, the provider's name for the model, and its API key, which is seen once as it is typed and kept in a file only the station's user can read, under <code>ai/</code> in the data directory, in Vibium's own <code>ai.env</code> format.</p>
+<p><b>Roles.</b> An <i>agent</i> model is a jam's brain: it reasons, sees the screenshots and calls the tools, and one is picked when a jam starts, the default unless there are several to choose from. A <i>listen</i> model turns the device's sound into text and a <i>say</i> model turns text into speech, for Vibium's listen and say, which make those calls themselves; their settings go to Vibium, never the agent's key.</p>
+<p><b>Saving.</b> An agent model is asked for one word when it is saved, so a wrong key or an unknown model is seen here and not in a failed jam. Saving a name again changes its settings and keeps its key unless a new one is typed. A model named <i>host</i> is the station's own environment, when it carries Vibium's variables, and is set there.</p>
+<p><b>Jams.</b> On by itself once an agent model is set, which puts Jams in the top bar and the prompt on the front page; off keeps the keys and puts the devices back on the front page. Jams drive devices through <code>vibium mcp</code>, so the station needs the Vibium binary on its PATH or named with <code>--vibium</code>.</p>
+</div>
+<p class="muted">A model provider turns on Jams: a prompt on the front page that drives the station's devices. Bring your own keys.</p>
+{{if .Models}}<div class="tablewrap"><table><thead><tr><th>Model</th><th>Role</th><th>Provider</th><th>Key</th><th></th></tr></thead><tbody>
+{{range .Models}}<tr><td data-l="Model"><b>{{.Name}}</b><span class="sub">{{.Model}}{{if .Default}} · default{{end}}{{if .ReasoningEffort}} · {{.ReasoningEffort}}{{end}}</span></td><td data-l="Role">{{.Role}}</td><td data-l="Provider">{{.Provider}}{{if .BaseURL}}<span class="sub">{{.BaseURL}}</span>{{end}}</td>
+<td data-l="Key">{{if .Host}}<span class="muted">from the environment</span>{{else if .HasKey}}set{{else}}<span class="muted">none</span>{{end}}</td>
+<td class="act">{{if not .Host}}{{if not .Default}}<form class="inline" method="post" action="/settings/models/default"><input type="hidden" name="csrf" value="{{$.CSRF}}"><input type="hidden" name="name" value="{{.Name}}"><button class="small" type="submit">Default</button></form> {{end}}<form class="inline" method="post" action="/settings/models/key"><input type="hidden" name="csrf" value="{{$.CSRF}}"><input type="hidden" name="name" value="{{.Name}}"><input type="password" name="key" placeholder="new key" aria-label="New key for {{.Name}}" autocomplete="off"> <button class="small" type="submit">Replace key</button></form> <form class="inline" method="post" action="/settings/models/remove"><input type="hidden" name="csrf" value="{{$.CSRF}}"><input type="hidden" name="name" value="{{.Name}}"><button class="small" type="submit">Remove</button></form>{{end}}</td></tr>{{end}}
+</tbody></table></div>{{end}}
+<form class="card modelform" method="post" action="/settings/models"><input type="hidden" name="csrf" value="{{.CSRF}}">
+<div class="row"><input type="text" name="name" placeholder="name, such as gpt or claude" aria-label="Name" required maxlength="40">
+<select name="role" aria-label="Role">{{range .Roles}}<option value="{{.}}">{{.}}</option>{{end}}</select>
+<select name="provider" aria-label="Provider">{{range .Providers}}<option value="{{.ID}}">{{.Label}}</option>{{end}}</select></div>
+<div class="row"><input type="text" name="model" placeholder="the provider's model name" aria-label="Model" required>
+<input type="password" name="key" placeholder="API key" aria-label="API key" autocomplete="off"></div>
+<div class="row"><input type="text" name="base_url" placeholder="base URL (optional)" aria-label="Base URL">
+<select name="effort" aria-label="Reasoning effort"><option value="">reasoning effort: the provider's default</option>{{range .Efforts}}{{if .}}<option value="{{.}}">{{.}}</option>{{end}}{{end}}</select>
+<label class="check"><input type="checkbox" name="default"> default for its role</label>
+<input class="primary" type="submit" value="Add model"></div></form>
+<div class="tablewrap"><table class="kv">
+<tr><th>Jams</th><td>{{if .JamsPossible}}<form class="inline" method="post" action="/settings/jams"><input type="hidden" name="csrf" value="{{.CSRF}}"><input type="hidden" name="on" value="{{if .JamsOn}}0{{else}}1{{end}}">{{if .JamsOn}}on <button class="link" type="submit">turn off</button>{{else}}off <button class="link" type="submit">turn on</button>{{end}}</form>{{else}}<span class="muted">off until an agent model is set</span>{{end}}</td></tr>
+<tr><th>Vibium</th><td>{{if .Vibium}}<code>{{.Vibium}}</code>{{else}}<span class="muted">not found ({{.VibiumMissing}}); jams drive devices through <code>vibium mcp</code>, so put the binary on the station's PATH or pass <code>--vibium</code></span>{{end}}</td></tr>
+</table></div>
 
 <h2 class="h2">Enroll a rig {{template "help" "enroll"}}</h2>
 <p class="helptext" id="help-enroll" hidden>A rig is a machine with devices on it: a Raspberry Pi running Roadie with a phone wired to it. Enrolling joins it to this station. From then on the rig keeps a tunnel open to the station, the station lists the rig's devices, and holds on them go through the tunnel. An enrollment code is used once and expires after 15 minutes. Its last group is this station's key fingerprint, which the rig checks, so it enrolls with the station you meant. On the same network the rig finds the station by mDNS and the address can be left out.</p>

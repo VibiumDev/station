@@ -44,13 +44,19 @@ func (d *DB) AuditEntries(ctx context.Context, limit int) ([]station.AuditEntry,
 }
 
 // APIToken is a named token an agent signs in with. The secret is shown
-// once, at creation; only its hash is kept.
+// once, at creation; only its hash is kept. A token minted for a jam is
+// bound to one device and expires with the jam.
 type APIToken struct {
 	Name      string
 	ReadOnly  bool
+	Device    string    // the one device the token may act on, or ""
+	ExpiresAt time.Time // zero for a token that lasts until revoked
 	CreatedAt time.Time
 	UsedAt    time.Time
 }
+
+// Expired says whether the token has run out at t.
+func (t APIToken) Expired(at time.Time) bool { return !t.ExpiresAt.IsZero() && !at.Before(t.ExpiresAt) }
 
 // ErrTokenExists says a token of that name already exists.
 var ErrTokenExists = errors.New("a token with that name exists")
@@ -62,6 +68,12 @@ func hashSecret(s string) string {
 
 // CreateToken makes a token and returns its secret.
 func (d *DB) CreateToken(ctx context.Context, name string, readOnly bool) (string, error) {
+	return d.CreateScopedToken(ctx, name, readOnly, "", time.Time{})
+}
+
+// CreateScopedToken makes a token bound to one device and expiring at a
+// time, either of which may be left empty, and returns its secret.
+func (d *DB) CreateScopedToken(ctx context.Context, name string, readOnly bool, device string, expires time.Time) (string, error) {
 	var b [24]byte
 	if _, err := rand.Read(b[:]); err != nil {
 		return "", err
@@ -71,25 +83,25 @@ func (d *DB) CreateToken(ctx context.Context, name string, readOnly bool) (strin
 	if readOnly {
 		ro = 1
 	}
-	_, err := d.db.ExecContext(ctx, `INSERT INTO api_tokens (name, hash, read_only, created_at) VALUES (?, ?, ?, ?)`,
-		name, hashSecret(secret), ro, time.Now().UnixNano())
+	var exp int64
+	if !expires.IsZero() {
+		exp = expires.UnixNano()
+	}
+	_, err := d.db.ExecContext(ctx, `INSERT INTO api_tokens (name, hash, read_only, created_at, device, expires_at) VALUES (?, ?, ?, ?, ?, ?)`,
+		name, hashSecret(secret), ro, time.Now().UnixNano(), device, exp)
 	if err != nil && strings.Contains(err.Error(), "UNIQUE") {
 		return "", ErrTokenExists
 	}
 	return secret, err
 }
 
-// LookupToken finds the token a secret belongs to and notes the use.
-func (d *DB) LookupToken(ctx context.Context, secret string) (APIToken, error) {
+const tokenCols = `name, read_only, created_at, used_at, device, expires_at`
+
+func scanToken(s scanner) (APIToken, error) {
 	var t APIToken
 	var ro int
-	var created, used int64
-	err := d.db.QueryRowContext(ctx, `SELECT name, read_only, created_at, used_at FROM api_tokens WHERE hash = ?`, hashSecret(secret)).
-		Scan(&t.Name, &ro, &created, &used)
-	if errors.Is(err, sql.ErrNoRows) {
-		return t, station.ErrNotFound
-	}
-	if err != nil {
+	var created, used, expires int64
+	if err := s.Scan(&t.Name, &ro, &created, &used, &t.Device, &expires); err != nil {
 		return t, err
 	}
 	t.ReadOnly = ro == 1
@@ -97,29 +109,39 @@ func (d *DB) LookupToken(ctx context.Context, secret string) (APIToken, error) {
 	if used != 0 {
 		t.UsedAt = time.Unix(0, used)
 	}
+	if expires != 0 {
+		t.ExpiresAt = time.Unix(0, expires)
+	}
+	return t, nil
+}
+
+// LookupToken finds the token a secret belongs to and notes the use. An
+// expired token is not found.
+func (d *DB) LookupToken(ctx context.Context, secret string) (APIToken, error) {
+	t, err := scanToken(d.db.QueryRowContext(ctx, `SELECT `+tokenCols+` FROM api_tokens WHERE hash = ?`, hashSecret(secret)))
+	if errors.Is(err, sql.ErrNoRows) || (err == nil && t.Expired(time.Now())) {
+		return t, station.ErrNotFound
+	}
+	if err != nil {
+		return t, err
+	}
 	d.db.ExecContext(ctx, `UPDATE api_tokens SET used_at = ? WHERE name = ?`, time.Now().UnixNano(), t.Name)
 	return t, nil
 }
 
-// Tokens lists the tokens.
+// Tokens lists the tokens the owner made; the ones minted for jams, bound
+// to a device, are the station's own and are left out.
 func (d *DB) Tokens(ctx context.Context) ([]APIToken, error) {
-	rows, err := d.db.QueryContext(ctx, `SELECT name, read_only, created_at, used_at FROM api_tokens ORDER BY created_at`)
+	rows, err := d.db.QueryContext(ctx, `SELECT `+tokenCols+` FROM api_tokens WHERE device = '' ORDER BY created_at`)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
 	var out []APIToken
 	for rows.Next() {
-		var t APIToken
-		var ro int
-		var created, used int64
-		if err := rows.Scan(&t.Name, &ro, &created, &used); err != nil {
+		t, err := scanToken(rows)
+		if err != nil {
 			return nil, err
-		}
-		t.ReadOnly = ro == 1
-		t.CreatedAt = time.Unix(0, created)
-		if used != 0 {
-			t.UsedAt = time.Unix(0, used)
 		}
 		out = append(out, t)
 	}

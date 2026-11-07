@@ -92,7 +92,7 @@ func (a *auth) Authenticate(r *http.Request) (station.Principal, error) {
 		if err != nil {
 			return station.Principal{}, station.ErrUnauthenticated
 		}
-		return station.Principal{Subject: "token:" + tok.Name, ReadOnly: tok.ReadOnly}, nil
+		return station.Principal{Subject: "token:" + tok.Name, ReadOnly: tok.ReadOnly, Device: tok.Device}, nil
 	}
 	if s := a.sessionOf(r); s != nil {
 		return s.principal, nil
@@ -126,8 +126,12 @@ func (a *auth) allowed(login string, tags []string) bool {
 }
 
 // Authorize: the owner and allowed identities do everything; tokens
-// control devices unless read-only; nobody but admins manages.
-func (a *auth) Authorize(_ context.Context, p station.Principal, action station.Action, _ string) error {
+// control devices unless read-only, and a token bound to a device acts
+// on that device alone; nobody but admins manages.
+func (a *auth) Authorize(_ context.Context, p station.Principal, action station.Action, deviceID string) error {
+	if p.Device != "" && deviceID != "" && deviceID != p.Device {
+		return station.ErrForbidden
+	}
 	switch action {
 	case station.ActionView:
 		return nil

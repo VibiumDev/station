@@ -24,6 +24,9 @@ type Config struct {
 	// Allow lists the Tailscale logins and tags that may sign in by
 	// identity in tailnet mode; empty means password only.
 	Allow []string `json:"allow,omitempty"`
+	// JamsOff keeps Jams off although an agent model is set: the switch
+	// on Settings.
+	JamsOff bool `json:"jams_off,omitempty"`
 }
 
 // dataDir is where the station keeps everything: config, key, database,

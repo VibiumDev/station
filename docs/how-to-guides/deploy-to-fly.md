@@ -66,7 +66,8 @@ fly deploy -c deploy/fly/fly.toml --dockerfile Dockerfile --remote-only --ha=fal
 station's in-memory queue of holds require. The first deploy builds the
 image on Fly and takes a few minutes; `fly logs -a NAME` shows the
 station starting, and on the first start it prints `Password set from
-STATION_PASSWORD`.
+STATION_PASSWORD`. The image carries the Vibium binary too, for jams:
+once the station is up, a model added on Settings turns Jams on.
 
 ## 5. Check it
 

@@ -15,6 +15,10 @@ STATION_ARGS="--tailnet --hostname station --allow you@example.com"
 # one-time login link that otherwise appears in its journal.
 #TS_AUTHKEY=tskey-auth-...
 #
+# Where the Vibium binary is, for jams, when it is not on the service's
+# PATH (the npm package puts it under the global node_modules).
+#STATION_VIBIUM=/usr/local/bin/vibium
+#
 # The owner's password, applied at every start, for hosts that keep
 # secrets in environment variables. Otherwise set it once with
 # `station passwd` (docs/how-to-guides/self-host.md) and leave this out.

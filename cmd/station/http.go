@@ -44,6 +44,7 @@ type server struct {
 	turn       *turn.Server // nil when off
 	records    *records.Store
 	recordsDir string
+	jams       *jams
 	turnInfo   string
 	publicURL  string
 	mode       string
@@ -140,7 +141,14 @@ func (s *server) handler() http.Handler {
 	mux.HandleFunc("POST /login", s.loginPost)
 	mux.HandleFunc("POST /logout", s.logout)
 	// Pages.
-	mux.Handle("GET /{$}", s.page(station.ActionView, s.indexPage))
+	mux.Handle("GET /{$}", s.page(station.ActionView, s.homePage))
+	mux.Handle("GET /devices", s.page(station.ActionView, s.indexPage))
+	mux.Handle("GET /jams", s.page(station.ActionView, s.jamsPage))
+	mux.Handle("POST /jams", s.page(station.ActionView, s.startJamForm))
+	mux.Handle("GET /jams/{id}", s.page(station.ActionView, s.jamPage))
+	mux.Handle("POST /jams/{id}/turns", s.page(station.ActionView, s.jamTurnForm))
+	mux.Handle("POST /jams/{id}/stop", s.page(station.ActionView, s.jamStopForm))
+	mux.Handle("GET /jams/{id}/shots/{seq}", s.page(station.ActionView, s.jamShot))
 	mux.Handle("GET /devices/{rig}/{name}/view", s.page(station.ActionView, s.viewPage))
 	mux.Handle("GET /records", s.page(station.ActionView, s.recordsPage))
 	mux.Handle("GET /records/{sha}/play", s.page(station.ActionView, s.playPage))
@@ -159,8 +167,21 @@ func (s *server) handler() http.Handler {
 	mux.Handle("POST /settings/tokens/revoke", s.page(station.ActionManage, s.revokeToken))
 	mux.Handle("POST /settings/codes", s.page(station.ActionManage, s.createCode))
 	mux.Handle("POST /settings/rigs/remove", s.page(station.ActionManage, s.removeRig))
+	mux.Handle("POST /settings/models", s.page(station.ActionManage, s.addModel))
+	mux.Handle("POST /settings/models/remove", s.page(station.ActionManage, s.removeModel))
+	mux.Handle("POST /settings/models/default", s.page(station.ActionManage, s.defaultModel))
+	mux.Handle("POST /settings/models/key", s.page(station.ActionManage, s.modelKey))
+	mux.Handle("POST /settings/jams", s.page(station.ActionManage, s.setJams))
 	// The API.
 	mux.Handle("GET /v1/devices", s.api(station.ActionView, s.listDevices))
+	// Jams: a prompt on the station, answered by the station's own loop.
+	mux.Handle("GET /v1/models", s.api(station.ActionView, s.listModels))
+	mux.Handle("POST /v1/jams", s.api(station.ActionControl, s.startJam))
+	mux.Handle("GET /v1/jams", s.api(station.ActionView, s.listJams))
+	mux.Handle("GET /v1/jams/{id}", s.api(station.ActionView, s.getJam))
+	mux.Handle("POST /v1/jams/{id}/turns", s.api(station.ActionControl, s.jamTurn))
+	mux.Handle("GET /v1/jams/{id}/events", s.api(station.ActionView, s.jamEvents))
+	mux.Handle("POST /v1/jams/{id}/stop", s.api(station.ActionControl, s.stopJam))
 	// The Record Store: Blossom at the root, the station's own calls under /v1/records.
 	mux.HandleFunc("PUT /upload", func(w http.ResponseWriter, r *http.Request) { s.records.ServeUpload(w, r) })
 	mux.HandleFunc("GET /list/{pubkey}", s.blossomList)
@@ -207,14 +228,20 @@ func (s *server) handler() http.Handler {
 
 func deviceID(r *http.Request) string { return r.PathValue("rig") + "/" + r.PathValue("name") }
 
-// secure adds the headers every response carries. The pages have no
-// inline script or style, so the policy is strict.
+// pageCSP is the policy every page carries: no inline script anywhere;
+// inline style attributes are the viewer's layout (Roadie's markup),
+// with no way to run code. A page framed by one of the station's own,
+// the viewer watching a jam, allows that frame and no other.
+const (
+	pageCSP   = "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' blob:; connect-src 'self' wss: ws:; frame-ancestors 'none'; base-uri 'none'; form-action 'self'; object-src 'none'"
+	framedCSP = "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' blob:; connect-src 'self' wss: ws:; frame-ancestors 'self'; base-uri 'none'; form-action 'self'; object-src 'none'"
+)
+
+// secure adds the headers every response carries.
 func secure(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		h := w.Header()
-		// No inline script anywhere; inline style attributes are the
-		// viewer's layout (Roadie's markup), with no way to run code.
-		h.Set("Content-Security-Policy", "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' blob:; connect-src 'self' wss: ws:; frame-ancestors 'none'; base-uri 'none'; form-action 'self'; object-src 'none'")
+		h.Set("Content-Security-Policy", pageCSP)
 		h.Set("X-Content-Type-Options", "nosniff")
 		h.Set("X-Frame-Options", "DENY")
 		h.Set("Referrer-Policy", "same-origin")
@@ -373,6 +400,7 @@ type rigView struct {
 }
 
 type holdView struct {
+	JamID   string    `json:"jam,omitempty"` // when a jam's token holds the device
 	ID      string    `json:"id"`
 	Seq     uint64    `json:"seq"`
 	Subject string    `json:"subject"`
@@ -394,7 +422,7 @@ func (s *server) devices(ctx context.Context) ([]deviceView, error) {
 			v := deviceView{ID: d.ID, Name: d.Name(), Kind: d.Kind, Caps: d.Caps, Shortcuts: d.Shortcuts, Input: d.Input, Extras: d.Extras,
 				Label: d.Label, Platform: d.Platform, Rig: rigView{ID: rg.ID, Name: rg.Name, Npub: npub(rg.PubKey)}, Online: online, Recorded: recorded}
 			if l, err := s.db.Current(ctx, d.ID); err == nil {
-				v.Hold = &holdView{ID: l.ID, Seq: l.Seq, Subject: l.Subject, Scopes: station.ScopeStrings(l.Scopes), Since: l.CreatedAt, Expires: l.ExpiresAt}
+				v.Hold = &holdView{ID: l.ID, Seq: l.Seq, Subject: l.Subject, Scopes: station.ScopeStrings(l.Scopes), Since: l.CreatedAt, Expires: l.ExpiresAt, JamID: jamOfSubject(l.Subject)}
 			}
 			v.Waiting = s.holds.Waiting(d.ID)
 			out = append(out, v)
@@ -691,13 +719,23 @@ func (s *server) releaseHold(w http.ResponseWriter, r *http.Request, p station.P
 
 // --- Pages ---
 
+// homePage is /: the Jams page once a model is set and Jams is on, the
+// Devices page otherwise, so each page has one address.
+func (s *server) homePage(w http.ResponseWriter, r *http.Request, _ station.Principal) {
+	if s.jams.on() {
+		http.Redirect(w, r, "/jams", http.StatusSeeOther)
+		return
+	}
+	http.Redirect(w, r, "/devices", http.StatusSeeOther)
+}
+
 func (s *server) indexPage(w http.ResponseWriter, r *http.Request, p station.Principal) {
 	devs, err := s.devices(r.Context())
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	s.render(w, "index", map[string]any{"Page": "index", "Devices": devs, "Principal": p, "CSRF": s.auth.csrfToken(r)})
+	s.render(w, "index", map[string]any{"Page": "index", "Devices": devs, "Principal": p, "CSRF": s.auth.csrfToken(r), "JamsOn": s.jams.on()})
 }
 
 func (s *server) viewPage(w http.ResponseWriter, r *http.Request, p station.Principal) {
@@ -710,6 +748,9 @@ func (s *server) viewPage(w http.ResponseWriter, r *http.Request, p station.Prin
 	rg, _ := s.db.Rig(r.Context(), r.PathValue("rig"))
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	q := r.URL.Query()
+	if q.Get("minimal") == "1" {
+		w.Header().Set("Content-Security-Policy", framedCSP)
+	}
 	label := dev.Name()
 	if dev.Label != "" {
 		label = dev.Label
@@ -730,7 +771,7 @@ func (s *server) viewPage(w http.ResponseWriter, r *http.Request, p station.Prin
 	if dev.Extras != "" {
 		cfg.Extras = "/v1/devices/" + dev.ID + "/extras.js"
 	}
-	viewer.Render(w, viewer.Page{Title: rg.Name + " / " + label + " · " + s.title(), Minimal: q.Get("minimal") == "1", Home: "/", HomeTitle: "Devices", Config: cfg})
+	viewer.Render(w, viewer.Page{Title: rg.Name + " / " + label + " · " + s.title(), Minimal: q.Get("minimal") == "1", Home: "/devices", HomeTitle: "Devices", Config: cfg})
 }
 
 func (s *server) settingsData(r *http.Request, p station.Principal, extra map[string]any) map[string]any {
@@ -749,6 +790,7 @@ func (s *server) settingsData(r *http.Request, p station.Principal, extra map[st
 	}
 	data["RecordsDir"], data["RecordsMaxFile"], data["RecordsMaxTotal"], data["RecordsMaxAge"] =
 		s.recordsDir, humanSize(s.records.MaxFile), humanSize(s.records.MaxTotal), humanAge(s.records.MaxAge)
+	s.modelsData(data)
 	for k, v := range extra {
 		data[k] = v
 	}
@@ -834,6 +876,7 @@ func (s *server) removeRig(w http.ResponseWriter, r *http.Request, p station.Pri
 // owner set it, and the station's address.
 func (s *server) render(w http.ResponseWriter, name string, data map[string]any) {
 	data["Name"], data["Named"], data["Host"] = s.name(), s.named(), s.host()
+	data["JamsOn"] = s.jams.on()
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	// Every page is one person's view of the moment and changes under
 	// its own forms, so Back refetches it rather than showing the copy

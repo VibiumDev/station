@@ -28,6 +28,10 @@ These parts work:
   Blossom blobs, uploaded with authorizations the station signs for
   agents or a rig signs itself, listed per device and hold, and
   played in place by the embedded Record Player
+- Jams (R8, under way): a prompt on the station's front page, "What can
+  I check for you?", that a model the owner set up on Settings carries
+  out on a device through Vibium's tools, with each step shown as it
+  happens; [docs/specs/jams.md](docs/specs/jams.md)
 
 Packaging and hardening (R6) are under review.
 
@@ -136,6 +140,7 @@ events do today, and what they leave open.
 | `--records-max-file` | `256M` | The largest file the Record Store takes |
 | `--records-max-total` | `2G` | How much it keeps before the oldest files go; `0` for no limit |
 | `--records-max-age` | `720h` | How long it keeps a file; `0` for ever |
+| `--vibium` | `$STATION_VIBIUM`, else `vibium` on `PATH` | The Vibium binary a jam drives devices with, through `vibium mcp` |
 | `--turn` | `auto` | Run the TURN server: `on`, `off`, or `auto` (on in public mode) |
 | `--turn-listen` | `:3478` | TURN's UDP address; `fly-global-services:3478` on Fly.io |
 | `--turn-public-ip` | the `--public` host's address | The public address TURN and its relays are reached at |
@@ -146,6 +151,10 @@ events do today, and what they leave open.
 
 `STATION_PASSWORD` in the environment sets the owner's password when the
 station starts, for hosts whose secrets are environment variables.
+`STATION_VIBIUM` names the Vibium binary the same way `--vibium` does,
+and `VIBIUM_AI_PROVIDER`, `VIBIUM_AI_MODEL` and the provider's key
+variable in the environment are one more agent model on Settings, named
+`host`, for a deployment that keeps the key as a platform secret.
 
 ## Packages
 

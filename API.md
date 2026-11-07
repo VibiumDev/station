@@ -244,6 +244,38 @@ hour. `--records-max-file` (256 MB) caps a single upload, and
 data directory. The file events remain, so what was recorded, by whom
 and on which hold stays on record after the bytes are gone.
 
+## Jams
+
+A jam is a prompt typed on the station and carried out on a device by
+the station's own loop, with a model the owner set up on Settings and
+Vibium's tools through `vibium mcp`; [docs/specs/jams.md](docs/specs/jams.md)
+has the design. The loop opens the device through `/session` like any
+agent, under a token minted for the jam that is bound to the device and
+expires with the jam, so the hold's subject is `token:jam:<id>` and the
+Devices page shows the jam as the holder. Taking the device from it
+ends the jam. While Jams is off, every path here answers 404.
+
+| Method and path | What it does |
+|---|---|
+| `GET /v1/models` | The models on Settings, each with `name`, `role` (`agent`, `listen` or `say`), `provider`, `model` and `default`; never a key |
+| `POST /v1/jams` | Starts a jam: `{"prompt": ..., "device": "<rig>/<name>", "model": "<name>", "mode": "check" or "run"}`; the device may be left out when one is online, the model when one agent model is set, and the mode when the model should decide from the prompt. Needs control. Returns the jam, 201 |
+| `GET /v1/jams` | The caller's jams, newest first; every jam for the owner |
+| `GET /v1/jams/{id}` | `{"jam": ..., "events": [...], "recording": "<sha256>"}`: the jam, its transcript, and the host's recording of its hold when there is one |
+| `POST /v1/jams/{id}/turns` | `{"prompt": ...}`: a follow-up on an open jam, taken up once the current prompt has its result; 409 when the jam has ended or a prompt is already waiting |
+| `GET /v1/jams/{id}/events` | The transcript as server-sent events, each with `id` (the sequence number), `event` (the kind) and `data` (the event), from the start or after `?after=<seq>` or `Last-Event-ID`; a running jam streams on until its `end`, a finished one replays and closes |
+| `POST /v1/jams/{id}/stop` | Ends the jam, which releases the device |
+
+A jam is `running` until it ends `done` (it delivered at least one
+result), `stopped` or `failed`, with `took` saying whether the model
+read the prompt as a `check` or a `run`, `verdict` one of `passed`,
+`failed`, `inconclusive`, `completed` and `not_completed`, and
+`summary` the model's explanation. The event kinds are `start`, `turn`
+(a prompt), `text` (the model's words), `call` (a tool and its
+arguments), `result` (what the tool returned, with `error` when it
+failed), `shot` (a screenshot, at `image`), `verdict`, `usage` (tokens
+in and out), `error` and `end`. A jam ends on its own after thirty
+minutes, a hundred actions, or five minutes without a follow-up.
+
 ## station-probe
 
 `station-probe` is the headless check the spec asks for, built from
@@ -269,13 +301,16 @@ relay-only fails by design, since TURN refuses private peers.
 | Page | What the owner does |
 |---|---|
 | `/login` | Sign in with the password; in tailnet mode an allowed identity needs none |
-| `/` | The devices: rig, kind, online, who controls it, Open, Records |
+| `/` | Sends to `/jams` once an agent model is set and Jams is on, and to `/devices` otherwise |
+| `/jams` | The prompt box, "What can I check for you?", with a device picker when more than one device is online and a model picker when more than one agent model is set, example prompts for the device's kind, and the jams so far |
+| `/jams/{id}` | One jam: its transcript as it happens, the viewer watching the device beside it while it runs, a box for a follow-up prompt, Stop, and Play for the host's recording of its hold when it ends |
+| `/devices` | The devices: rig, kind, online, who controls it, Open, Records |
 | `/devices/{rig}/{name}/view` | The viewer: Roadie's shell with the WebRTC picture, sound, touch and keyboard, the mic, the settings panel, the on-screen keyboard, stats, the device's own buttons and panels from its extras, and Hold and Release. One link for driving and watching: a free device is taken, a held one is watched, and Hold takes it; Release ends the hold and returns to the device list. `?watch=1` watches only; on a touchscreen two fingers moving together turn the wheel and a pinch becomes Apple Maps' one-finger zoom on a device whose pointer stands in for touch (see Roadie's `/view`); `?minimal=1`, `?input=`, `?transport=`, `?ice=relay`, `?toolbar=`, `?align=`, `?zoom=` (a percentage, or `fit` for the room the picture has, the default on a phone or tablet) and `?stats=1` as on a Roadie |
 | `/records` | The Record Store: every recording, screenshot and log the caller may read, newest first, or one device's with `?device=`, as cards showing each recording's last frame, or with `?view=list` as a list; Play, Download, make a file public or private, Delete |
 | `/records/{sha256}/thumb.jpg` | A recording's last frame, from its unpacked copy, or a screenshot itself; the same readers as the file |
 | `/records/{sha256}/files/{path}` | One file out of a recording's unpacked copy, such as `trace.trace` or `resources/<frame>`; the same readers as the file |
 | `/records/{sha256}/play` | A recording in the embedded [Record Player](https://github.com/VibiumDev/record-player), framed under the station's own bar with Download and a full-page link; the player is served by the station at `/viewer/player/app/?record=<sha256>.zip` and fetches the file with the browser's own session. In the frame it runs with `chrome=hidden`, without its own logo, title and theme switch, and paints with the station's colors and theme, which it reads from the framing page; `?full` is the same frame filling the window, without the bar |
-| `/settings` | Enrollment codes, rigs, API tokens, the password, the network, the Record Store's room and limits |
+| `/settings` | The AI models and the Jams switch, enrollment codes, rigs, API tokens, the password, the network, the Record Store's room and limits |
 
 The viewer's files are at `/viewer/shell.js`, `/viewer/shell.css`,
 `/viewer/webrtc.js` and the audio worklets; a Roadie serves the same

@@ -134,6 +134,33 @@ CREATE TABLE IF NOT EXISTS blobs (
 CREATE INDEX IF NOT EXISTS blobs_device ON blobs(device_id, created_at);
 CREATE INDEX IF NOT EXISTS blobs_hold ON blobs(hold_id);
 CREATE INDEX IF NOT EXISTS blobs_age ON blobs(created_at);
+CREATE TABLE IF NOT EXISTS jams (
+	id         TEXT PRIMARY KEY,
+	subject    TEXT NOT NULL,
+	device_id  TEXT NOT NULL,
+	model      TEXT NOT NULL,
+	prompt     TEXT NOT NULL,
+	mode       TEXT NOT NULL DEFAULT '',
+	status     TEXT NOT NULL,
+	took       TEXT NOT NULL DEFAULT '',
+	verdict    TEXT NOT NULL DEFAULT '',
+	summary    TEXT NOT NULL DEFAULT '',
+	hold_id    TEXT NOT NULL DEFAULT '',
+	actions    INTEGER NOT NULL DEFAULT 0,
+	tokens_in  INTEGER NOT NULL DEFAULT 0,
+	tokens_out INTEGER NOT NULL DEFAULT 0,
+	error      TEXT NOT NULL DEFAULT '',
+	created_at INTEGER NOT NULL,
+	ended_at   INTEGER NOT NULL DEFAULT 0
+);
+CREATE TABLE IF NOT EXISTS jam_events (
+	jam_id TEXT NOT NULL,
+	seq    INTEGER NOT NULL,
+	at     INTEGER NOT NULL,
+	kind   TEXT NOT NULL,
+	data   TEXT NOT NULL,
+	PRIMARY KEY (jam_id, seq)
+);
 CREATE TABLE IF NOT EXISTS audit (
 	id        INTEGER PRIMARY KEY AUTOINCREMENT,
 	at        INTEGER NOT NULL,
@@ -175,6 +202,8 @@ func (d *DB) migrate() error {
 		{"blobs", "frames", "INTEGER NOT NULL DEFAULT 0"},
 		{"blobs", "duration_ms", "INTEGER NOT NULL DEFAULT 0"},
 		{"blobs", "thumb", "TEXT NOT NULL DEFAULT ''"},
+		{"api_tokens", "device", "TEXT NOT NULL DEFAULT ''"},
+		{"api_tokens", "expires_at", "INTEGER NOT NULL DEFAULT 0"},
 	} {
 		has, err := d.hasColumn(c.table, c.column)
 		if err != nil {

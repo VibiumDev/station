@@ -28,6 +28,7 @@ import (
 	"github.com/VibiumDev/station/blob"
 	"github.com/VibiumDev/station/enroll"
 	"github.com/VibiumDev/station/hold"
+	"github.com/VibiumDev/station/jam"
 	"github.com/VibiumDev/station/records"
 	"github.com/VibiumDev/station/relay"
 	"github.com/VibiumDev/station/sdnotify"
@@ -238,6 +239,7 @@ func serve(args []string) int {
 	recordsMaxFile := fs.String("records-max-file", "256M", "the largest file the Record Store takes (bytes, or K, M, G)")
 	recordsMaxTotal := fs.String("records-max-total", "2G", "how much the Record Store keeps before the oldest files go (0: no limit)")
 	recordsMaxAge := fs.Duration("records-max-age", 30*24*time.Hour, "how long the Record Store keeps a file (0: for ever)")
+	vibiumPath := fs.String("vibium", "", "the Vibium binary jams drive devices with (default: $STATION_VIBIUM, or vibium on PATH)")
 	fs.Usage = func() { usage(); fmt.Println(); fs.PrintDefaults() }
 	fs.Parse(args)
 
@@ -473,6 +475,18 @@ func serve(args []string) int {
 	s.records = &records.Store{Blobs: blob.Disk{Dir: blobDir}, Index: db, Events: db, Holds: db, Devices: db, Signer: records.Key(key),
 		HoldsOf: db.HoldsOf, BaseURL: base, UnpackDir: filepath.Join(blobDir, "unpacked"), MaxFile: maxFile, MaxTotal: maxTotal, MaxAge: *recordsMaxAge, Audit: db}
 	s.recordsDir = blobDir
+	// Jams: the models the owner set up, under ai/ in the data directory,
+	// and the Vibium binary whose MCP server drives the devices.
+	s.jams = &jams{s: s, models: &jam.Store{Dir: filepath.Join(dir, "ai")}, dir: filepath.Join(dir, "jams"), live: map[string]*liveJam{}}
+	if *vibiumPath == "" {
+		*vibiumPath = os.Getenv("STATION_VIBIUM")
+	}
+	if path, err := jam.LookPath(*vibiumPath); err != nil {
+		s.jams.missing = err.Error()
+	} else {
+		s.jams.vibium = path
+	}
+	s.jams.closeLeftovers(context.Background())
 	if mode == "lan" && !*noMDNS {
 		_, port, _ := net.SplitHostPort(ln.Addr().String())
 		var p int
@@ -538,6 +552,15 @@ func serve(args []string) int {
 	}()
 
 	srv := &http.Server{Handler: s.handler(), ReadHeaderTimeout: 30 * time.Second}
+	// A jam's Vibium reaches /session on a loopback listener without
+	// TLS, since the station's own certificate may be one it made
+	// itself; every request there still needs a token.
+	if lb, err := net.Listen("tcp", "127.0.0.1:0"); err == nil {
+		s.jams.loopback = "ws://" + lb.Addr().String()
+		go srv.Serve(lb)
+	} else {
+		fmt.Fprintln(os.Stderr, "jams: loopback listener:", err)
+	}
 	go func() {
 		<-ctx.Done()
 		sdnotify.Stopping()

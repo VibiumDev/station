@@ -75,6 +75,13 @@ func (s *server) serveSession(w http.ResponseWriter, r *http.Request, p station.
 		}
 		want, _ = fm[DeviceCapability].(string)
 	}
+	if p.Device != "" {
+		if want != "" && want != p.Device {
+			bidiError("session not created", "this token may only use "+p.Device)
+			return
+		}
+		want = p.Device
+	}
 	devID, err := s.pickDevice(ctx, want)
 	if err != nil {
 		bidiError("session not created", err.Error())

@@ -38,6 +38,23 @@ repository, where `make build` produces the same two binaries and
 `make dist` the same tarballs. The Docker image is covered
 [below](#docker).
 
+Jams, the prompt on the station's front page, drive devices through
+`vibium mcp`, so the station also needs the Vibium binary, on its
+`PATH` or named with `--vibium` (or `STATION_VIBIUM` in
+`/etc/default/station`). The npm package carries a static binary for
+each platform; without a Node install, pick the package for the
+machine out of the registry:
+
+```bash
+ARCH=arm64   # or x64
+curl -fL "https://registry.npmjs.org/@vibium/linux-$ARCH/-/linux-$ARCH-26.8.21.tgz" | tar xz
+sudo install -m 755 package/bin/vibium /usr/local/bin/
+vibium --version
+```
+
+Vibium needs no browser for this: a jam's session is the station's own
+device, reached through `/session`.
+
 ## 2. The user and the service
 
 The service runs as a system user named `station` whose home is the

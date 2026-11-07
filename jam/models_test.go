@@ -1,0 +1,84 @@
+package jam
+
+import (
+	"os"
+	"path/filepath"
+	"strings"
+	"testing"
+)
+
+func TestStore(t *testing.T) {
+	dir := t.TempDir()
+	env := map[string]string{}
+	s := &Store{Dir: dir, Getenv: func(k string) string { return env[k] }}
+	if list, err := s.List(); err != nil || len(list) != 0 {
+		t.Fatalf("empty store: %v, %v", list, err)
+	}
+	if err := s.Save(ModelConfig{Name: "gpt", Role: RoleAgent, Provider: "openai", Model: "gpt-5", APIKey: "sk-1"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.Save(ModelConfig{Name: "claude", Role: RoleAgent, Provider: "anthropic", Model: "claude-sonnet-4-6", APIKey: "sk-ant"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.Save(ModelConfig{Name: "ears", Role: RoleListen, Provider: "openai", Model: "whisper-1", APIKey: "sk-1"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.Save(ModelConfig{Name: "bad", Role: RoleAgent, Provider: "openai", Model: "gpt-5"}); err == nil || !strings.Contains(err.Error(), "API key") {
+		t.Errorf("a key is required for OpenAI: %v", err)
+	}
+	if err := s.Save(ModelConfig{Name: "host", Role: RoleAgent, Provider: "local", Model: "x"}); err == nil {
+		t.Error("host is reserved")
+	}
+	info, err := os.Stat(filepath.Join(dir, "gpt.env"))
+	if err != nil || info.Mode().Perm() != 0o600 {
+		t.Errorf("file mode: %v, %v", info, err)
+	}
+	// With nothing marked, the first of a role is the default.
+	d, ok := s.Default(RoleAgent)
+	if !ok || d.Name != "claude" {
+		t.Errorf("default agent: %+v, %v", d, ok)
+	}
+	if err := s.SetDefault("gpt"); err != nil {
+		t.Fatal(err)
+	}
+	d, _ = s.Default(RoleAgent)
+	if d.Name != "gpt" {
+		t.Errorf("default after set: %s", d.Name)
+	}
+	if c, _ := s.Get("claude"); c.Default {
+		t.Error("the other agent should have lost the default mark")
+	}
+	if l, ok := s.Default(RoleListen); !ok || l.Name != "ears" || len(s.OfRole(RoleAgent)) != 2 {
+		t.Errorf("roles: %+v %v", l, ok)
+	}
+	if err := s.SetKey("gpt", "sk-2"); err != nil {
+		t.Fatal(err)
+	}
+	if c, _ := s.Get("gpt"); c.APIKey != "sk-2" || !c.Default || strings.Join(c.Env(), " ") != "VIBIUM_AI_PROVIDER=openai VIBIUM_AI_MODEL=gpt-5 OPENAI_API_KEY=sk-2" {
+		t.Errorf("after key change: %+v %v", c, c.Env())
+	}
+	// A file copied from a laptop, with export lines and quotes and no role.
+	os.WriteFile(filepath.Join(dir, "laptop.env"), []byte("export VIBIUM_AI_PROVIDER=\"xai\"\nVIBIUM_AI_MODEL='grok-4'\n# a comment\nXAI_API_KEY=xai-1\n"), 0o600)
+	if c, err := s.Get("laptop"); err != nil || c.Role != RoleAgent || c.Provider != "xai" || c.Model != "grok-4" || c.APIKey != "xai-1" {
+		t.Errorf("laptop file: %+v, %v", c, err)
+	}
+	// The host's environment is one more agent model, and the default
+	// only when no file is marked.
+	env["VIBIUM_AI_PROVIDER"], env["VIBIUM_AI_MODEL"], env["GEMINI_API_KEY"] = "google", "gemini-2.5-flash", "g-1"
+	h, err := s.Get("host")
+	if err != nil || !h.Host || h.APIKey != "g-1" || h.Default {
+		t.Errorf("host model: %+v, %v", h, err)
+	}
+	if err := s.SetKey("host", "x"); err == nil {
+		t.Error("the host model cannot be edited")
+	}
+	if err := s.Remove("gpt"); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.Remove("gpt"); err != ErrNoModel {
+		t.Errorf("removing twice: %v", err)
+	}
+	if _, err := s.Get("gpt"); err != ErrNoModel {
+		t.Errorf("removed model found: %v", err)
+	}
+}
