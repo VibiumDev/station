@@ -4,8 +4,8 @@ Nov 6, 2026 · draft for review
 
 ## Summary and goals
 
-The station's front page, once the owner has set a model provider, is
-a prompt box, the kind ChatGPT and Claude open on: a few lines tall,
+The station's front page, once the owner has set up a model, is a
+prompt box, the kind ChatGPT and Claude open on: a few lines tall,
 wide, growing with what is typed, with a send button in its corner. A
 person signs in, reads "What can I check for you?" above it, types a
 claim or an errand, and an agent drives a device on the station to do
@@ -28,22 +28,27 @@ better stays with the remote agent.
 The agent is what a person does today when they point Claude Code or
 Codex at a phone through Vibium: a model, a loop, and Vibium's tools.
 The station supplies the loop, a few hundred lines of Go, and the model
-is the one whose key the owner entered on Settings. The tools are
-Vibium's own, served by `vibium mcp` running beside the station and
-connected to the station's `/session` with the jam's token, so a jam
-reaches the phone the way every other agent does, under a hold the rig
-checks. Nothing is added to Vibium, and nothing in Vibium sees the key.
+is one the owner set up on Settings, picked at the prompt when there is
+more than one. The tools are Vibium's own, served by `vibium mcp`
+running beside the station and connected to the station's `/session`
+with the jam's token, so a jam reaches the phone the way every other
+agent does, under a hold the rig checks, plus a few of the station's
+own for what Vibium's do not reach, the phone's sound first. Nothing is
+added to Vibium, and nothing in Vibium sees a key.
 
 The goals, in order:
 
-1. **One prompt, one key.** Once the owner has picked a model provider
-   and pasted its key on Settings, anyone who can sign in to the
-   station can type a sentence and watch a phone act on it.
+1. **One prompt, your keys.** Once the owner has set up a model and
+   its key on Settings, anyone who can sign in to the station can type
+   a sentence and watch a phone act on it. More models are more choices
+   at the prompt, never more setup for the person typing.
 2. **The same tools as the CLI and MCP.** A jam does what Claude Code
    does with `vibium mcp` on the same phone, through the same tools
    with the same schemas, so a step that works from a laptop works from
    the page, and when a host with a document model appears, a browser
-   VM or an emulator, Vibium's tools for it come along.
+   VM or an emulator, Vibium's tools for it come along. Where a device
+   offers something Vibium's tools do not reach, the station adds a
+   tool of its own beside them, in the same list and the same shape.
 3. **The agent is a conversation.** The loop keeps the exchange, so a
    second prompt continues where the first left off and where the
    phone is, and the transcript fills as the agent works, because the
@@ -92,7 +97,8 @@ can, through the API's `mode`.
 A person types a prompt and sends it. The station:
 
 1. Makes a jam record with an id, the prompt, the person, the device
-   chosen (or the only one), and the time.
+   chosen (or the only one), the agent model chosen (or the default),
+   and the time.
 2. Mints a token for the jam: control scope, this device only, this jam
    only, expiring with the jam's time limit. The token never reaches the
    browser.
@@ -106,11 +112,12 @@ A person types a prompt and sends it. The station:
    holder, the rig's recording, when the rig records, lands against that
    hold, and because the hold belongs to a token and the owner is a
    person, the owner's Hold button can take the device back.
-4. Runs the loop: sends the model the instruction, the prompt and the
-   tools Vibium offers for this device; executes each tool call the
-   model returns through Vibium; takes a screenshot after each action
-   and sends it back as the observation; repeats until the model
-   delivers a verdict or a result, or a limit stops it.
+4. Runs the loop: sends the model the instruction, the prompt, the
+   tools Vibium offers for this device and the station's own for it;
+   executes each tool call the model returns, through Vibium or in the
+   station; takes a screenshot after each action and sends it back as
+   the observation; repeats until the model delivers a verdict or a
+   result, or a limit stops it.
 5. Shows each step on the page as it happens: the tool call and its
    arguments, the observation, the screenshot, the model's visible
    text, and at the end the verdict or the goal's completion, or an
@@ -129,7 +136,8 @@ ended starts a new one.
 
 ## The agent
 
-The agent has three parts, and only the first is new code.
+The agent has three parts, and the new code is the first and a corner
+of the third.
 
 **The loop** is a package in the station, `jam`, of the shape every
 tool-calling agent has: a conversation, a tool list, a model request, a
@@ -156,9 +164,12 @@ Vibium's names, `VIBIUM_AI_PROVIDER`, `VIBIUM_AI_MODEL`,
 `VIBIUM_AI_BASE_URL`, `VIBIUM_AI_REASONING_EFFORT` and the provider's
 key variable, so a person's existing `ai.env` carries over, and the
 provider table the station keeps (name, default base URL, key variable)
-is the same table Vibium documents.
+is the same table Vibium documents. A jam has one agent model, the one
+picked at the prompt, and the loop reaches other models by role for
+what the agent does not do itself: in the first milestone nothing, and
+in the next, hearing, through the station's listen tool below.
 
-**The tools** are Vibium's, through `vibium mcp`. The station is the
+**Vibium's tools** come through `vibium mcp`. The station is the
 MCP client, over standard input and output, and asks the server for its
 tool list at the start of each jam. Vibium lists every tool it has
 whatever it is connected to, so the loop narrows the list by the
@@ -172,6 +183,24 @@ is a static Go binary, so the station host needs one file beside the
 station, which the self-host guide and the Fly image add; the station
 finds it on the path or by a flag, and the Settings page says when it
 is missing.
+
+**The station's tools** cover what a device offers and Vibium's tools
+do not reach. The loop puts them in the model's list beside Vibium's,
+in the same shape, and runs them itself. A station tool uses the jam's
+hold the way the viewer uses a person's: through the station's own
+device routes, under the jam's token, so it needs no second credential
+and nothing new on the rig. The first is `listen`. The station already
+relays the phone's speaker as a stream of 48 kHz stereo float PCM under
+view scope, so the tool opens it for the seconds the model asks, up to
+thirty, downmixes and resamples the clip to 16 kHz mono WAV, sends it to
+the transcribe model, and returns the text with the duration. Text,
+because every agent model reads it; an audio-native agent hearing the
+clip itself is a later option. The tool is offered only when a
+transcribe model is set and the device announces audio, and is absent
+otherwise, like a tool for a kind the device is not, with the example
+prompts about sound hidden along with it. A `say` tool, speech into the
+phone's microphone, which the station relays too, is the natural second
+and waits in the list at the end.
 
 Why not Vibium's own `check` and `run`, which are the same loop with the
 same discipline? Because they were built for a browser the binary
@@ -201,64 +230,92 @@ and prompt do not go there.
 ## Provider settings
 
 Jams are bring your own keys. Settings gains an **AI** section that
-opens with what it is for, a model provider turns on Jams, and where
-the owner picks a provider (OpenAI, xAI, Anthropic, Google Gemini, an
-OpenAI-compatible server, or a local one), names the model, pastes the
-provider's API key, and can set the base URL and the reasoning effort
-where the provider takes them. Saving sends one small request with
-those values and shows the answer on the page, so a wrong key or an
-unknown model is seen there and not in a failed jam. The key is seen
-once, as it is typed, and never again: the page says that one is set,
-offers Replace and Remove, and nothing a browser receives afterwards
-contains it. The section also holds the Jams switch, on by default once
-a provider is set, which is what puts Jams in the top bar and the
-prompt on the front page.
+opens with what it is for, a model turns on Jams, and holds a list of
+**models**. Each has a name of the owner's choosing, a role, a provider
+(OpenAI, xAI, Anthropic, Google Gemini, an OpenAI-compatible server, or
+a local one), the provider's name for the model, the provider's API
+key, and where the provider takes them a base URL and a reasoning
+effort. The role says what a model is for. An **agent** model is a
+jam's brain: it reasons, sees the screenshots and calls the tools, and
+one is picked at jam start. A **transcribe** model turns the phone's
+sound into text for the listen tool: OpenAI's transcription endpoint, a
+local whisper.cpp or faster-whisper server, or anything else that
+speaks that path, since Anthropic has none, so a Claude demo that
+listens needs a second key. Roles for speaking and for live audio are
+reserved at the end. Each role has a default, the one model of that
+role until the owner marks another. Adding a model sends one small
+request with its values and shows the answer on the page, so a wrong
+key or an unknown model is seen there and not in a failed jam. The key
+is seen once, as it is typed, and never again: the row says that one is
+set, offers Replace and Remove, and nothing a browser receives
+afterwards contains it. The section also holds the Jams switch, on by
+default once an agent model is set, which is what puts Jams in the top
+bar and the prompt on the front page.
 
-The station keeps the settings in Vibium's own format, an `ai.env` file
-in its data directory written with mode 0600 like `station.key`, holding
-`VIBIUM_AI_PROVIDER`, `VIBIUM_AI_MODEL`, the optional `VIBIUM_AI_BASE_URL`
-and `VIBIUM_AI_REASONING_EFFORT`, and the provider's key variable
-(`OPENAI_API_KEY`, `XAI_API_KEY`, `ANTHROPIC_API_KEY` or
-`GOOGLE_API_KEY`). It is the same file `vibium config init` writes for a
-person, so one copied from a laptop works as it is. Whatever the page
-leaves unset, the station host's environment fills in, so a deployment
-that sets the key as a platform secret works without typing it into
-the page. Changing the settings is an owner action and goes in the
-audit table like making a token, without the key.
+With one agent model the prompt has no picker and the person typing
+sees none of this. With two or more, a picker beside the prompt names
+them with the default selected, so a demo can run the same prompt on
+the same phone with GPT, Claude, Gemini and a local model, and the
+jam's header and the list say which one did it. A jam keeps its model
+through its follow-up turns.
 
-In single-player Station there is one owner and so one set of keys. A
-hosted station is bring your own keys per account, with the same
-section on each account's settings and the file replaced by a
-per-account store, and each jam's loop reading only its own account's
-settings.
+The station keeps each model in Vibium's own format, one file per model
+in an `ai` directory under the data directory, written with mode 0600
+like `station.key`, holding `VIBIUM_AI_PROVIDER`, `VIBIUM_AI_MODEL`, the
+optional `VIBIUM_AI_BASE_URL` and `VIBIUM_AI_REASONING_EFFORT`, and the
+provider's key variable (`OPENAI_API_KEY`, `XAI_API_KEY`,
+`ANTHROPIC_API_KEY` or `GOOGLE_API_KEY`), plus the role and the default
+mark in two variables of the station's own, which Vibium's loader skips
+because it reads only the names it knows. Each file is what `vibium
+config init` writes for a person, so one copied from a laptop under a
+name works as it is. When the station host's environment carries
+Vibium's variables, as a deployment that sets the key as a platform
+secret does, they show as one more agent model named `host`, which the
+page lists and cannot edit, and which is the default when no file is.
+Changing a model is an owner action and goes in the audit table like
+making a token, without the key.
+
+Single-player Station has one owner and so one list, the station's,
+and everyone who can start a jam picks from it. That list is also what
+a team sharing a station on a tailnet needs to keep separate bills: two
+people add their own keys as two named models and each picks their own
+at the prompt, seeing the other's name and never the key. The second
+level, a person's own models offered before the station's with the
+person's default winning per role, is the shape for when Station has
+accounts, which is a hosted station today and Station itself the day
+it grows from single-player to a team: people who know each other on
+one station, not strangers on a service. It is written down here so
+the store gets a subject column from the start, and it is built then.
 
 ## Pages and API
 
-`/` becomes a redirect: to `/devices` by default, and to `/jams` once a
-provider is set and Jams is on, so each page has one address and the
+`/` becomes a redirect: to `/devices` by default, and to `/jams` once an
+agent model is set and Jams is on, so each page has one address and the
 front page is whichever the station is for right now. The Jams page,
 at `/jams`, has the prompt box, sized and placed as the chat products
 place theirs rather than as a hero, a device picker beside it when more
-than one device is online, two or three example prompts under it for
-the device's kind, which a demo can click and a first-time visitor can
-learn from, and below that the list of past jams, with when, who, the
-device, the prompt, and the verdict where there is one. The list of
+than one device is online and a model picker when more than one agent
+model is set, two or three example prompts under it for the device's
+kind and the tools it has, which a demo can click and a first-time
+visitor can learn from, and below that the list of past jams, with
+when, who, the device, the model, the prompt, and the verdict where
+there is one. The list of
 devices moves to `/devices`, and the docs that point at it follow. The
 top bar reads Jams, Devices, Records, Settings, and the brand keeps
 linking to `/`. One jam lives at `/jams/{id}`, with the transcript,
 the prompt box for the next turn while the jam is open, the watching
 viewer while it is live, and the recording's Play when it is done.
 
-Jams exist only once a provider is set. Until then the station looks
-as it does today, `/` sending to `/devices` and no Jams in the top bar,
-and the only mention is where the owner will act on it: the AI section
-on Settings opens with a line saying that a model provider turns on
+Jams exist only once an agent model is set. Until then the station
+looks as it does today, `/` sending to `/devices` and no Jams in the
+top bar, and the only mention is where the owner will act on it: the AI
+section on Settings opens with a line saying that a model turns on
 Jams, a prompt on the front page that drives the station's devices. The
 owner is on Settings before anything can be jammed, to enroll a rig, so
 the line is seen in time without being shown to anyone who cannot act
-on it. Setting the provider turns Jams on and points `/` at `/jams`;
-the switch beside the provider turns Jams off again without forgetting
-the key, for a station that is only a broker and wants its devices on
+on it. Adding the first agent model turns Jams on and points `/` at
+`/jams`; the switch beside the list turns Jams off again without
+forgetting the keys, for a station that is only a broker and wants its devices on
 the front page. While Jams is off, its pages and its API answer 404
 with a line saying so. A greyed-out prompt with a polite note was the
 alternative, and it would sit on the front page of every station that
@@ -268,9 +325,10 @@ The API follows the pages, under the token model R5 built:
 
 | Method and path | What it does |
 | --- | --- |
-| `POST /v1/jams` | Starts a jam: `prompt`, `device`, and `mode` when the caller wants to force check or run. Needs control. Returns the jam with its id. |
+| `POST /v1/jams` | Starts a jam: `prompt`, `device`, `model` (an agent model's name; the default when absent), and `mode` when the caller wants to force check or run. Needs control. Returns the jam with its id. |
 | `GET /v1/jams` | The caller's jams; every jam for an admin. |
-| `GET /v1/jams/{id}` | One jam with its transcript and the recording's SHA-256. |
+| `GET /v1/jams/{id}` | One jam with its model, its transcript and the recording's SHA-256. |
+| `GET /v1/models` | The models set on Settings, by name and role, so a caller knows what to pass. Never a key. |
 | `POST /v1/jams/{id}/turns` | A follow-up prompt on an open jam. |
 | `GET /v1/jams/{id}/events` | The event stream, as server-sent events, from the start of the jam; a finished jam replays and closes. |
 | `POST /v1/jams/{id}/stop` | Ends the jam and releases the hold. |
@@ -291,11 +349,12 @@ longer than that between inputs, so the loop's steps count as activity,
 and a jam with no step for the idle time is stopped rather than
 silently losing its phone. And a jam has limits of its own: thirty
 minutes and a hundred actions by default, which the loop enforces and
-the token's expiry backs even if the loop hangs.
+the token's expiry backs even if the loop hangs. A listen counts as
+an action, and its seconds count against the clock.
 
-Model cost is the person's, on their own key. The first milestone
-records the tokens the provider reports in the jam's transcript, so
-the list can show what a jam cost, and sets no budget. A budget per jam
+Model cost falls on the key the model was set up with. The first
+milestone records the tokens the provider reports in the jam's
+transcript, so the list can show what a jam cost, and sets no budget. A budget per jam
 and per day is the hosted station's concern.
 
 ## Recordings
@@ -312,20 +371,23 @@ question below until the loop records for itself.
 
 ## Security
 
-- The model key is a secret the owner typed. It lives in `ai.env` in
-  the data directory, readable by the station's user alone, is read by
-  the loop and sent only to the provider's endpoint over HTTPS, and
-  never appears in the database, in a page after it is typed, in a log,
-  in a URL, or in Vibium's environment.
+- A model's key is a secret the owner typed. It lives in the model's
+  file in the `ai` directory, readable by the station's user alone, is
+  read by the loop and sent only to that provider's endpoint over
+  HTTPS, and never appears in the database, in a page after it is
+  typed, in a log, in a URL, or in Vibium's environment.
 - The jam's token is scoped to one device and one jam and expires with
   the jam; it travels in a header, never a URL, like every other token,
   and it is the only credential Vibium receives.
-- What the screen shows is data from the device, not instructions from
-  the person. The system instruction says so, the loop puts every
-  observation in a user turn marked untrusted, as Vibium does, and the
-  station adds nothing from the device to anything it signs.
-- The loop offers the model no tool beyond Vibium's device tools: no
-  session control, no recording control, no files, no shell. The
+- What the screen shows, and what the speaker plays, is data from the
+  device, not instructions from the person. The system instruction
+  says so, the loop puts every observation, a screenshot or a
+  transcript of sound, in a user turn marked untrusted, as Vibium
+  does, and the station adds nothing from the device to anything it
+  signs.
+- The loop offers the model no tool beyond the device tools, Vibium's
+  and the station's: no session control, no recording control, no
+  files, no shell. The
   password guard is the instruction and the result tool, not a probe,
   since a screen has no fields to inspect.
 - The rig checks the jam's grant like any grant. A loop that misbehaves
@@ -339,22 +401,42 @@ question below until the loop records for itself.
 
 - [ ] **R8 Jams on a phone**: the Jams page at `/jams` with the prompt
   and the example prompts, the Devices page at `/devices`, `/` sending
-  to whichever is on, the AI section on Settings with provider, model,
-  key, the readiness request and the Jams switch, the `jam` package
-  with the loop, the OpenAI-compatible client and the MCP client,
-  `vibium mcp` beside the station on the Pi and in the Fly image, the
-  event stream, the transcript with the watching viewer beside it,
-  follow-up turns, the rig's recording linked from the jam. Gate: a
-  claim typed on the page drives the phone through the station, each
-  step shows as it happens, the verdict shows at the end, a follow-up
-  prompt continues on the same phone, and the jam's recording plays
-  from the jam's page and the Records page. The same on the Fly test
-  station, with nothing changed but the address.
+  to whichever is on, the AI section on Settings with the list of
+  models, the readiness request on each and the Jams switch, the model
+  picker when more than one agent model is set, the `jam` package with
+  the loop, the OpenAI-compatible client and the MCP client, `vibium
+  mcp` beside the station on the Pi and in the Fly image, the event
+  stream, the transcript with the watching viewer beside it, follow-up
+  turns, the rig's recording linked from the jam. Gate: a claim typed
+  on the page drives the phone through the station, each step shows as
+  it happens, the verdict shows at the end, a follow-up prompt
+  continues on the same phone, the same claim run under a second model
+  says which one did it, and the jam's recording plays from the jam's
+  page and the Records page. The same on the Fly test station, with
+  nothing changed but the address.
+- [ ] **R9 Jams can listen**: the transcribe role on Settings, the
+  `listen` tool in the station, offered when a transcribe model is set
+  and the device announces audio, an example prompt that uses it, and
+  the transcript showing what was heard. Gate: "Open YouTube, play the
+  first video and tell me what is said in its first ten seconds" typed
+  on the page plays the video on the phone, the jam listens, and the
+  result quotes what it heard; the same with a local whisper server as
+  the transcribe model.
 
 ## Later, if wanted
 
-None of these is in R8, and each is a separate decision.
+None of these is in R8 or R9, and each is a separate decision.
 
+- A `say` tool and a **speak** role: text to speech pushed into the
+  phone's microphone, which the station already relays, so a jam can
+  talk to a phone's voice assistant. After it a **realtime** role, a
+  model that takes and returns audio live, which is a session of a
+  different shape than the loop and the full-duplex call the naming
+  section leaves room for.
+- An audio-native agent model hearing the clip itself instead of a
+  transcript of it.
+- A person's own models beside the station's, as the provider settings
+  describe, when Station has accounts.
 - The loop recording for itself, in Vibium's format, so a jam on a rig
   that does not record still leaves a recording, and so the model's
   text can sit beside the pictures in the Record Player. Roadie already
@@ -378,6 +460,10 @@ None of these is in R8, and each is a separate decision.
 - [ ] What `vibium mcp` does on its first tool call when connected to
   a station: which tool opens the session, and whether the hold is
   taken then or at start. The first day of R8 settles it.
+- [ ] Which transcription servers beyond OpenAI's take its request
+  shape. whisper.cpp's server and faster-whisper's do; Gemini hears
+  audio through its own API, and whether its compatible endpoint does
+  is to find out.
 - [ ] A prompt that names two devices ("on the phone and the laptop").
   The first milestone takes one device per jam.
 - [ ] Whether the station should download the Vibium binary itself
