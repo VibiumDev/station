@@ -253,7 +253,7 @@ iframe.player.full { position: fixed; inset: 0; width: 100%; height: 100%; borde
 .promptbar { display: flex; gap: 8px; align-items: center; justify-content: flex-end; flex-wrap: wrap; margin-top: 4px; }
 .promptbar .muted { margin-right: auto; font-size: 14px; }
 .promptbar select { min-height: 34px; padding: 4px 28px 4px 10px; font-size: 14px; }
-.send { border-radius: 50%; width: 36px; height: 36px; padding: 0; display: inline-flex; align-items: center; justify-content: center; }
+.send { border-radius: 50%; width: 36px; height: 36px; min-width: 36px; min-height: 36px; padding: 0; flex: 0 0 36px; display: inline-flex; align-items: center; justify-content: center; line-height: 1; }
 .examples { display: flex; gap: 8px; flex-wrap: wrap; margin: 0 0 24px; }
 .example { font-size: 14px; }
 .jamgrid { display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; align-items: start; }
