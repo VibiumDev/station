@@ -71,10 +71,11 @@ pre { background: var(--surface); border: 1px solid var(--line-card); border-rad
 .top .pages a { color: var(--text-2); text-decoration: none; }
 .top .pages a:hover { color: var(--text); }
 .top .pages a[aria-current="page"] { color: var(--text); font-weight: 600; }
-.top .account { display: flex; gap: 16px; align-items: center; margin-left: auto; font-size: 15px; }
-.top .who { color: var(--text-muted); font-family: var(--mono); font-size: 13px; }
+.top .account { display: flex; gap: 10px; align-items: center; margin-left: auto; font-size: 15px; }
+.top .who { color: var(--text-muted); font-family: var(--mono); font-size: 13px; max-width: 40vw; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .top .iconbtn { margin-left: auto; }
-.top .account ~ .iconbtn { margin-left: 16px; }
+.top .signout .iconbtn { margin-left: 0; }
+.top .account ~ .iconbtn { margin-left: 8px; }
 .top .break { display: none; flex-basis: 100%; height: 0; }
 
 main { flex: 1; }
@@ -178,14 +179,17 @@ input[type=radio], input[type=checkbox] { accent-color: var(--accent); width: 16
    lines, so nothing scrolls sideways or breaks mid-word. */
 @media (max-width: 640px) {
   .wrap { padding: 0 16px; }
-  /* Two rows: the wordmark and the theme button, then the page links
-     at the left and the account at the right. */
+  /* Two rows: the wordmark, who is signed in and the theme button, then
+     the page links at the left and Sign out at the right. */
   .top .wrap { padding: 14px 16px; gap: 10px 16px; }
   .top .brand { order: 1; }
-  .top .iconbtn, .top .account ~ .iconbtn { order: 2; margin-left: auto; }
-  .top .break { order: 3; display: block; }
-  .top .pages { order: 4; margin-left: 0; gap: 6px 16px; }
-  .top .account { order: 5; gap: 12px; }
+  .top .account { display: contents; }
+  .top .who { order: 2; margin-left: auto; max-width: 36vw; }
+  .top .iconbtn { order: 3; margin-left: auto; }
+  .top .account ~ .iconbtn { margin-left: 0; }
+  .top .break { order: 4; display: block; }
+  .top .pages { order: 5; margin-left: 0; gap: 6px 16px; }
+  .top .signout { order: 6; margin-left: auto; }
   main.wrap { padding-top: 36px; padding-bottom: 56px; }
   .h2 { margin-top: 40px; }
   .tablewrap table:not(.kv) thead { display: none; }
@@ -254,8 +258,16 @@ iframe.player.full { position: fixed; inset: 0; width: 100%; height: 100%; borde
 .promptbar .muted { margin-right: auto; font-size: 14px; }
 .promptbar select { min-height: 34px; padding: 4px 28px 4px 10px; font-size: 14px; }
 .send { border-radius: 50%; width: 36px; height: 36px; min-width: 36px; min-height: 36px; padding: 0; flex: 0 0 36px; display: inline-flex; align-items: center; justify-content: center; line-height: 1; }
+/* The examples under the box: quiet pills, wrapping on a wide screen and
+   one row that scrolls sideways on a phone. */
 .examples { display: flex; gap: 8px; flex-wrap: wrap; margin: 0 0 24px; }
-.example { font-size: 14px; }
+.example { font-size: 13px; font-weight: 400; min-height: 32px; padding: 5px 12px; border-radius: 999px; color: var(--text-3); border-color: var(--line-card); }
+.example:hover { color: var(--text); border-color: var(--line-strong); }
+@media (max-width: 640px) {
+  .examples { flex-wrap: nowrap; overflow-x: auto; margin: 0 -16px 20px; padding: 0 16px; scrollbar-width: none; }
+  .examples::-webkit-scrollbar { display: none; }
+  .example { flex: 0 0 auto; display: inline-block; max-width: 240px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; line-height: 20px; }
+}
 .jamgrid { display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; align-items: start; }
 .jam.watching .jamgrid { grid-template-columns: minmax(0, 1fr) 300px; }
 @media (max-width: 820px) { .jam.watching .jamgrid { grid-template-columns: minmax(0, 1fr); } }

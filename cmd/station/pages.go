@@ -42,7 +42,7 @@ var pages = template.Must(template.New("").Funcs(template.FuncMap{"npub": npub, 
 <a class="brand" href="/"><img class="logo" src="/viewer/vibium-logo.png" alt="Vibium"><span class="wordmark">{{if .Named}}{{.Name}}{{else}}Station{{end}}</span></a>
 <nav class="pages">{{if .JamsOn}}<a href="/jams"{{if eq (printf "%v" .Page) "jams"}} aria-current="page"{{end}}>Jams</a>{{end}}<a href="/devices"{{if eq (printf "%v" .Page) "index"}} aria-current="page"{{end}}>Devices</a><a href="/records"{{if eq (printf "%v" .Page) "records"}} aria-current="page"{{end}}>Records</a>{{if .Principal.Admin}}<a href="/settings"{{if eq (printf "%v" .Page) "settings"}} aria-current="page"{{end}}>Settings</a>{{end}}</nav>
 <div class="account"><span class="who">{{.Principal.Subject}}</span>
-<form class="inline" method="post" action="/logout"><input type="hidden" name="csrf" value="{{.CSRF}}"><button class="link" type="submit">Sign out</button></form></div>
+<form class="inline signout" method="post" action="/logout"><input type="hidden" name="csrf" value="{{.CSRF}}"><button class="iconbtn" type="submit" aria-label="Sign out" title="Sign out">{{template "icon-signout"}}</button></form></div>
 {{template "theme"}}<span class="break"></span></div></header>{{end}}
 
 {{define "foot"}}</body></html>{{end}}
@@ -103,6 +103,7 @@ var pages = template.Must(template.New("").Funcs(template.FuncMap{"npub": npub, 
 </tr>{{end}}</tbody></table></div>{{end}}
 </main>{{template "foot" .}}{{end}}
 
+{{define "icon-signout"}}<svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>{{end}}
 {{define "icon-send"}}<svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M12 20V5m0 0-6 6m6-6 6 6" stroke="currentColor" stroke-width="2.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>{{end}}
 
 {{define "jams"}}{{template "head" (dict "Title" "Jams" "Name" .Name "Named" .Named)}}{{template "header" .}}
