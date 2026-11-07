@@ -835,6 +835,10 @@ func (s *server) removeRig(w http.ResponseWriter, r *http.Request, p station.Pri
 func (s *server) render(w http.ResponseWriter, name string, data map[string]any) {
 	data["Name"], data["Named"], data["Host"] = s.name(), s.named(), s.host()
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	// Every page is one person's view of the moment and changes under
+	// its own forms, so Back refetches it rather than showing the copy
+	// the browser kept.
+	w.Header().Set("Cache-Control", "no-store")
 	if err := pages.ExecuteTemplate(w, name, data); err != nil {
 		log.Printf("render %s: %v", name, err)
 	}

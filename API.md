@@ -232,7 +232,8 @@ the owner or for a `t=list` event signed by that key.
 `DELETE /<sha256>` removes the bytes and the index entry, while the file
 event stays, for the owner, the uploader, or a `t=delete` event signed
 by the station or the uploading rig. The Records page does the same, and
-marks a file public or private again.
+marks a file public or private again; public opens the raw file link
+alone, and the Play page stays behind sign-in.
 
 ### Retention
 

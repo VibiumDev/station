@@ -216,7 +216,7 @@ func (s *server) recordsData(r *http.Request, p station.Principal, extra map[str
 	}
 	count, size, _ := s.db.BlobTotal(r.Context())
 	data := map[string]any{
-		"Page": "records", "Principal": p, "CSRF": s.auth.csrfToken(r), "Records": views, "Device": device, "Grid": r.FormValue("view") != "list",
+		"Page": "records", "Principal": p, "CSRF": s.auth.csrfToken(r), "Records": views, "Device": device, "Grid": r.FormValue("view") != "list", "Hold": r.FormValue("hold"),
 		"DeviceLabel": labels[device], "Count": count, "Total": humanSize(size),
 		"MaxFile": humanSize(s.records.MaxFile), "MaxTotal": humanSize(s.records.MaxTotal), "MaxAge": humanAge(s.records.MaxAge),
 	}
@@ -274,9 +274,15 @@ func (s *server) recordsPage(w http.ResponseWriter, r *http.Request, p station.P
 
 // backToRecords returns to the Records page the form came from.
 func backToRecords(w http.ResponseWriter, r *http.Request) {
+	q := url.Values{}
+	for _, k := range []string{"device", "view", "hold"} {
+		if v := r.FormValue(k); v != "" {
+			q.Set(k, v)
+		}
+	}
 	to := "/records"
-	if d := r.FormValue("device"); d != "" {
-		to += "?device=" + url.QueryEscape(d)
+	if len(q) > 0 {
+		to += "?" + q.Encode()
 	}
 	http.Redirect(w, r, to, http.StatusSeeOther)
 }
