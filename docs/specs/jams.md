@@ -441,8 +441,11 @@ None of these is in R8, R9 or R10, and each is a separate decision.
   describe, when Station has accounts.
 - The loop recording for itself, in Vibium's format, so a jam on a rig
   that does not record still leaves a recording, and so the model's
-  text can sit beside the pictures in the Record Player. Roadie already
-  writes the format, so the writer would become a package both share.
+  text, and the words a listen heard, can sit beside the pictures in
+  the Record Player. The rig's recording can carry the sound, but the
+  words come back from the speech model to Vibium and the station and
+  never reach the rig. Roadie already writes the format, so the writer
+  would become a package both share.
 - Native clients for providers whose OpenAI-compatible endpoints fall
   short.
 - A budget per jam and per day, for a hosted station.
