@@ -94,8 +94,23 @@ func (m *Model) Endpoint() string {
 }
 
 // Complete asks the model for its next message given the conversation
-// and the tools; force names a tool the model must call.
+// and the tools; force names a tool the model must call. An OpenAI
+// model with no effort set gets the one its family needs for tools,
+// and a provider that refuses tools with reasoning is asked once more
+// with reasoning off.
 func (m *Model) Complete(ctx context.Context, messages []Message, tools []Tool, force string) (Reply, error) {
+	effort := m.ReasoningEffort
+	if effort == "" && m.Provider == "openai" && len(tools) > 0 {
+		effort = OpenAIEffortDefault(m.Name)
+	}
+	reply, err := m.complete(ctx, messages, tools, force, effort)
+	if err != nil && effort != "none" && len(tools) > 0 && strings.Contains(err.Error(), "reasoning_effort") {
+		reply, err = m.complete(ctx, messages, tools, force, "none")
+	}
+	return reply, err
+}
+
+func (m *Model) complete(ctx context.Context, messages []Message, tools []Tool, force, effort string) (Reply, error) {
 	payload := map[string]any{"model": m.Name, "messages": messages}
 	if len(tools) > 0 {
 		var fs []map[string]any
@@ -115,8 +130,8 @@ func (m *Model) Complete(ctx context.Context, messages []Message, tools []Tool, 
 			payload["parallel_tool_calls"] = false
 		}
 	}
-	if m.ReasoningEffort != "" && m.Provider != "anthropic" && m.Provider != "google" {
-		payload["reasoning_effort"] = m.ReasoningEffort
+	if effort != "" && m.Provider != "anthropic" && m.Provider != "google" {
+		payload["reasoning_effort"] = effort
 	}
 	data, err := m.post(ctx, m.Endpoint()+"/chat/completions", payload)
 	if err != nil {
@@ -165,15 +180,32 @@ func contentText(raw json.RawMessage) string {
 	return ""
 }
 
-// Ping sends the smallest request that proves the model answers, the
-// readiness check Settings runs when a model is saved, and returns what
-// it said.
+// Ping sends the smallest request that proves the model answers the way
+// a jam needs, with a tool to call, which is the readiness check
+// Settings runs when a model is saved, and returns what it said.
 func (m *Model) Ping(ctx context.Context) (string, error) {
-	reply, err := m.Complete(ctx, []Message{{Role: "user", Content: "Reply with the single word: ready"}}, nil, "")
+	if problem := ChatToolsProblem(m.Provider, m.Name); problem != "" {
+		return "", errors.New(problem)
+	}
+	ready := Tool{Name: "ready", Description: "Say that you are ready.", Parameters: json.RawMessage(`{"type":"object","properties":{"word":{"type":"string","description":"One word."}},"required":["word"]}`)}
+	reply, err := m.Complete(ctx, []Message{{Role: "user", Content: "Call the ready tool with the word ready."}}, []Tool{ready}, ready.Name)
 	if err != nil {
 		return "", err
 	}
+	for _, c := range reply.Message.ToolCalls {
+		if c.Function.Name == ready.Name {
+			var args struct{ Word string }
+			json.Unmarshal([]byte(c.Function.Arguments), &args)
+			if args.Word != "" {
+				return args.Word, nil
+			}
+			return "ready", nil
+		}
+	}
 	text, _ := reply.Message.Content.(string)
+	if text == "" {
+		return "", errors.New("the model answered without calling the tool")
+	}
 	return strings.TrimSpace(text), nil
 }
 

@@ -144,7 +144,7 @@ var pages = template.Must(template.New("").Funcs(template.FuncMap{"npub": npub, 
 {{if .Open}}<form class="promptbox" method="post" action="/jams/{{.Jam.ID}}/turns"><input type="hidden" name="csrf" value="{{.CSRF}}">
 <textarea name="prompt" class="prompt" rows="2" placeholder="A follow-up, once the result is in" required maxlength="4000" aria-label="Follow-up prompt"></textarea>
 <div class="promptbar"><button class="primary send" type="submit" aria-label="Send">{{template "icon-send"}}</button></div></form>
-{{else}}<p class="muted">{{.Jam.Status}}{{if .Jam.Error}}: {{.Jam.Error}}{{end}} · {{.Jam.Actions}} actions · {{.Jam.TokensIn}} tokens in, {{.Jam.TokensOut}} out</p>{{end}}
+{{else}}<p class="muted">{{.Jam.Status}} · {{.Jam.Actions}} actions · {{.Jam.TokensIn}} tokens in, {{.Jam.TokensOut}} out</p>{{end}}
 </main>{{template "foot" .}}{{end}}
 
 {{define "event"}}{{if eq .Kind "turn"}}<div class="ev turn"><span class="t">{{.When}}</span><div class="body"><b>Prompt</b><p>{{.Text}}</p></div></div>
@@ -202,7 +202,7 @@ var pages = template.Must(template.New("").Funcs(template.FuncMap{"npub": npub, 
 <div class="row"><input type="text" name="model" placeholder="the provider's model name" aria-label="Model" required>
 <input type="password" name="key" placeholder="API key" aria-label="API key" autocomplete="off"></div>
 <div class="row"><input type="text" name="base_url" placeholder="base URL (optional)" aria-label="Base URL">
-<select name="effort" aria-label="Reasoning effort"><option value="">reasoning effort: the provider's default</option>{{range .Efforts}}{{if .}}<option value="{{.}}">{{.}}</option>{{end}}{{end}}</select>
+<select name="effort" aria-label="Reasoning effort"><option value="">reasoning effort: automatic</option>{{range .Efforts}}{{if .}}<option value="{{.}}">{{.}}</option>{{end}}{{end}}</select>
 <label class="check"><input type="checkbox" name="default"> default for its role</label>
 <input class="primary" type="submit" value="Add model"></div></form>
 <div class="tablewrap"><table class="kv">

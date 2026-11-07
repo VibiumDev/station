@@ -162,6 +162,9 @@ func (m *jams) start(ctx context.Context, p station.Principal, prompt, deviceID,
 	} else if model, err = m.models.Get(modelName); err != nil || model.Role != jam.RoleAgent {
 		return station.Jam{}, errors.New("no agent model named " + modelName)
 	}
+	if problem := jam.ChatToolsProblem(model.Provider, model.Model); problem != "" {
+		return station.Jam{}, errors.New(problem)
+	}
 	j := station.Jam{ID: station.NewID("jam"), Subject: p.Subject, DeviceID: dev.ID, Model: model.Name, Prompt: prompt, Mode: mode, Status: "running", CreatedAt: time.Now()}
 	if err := m.s.db.CreateJam(ctx, j); err != nil {
 		return station.Jam{}, err

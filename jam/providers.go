@@ -1,6 +1,9 @@
 package jam
 
-import "encoding/base64"
+import (
+	"encoding/base64"
+	"strings"
+)
 
 // Provider is one model provider as Vibium names it, with the base URL
 // and the key variable its documentation gives, so the station's
@@ -32,6 +35,44 @@ func ProviderByID(id string) (Provider, bool) {
 		}
 	}
 	return Provider{}, false
+}
+
+// openAIEfforts maps OpenAI model families to the reasoning effort they
+// need for function tools on chat completions, as Vibium's own table
+// has it: the families marked refuse function tools there at every
+// effort and need OpenAI's Responses API, which the loop does not speak.
+var openAIEfforts = []struct {
+	prefix      string
+	effort      string
+	noChatTools bool
+}{
+	{prefix: "gpt-6.1", noChatTools: true},
+	{prefix: "gpt-6", effort: "none"},
+	{prefix: "gpt-5", effort: "none"},
+}
+
+// OpenAIEffortDefault is the reasoning effort an OpenAI model needs for
+// tool calls on chat completions when none is set, or "".
+func OpenAIEffortDefault(model string) string {
+	for _, m := range openAIEfforts {
+		if strings.HasPrefix(strings.TrimSpace(model), m.prefix) {
+			return m.effort
+		}
+	}
+	return ""
+}
+
+// ChatToolsProblem says why a model cannot drive a jam, or "".
+func ChatToolsProblem(provider, model string) string {
+	if provider != "openai" {
+		return ""
+	}
+	for _, m := range openAIEfforts {
+		if strings.HasPrefix(strings.TrimSpace(model), m.prefix) && m.noChatTools {
+			return model + " takes function tools only on OpenAI's Responses API, which jams do not speak yet; choose another model, such as gpt-5.6-sol"
+		}
+	}
+	return ""
 }
 
 // Efforts are the reasoning efforts Vibium accepts.

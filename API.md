@@ -273,7 +273,8 @@ read the prompt as a `check` or a `run`, `verdict` one of `passed`,
 (a prompt), `text` (the model's words), `call` (a tool and its
 arguments), `result` (what the tool returned, with `error` when it
 failed), `shot` (a screenshot, at `image`), `verdict`, `usage` (tokens
-in and out), `error` and `end`. A jam ends on its own after thirty
+in and out) and `end`, whose text carries the reason when the jam
+failed or was stopped. A jam ends on its own after thirty
 minutes, a hundred actions, or five minutes without a follow-up.
 
 ## station-probe

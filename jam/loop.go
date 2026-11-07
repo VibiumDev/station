@@ -50,8 +50,8 @@ const (
 // Event is one step of a jam, as the page shows it and the transcript
 // keeps it.
 type Event struct {
-	Kind    string          `json:"kind"`              // turn, text, call, result, shot, verdict, usage, error, end
-	Text    string          `json:"text,omitempty"`    // the prompt, the model's text, a tool's text, an error, the end's status
+	Kind    string          `json:"kind"`              // turn, text, call, result, shot, verdict, usage, end
+	Text    string          `json:"text,omitempty"`    // the prompt, the model's text, a tool's text, the end's status and reason
 	Tool    string          `json:"tool,omitempty"`    // call, result, shot: the tool
 	Args    json.RawMessage `json:"args,omitempty"`    // call: the arguments
 	Error   bool            `json:"error,omitempty"`   // result: the tool failed
@@ -178,7 +178,6 @@ func (l *Loop) Run(ctx context.Context) Result {
 	switch {
 	case l.res.Err != nil:
 		l.res.Status, l.res.Reason = "failed", l.res.Err.Error()
-		l.opt.Emit(Event{Kind: "error", Text: l.res.Reason})
 	case l.res.Verdicts > 0:
 		l.res.Status = "done"
 	default:
