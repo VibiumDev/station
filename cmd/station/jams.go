@@ -101,8 +101,7 @@ var greetings = []string{
 	"What should the %s do?",
 	"What are we checking today?",
 	"Ready when you are.",
-	"Name a claim, and I'll check it on the %s.",
-	"Tell me what to try on the %s.",
+	"Anything to check on the %s?",
 	"What would you like to know about the %s?",
 }
 
