@@ -302,6 +302,11 @@ iframe.player.full { position: fixed; inset: 0; width: 100%; height: 100%; borde
 }
 
 /* Jams: the prompt box, the transcript and the viewer watching beside it. */
+/* The front page: the greeting and the box sit about a third of the way
+   down, as a search engine's or a chat product's do, higher on a phone
+   where the keyboard will take the lower half. */
+main.home { padding-top: clamp(44px, 30vh, 320px); }
+@media (max-width: 640px) { main.home { padding-top: clamp(24px, 16vh, 150px); } }
 .ask { font-size: 24px; font-weight: 500; letter-spacing: -0.01em; margin: 28px 0 10px; }
 .ask .qhelp { vertical-align: middle; }
 .promptbox { position: relative; border: 1px solid var(--line-strong); border-radius: 14px; background: var(--surface); padding: 10px 12px 8px; margin: 12px 0 8px; }
