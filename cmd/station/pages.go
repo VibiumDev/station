@@ -131,7 +131,7 @@ var pages = template.Must(template.New("").Funcs(template.FuncMap{"npub": npub, 
 {{if .Message}}<div class="msg error" role="alert">{{.Message}}</div>{{end}}
 <h1 class="ask">{{.Ask}} {{template "help" "jams"}}</h1>
 <div class="helptext" id="help-jams" hidden>
-<p>Type something to check or try, and a jam session begins. A model set up on Settings drives the device through Vibium's tools, and the page shows each step as it happens. A check ends with a verdict, PASS, FAIL or REVIEW. A try ends with a result, COMPLETED or NOT COMPLETED. The session's header shows which one it was.</p>
+<p>Type something to check or try, and a jam session begins. A model set up on Settings drives the device through Vibium's tools, and the page shows each step as it happens. A check ends with a verdict, PASS, FAIL or REVIEW. A try ends with COMPLETED or NOT COMPLETED. The session's header shows which one it was, and a follow-up of the same kind can change it.</p>
 <p><b>Device and model.</b> If more than one device is online, or more than one agent model is set up, pick which to use beside the prompt. The examples under the box match the kind of device that is online.</p>
 <p><b>While it runs.</b> The session holds the device, so Devices shows it as the holder. Taking the device from there ends the session at once. If the host records holds, the recording is linked from the session when it ends. A follow-up prompt continues the same conversation from where the model left off, for five minutes after a result.</p>
 <p><b>Cost.</b> Model calls go to the provider on the key the model was set up with, and the session's page shows the tokens used. A session ends after thirty minutes or a hundred actions.</p>
@@ -150,16 +150,16 @@ var pages = template.Must(template.New("").Funcs(template.FuncMap{"npub": npub, 
 {{define "jams"}}{{template "head" (dict "Title" "Jams" "Name" .Name "Named" .Named)}}{{template "header" .}}
 <main class="wrap jams">
 <h2 class="h2">Jams {{template "help" "jams"}}</h2>
-<p class="helptext" id="help-jams" hidden>Every jam session on this station, newest first: who asked, on which device and with which model, the prompt, and the verdict or result. Open one for its transcript and the recording. A new one starts from the <a href="/">front page</a>.</p>
-{{if .Jams}}<div class="tablewrap"><table><thead><tr><th>When</th><th>Who</th><th>Device</th><th>Model</th><th>Prompt</th><th>Verdict</th></tr></thead><tbody>
+<p class="helptext" id="help-jams" hidden>Every jam session on this station, newest first: who asked, on which device and with which model, the prompt, and the result. Open one for its transcript and the recording. A new one starts from the <a href="/">front page</a>.</p>
+{{if .Jams}}<div class="tablewrap"><table><thead><tr><th>When</th><th>Who</th><th>Device</th><th>Model</th><th>Prompt</th><th>Result</th></tr></thead><tbody>
 {{range .Jams}}<tr><td data-l="When"><a href="/jams/{{.ID}}">{{.When}}</a></td><td data-l="Who">{{.Subject}}</td><td data-l="Device">{{.Label}}</td><td data-l="Model">{{.Model}}</td><td data-l="Prompt">{{.Prompt}}</td>
-<td data-l="Verdict">{{if .Open}}<span class="dot on"></span>running{{else if .Word}}<b class="verdict {{.Verdict}}">{{.Word}}</b>{{else}}<span class="muted">{{.Status}}</span>{{end}}</td></tr>{{end}}
+<td data-l="Result">{{if .Open}}<span class="dot on"></span>running{{else if .Word}}<b class="verdict {{.Result}}">{{.Word}}</b>{{else}}<span class="muted">{{.Status}}</span>{{end}}</td></tr>{{end}}
 </tbody></table></div>{{else}}<p class="muted">No jams yet. <a href="/">Start one.</a></p>{{end}}
 </main>{{template "foot" .}}{{end}}
 
 {{define "jam"}}{{template "head" (dict "Title" "Jam" "Name" .Name "Named" .Named)}}{{template "header" .}}
 <main class="wrap jam{{if .Watch}} watching{{end}}">
-<p class="lead"><a href="/jams">Jams</a> › <b>{{.Jam.ID}}</b> <span class="muted">{{.When}} · {{.Jam.Subject}} · {{.DeviceLabel}} · {{.Jam.Model}}{{if .Took}} · {{.Took}}{{end}}{{if .Word}} · {{end}}</span>{{if .Word}}<b class="verdict {{.Jam.Verdict}}">{{.Word}}</b>{{end}}
+<p class="lead"><a href="/jams">Jams</a> › <b>{{.Jam.ID}}</b> <span class="muted">{{.When}} · {{.Jam.Subject}} · {{.DeviceLabel}} · {{.Jam.Model}}{{if .Took}} · {{.Took}}{{end}}{{if .Word}} · {{end}}</span>{{if .Word}}<b class="verdict {{.Jam.Result}}">{{.Word}}</b>{{end}}
 {{if .Open}} <form class="inline" method="post" action="/jams/{{.Jam.ID}}/stop"><input type="hidden" name="csrf" value="{{.CSRF}}"><button class="small" type="submit">Stop</button></form>{{end}}
 {{if .Play}} <a class="btn small" href="{{.Play}}">Play the recording</a>{{end}} <a class="btn small" href="/devices/{{.Jam.DeviceID}}/view">Open the device</a></p>
 {{if .Message}}<div class="msg error" role="alert">{{.Message}}</div>{{end}}

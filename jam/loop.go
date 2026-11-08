@@ -34,7 +34,17 @@ type Options struct {
 	MaxActions int           // tool calls in all; 0 means DefaultMaxActions
 	TimeLimit  time.Duration // for the whole jam; 0 means DefaultTimeLimit
 	IdleWait   time.Duration // how long a delivered result waits for a follow-up; 0 means DefaultIdleWait
+	Shortcuts  []Shortcut    // the device's own keys, as its provider announces them
 	Emit       func(Event)   // every step, in order
+}
+
+// Shortcut is one of the device's own keys: a label such as Home or
+// Back and the chord that presses it, in Vibium's key syntax
+// ("Meta+h"). The instruction tells the model about them, and Home,
+// when there is one, is pressed when a jam ends on its own.
+type Shortcut struct {
+	Label string
+	Keys  string
 }
 
 // Defaults.
@@ -101,15 +111,16 @@ type Result struct {
 
 // Loop is one jam's agent.
 type Loop struct {
-	model Completer
-	tools Tools
-	opt   Options
-	turns chan string
-	stop  chan struct{}
-	once  sync.Once
-	why   string
-	done  chan struct{}
-	res   Result
+	model  Completer
+	tools  Tools
+	opt    Options
+	turns  chan string
+	stop   chan struct{}
+	once   sync.Once
+	why    string
+	done   chan struct{}
+	res    Result
+	opened bool // the session was opened, so the device can be tidied
 }
 
 // Errors.
@@ -175,6 +186,7 @@ func (l *Loop) Run(ctx context.Context) Result {
 		}
 	}()
 	l.res = l.run(ctx)
+	l.tidy()
 	switch {
 	case l.res.Err != nil:
 		l.res.Status, l.res.Reason = "failed", l.res.Err.Error()
@@ -192,6 +204,46 @@ func endReason(r string) string {
 		return ""
 	}
 	return ": " + r
+}
+
+// tidy leaves the device on its home screen when the jam ended on its
+// own: after its idle wait, or at a limit. A jam a person stopped, or
+// whose device was taken, leaves the screen as it is, since the person
+// is about to look at it.
+func (l *Loop) tidy() {
+	home := l.home()
+	if home == "" || !l.opened {
+		return
+	}
+	select {
+	case <-l.stop:
+		return
+	default:
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	args := map[string]any{"keys": home}
+	raw, _ := json.Marshal(args)
+	l.opt.Emit(Event{Kind: "call", Tool: "browser_keys", Args: raw})
+	r, err := l.tools.Call(ctx, "browser_keys", args)
+	switch {
+	case err != nil:
+		l.opt.Emit(Event{Kind: "result", Tool: "browser_keys", Text: "Error: " + err.Error(), Error: true})
+	case r.IsError:
+		l.opt.Emit(Event{Kind: "result", Tool: "browser_keys", Text: "Error: " + clip(r.Text(), MaxText), Error: true})
+	default:
+		l.opt.Emit(Event{Kind: "result", Tool: "browser_keys", Text: clip(r.Text(), MaxText)})
+	}
+}
+
+// home is the chord for the device's Home, when it announces one.
+func (l *Loop) home() string {
+	for _, s := range l.opt.Shortcuts {
+		if strings.EqualFold(s.Label, "Home") {
+			return s.Keys
+		}
+	}
+	return ""
 }
 
 // stopped says why the jam was stopped, when it was.
@@ -226,6 +278,7 @@ func (l *Loop) run(ctx context.Context) Result {
 		res.Err = errors.New("opening the session: " + clip(r.Text(), 400))
 		return res
 	}
+	l.opened = true
 	messages := []Message{{Role: "system", Content: l.instruction()}}
 	l.opt.Emit(Event{Kind: "turn", Text: l.opt.Prompt})
 	messages = append(messages, Message{Role: "user", Content: l.opt.Prompt})
@@ -236,7 +289,9 @@ func (l *Loop) run(ctx context.Context) Result {
 		l.opt.Emit(ev)
 	}
 	for {
-		v, err := l.round(ctx, &messages, &shots, tools, &res)
+		// The first prompt ends with a result; a follow-up may end in
+		// words when it asks nothing of the device.
+		v, err := l.round(ctx, &messages, &shots, tools, &res, res.Verdicts > 0)
 		if err != nil {
 			if why, ok := l.stopped(ctx); ok {
 				res.Reason = why
@@ -245,9 +300,11 @@ func (l *Loop) run(ctx context.Context) Result {
 			res.Err = err
 			return res
 		}
-		res.Verdicts++
-		res.Last = v
-		// The result is delivered; a follow-up continues from here.
+		if v != nil {
+			res.Verdicts++
+			res.Last = v
+		}
+		// The prompt is answered; a follow-up continues from here.
 		select {
 		case prompt := <-l.turns:
 			l.opt.Emit(Event{Kind: "turn", Text: prompt})
@@ -265,8 +322,9 @@ func (l *Loop) run(ctx context.Context) Result {
 	}
 }
 
-// round takes one prompt to its result.
-func (l *Loop) round(ctx context.Context, messages *[]Message, shots *[]int, tools []Tool, res *Result) (*Verdict, error) {
+// round takes one prompt to its result, or, when words will do, to
+// the model's reply.
+func (l *Loop) round(ctx context.Context, messages *[]Message, shots *[]int, tools []Tool, res *Result, wordsDo bool) (*Verdict, error) {
 	force, corrected, limited := "", false, false
 	for {
 		if ctx.Err() != nil {
@@ -285,13 +343,20 @@ func (l *Loop) round(ctx context.Context, messages *[]Message, shots *[]int, too
 			if text != "" {
 				l.opt.Emit(Event{Kind: "text", Text: text})
 				*messages = append(*messages, Message{Role: "assistant", Content: text})
+				if wordsDo {
+					return nil, nil
+				}
 			}
 			if corrected {
 				return nil, errors.New("the model stopped without delivering a result")
 			}
 			corrected = true
-			*messages = append(*messages, Message{Role: "user", Content: "Your last message did not deliver the result. Call " + l.resultToolNames() + " with the required fields."})
-			force = l.forcedTool()
+			if wordsDo {
+				*messages = append(*messages, Message{Role: "user", Content: "Your last message was empty. Reply in a sentence, or act on the device and end with a result call."})
+			} else {
+				*messages = append(*messages, Message{Role: "user", Content: "Your last message did not deliver the result. Call " + l.resultToolNames() + " with the required fields."})
+				force = l.forcedTool()
+			}
 			continue
 		}
 		// The model's free text with its tool calls is kept for the
@@ -632,8 +697,9 @@ func (l *Loop) instruction() string {
 		b.WriteString("The device is a web browser: map the page, find elements, click, fill and read, and take a screenshot when the picture matters. ")
 	default:
 		b.WriteString("The device is a phone with a touch screen, which you see only through screenshots. Coordinates are pixels in the most recent screenshot, whose width and height are given with it, with (0, 0) at the top left. ")
-		b.WriteString("Tap, long press and swipe touch the screen; keys sends key names such as Enter, Back or Home; type enters text where the cursor is. After each action you receive a fresh screenshot. ")
-		b.WriteString("When the screen is still changing, sleep briefly and look again rather than act on a half-drawn screen. Swiping up from the bottom goes home on most phones. ")
+		b.WriteString("Tap, long press and swipe touch the screen; type enters text where the cursor is; keys presses a key or a chord, such as Enter or Meta+h. " + l.keysText())
+		b.WriteString("After each action you receive a fresh screenshot. When the screen is still changing, sleep briefly and look again rather than act on a half-drawn screen. ")
+		b.WriteString("Before you deliver a result, tidy up: close any browser tabs you opened and return to the home screen. ")
 	}
 	check := "For a claim, do not assume it is true: gather evidence, and when finished call return_verdict exactly once with status (passed, failed or inconclusive), summary, and evidence (up to 12 observations). Return inconclusive when verification cannot be done safely or the evidence is insufficient, with reason insufficient_evidence or safety_stop. Include observable evidence for passed or failed. "
 	run := "For a goal, carry it out, observe the resulting state before claiming completion, and when finished call return_result exactly once with status (completed or not_completed), summary, and evidence (up to 12 observations). If information is missing or completion cannot be established, return not_completed with reason missing_information or safety_stop. "
@@ -645,6 +711,32 @@ func (l *Loop) instruction() string {
 	default:
 		b.WriteString("The prompt is either a claim about the device to verify or a goal to carry out on it; decide which from its wording. " + check + run + "Call exactly one of the two result tools, alone, when finished. ")
 	}
-	b.WriteString("A later prompt continues the conversation from where the device is now; answer it the same way, ending with one result call.")
+	b.WriteString("A later prompt continues the conversation from where the device is now. When it asks for another check or goal, answer it the same way, ending with one result call. When it needs nothing done on the device, reply in a sentence or two instead.")
 	return b.String()
+}
+
+// keysText tells the model the device's keys for getting around, Home,
+// Back and Recents, and not the ones that lock or wake it, which no
+// prompt needs; a device that announces none gets the one gesture most
+// phones share.
+func (l *Loop) keysText() string {
+	var parts []string
+	for _, s := range l.opt.Shortcuts {
+		switch strings.ToLower(s.Label) {
+		case "home", "back", "recents":
+			parts = append(parts, s.Label+" is "+s.Keys)
+		}
+	}
+	if len(parts) == 0 {
+		return "Swiping up from the bottom goes home on most phones. "
+	}
+	return "On this device, " + joinAnd(parts) + ". "
+}
+
+// joinAnd reads a list out: "a", "a and b", "a, b and c".
+func joinAnd(parts []string) string {
+	if len(parts) <= 1 {
+		return strings.Join(parts, "")
+	}
+	return strings.Join(parts[:len(parts)-1], ", ") + " and " + parts[len(parts)-1]
 }

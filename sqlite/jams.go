@@ -10,12 +10,12 @@ import (
 	"github.com/VibiumDev/station"
 )
 
-const jamCols = `id, subject, device_id, model, prompt, mode, status, took, verdict, summary, hold_id, actions, tokens_in, tokens_out, error, created_at, ended_at`
+const jamCols = `id, subject, device_id, model, prompt, mode, status, took, result, summary, hold_id, actions, tokens_in, tokens_out, error, created_at, ended_at`
 
 func scanJam(s scanner) (station.Jam, error) {
 	var j station.Jam
 	var created, ended int64
-	if err := s.Scan(&j.ID, &j.Subject, &j.DeviceID, &j.Model, &j.Prompt, &j.Mode, &j.Status, &j.Took, &j.Verdict, &j.Summary,
+	if err := s.Scan(&j.ID, &j.Subject, &j.DeviceID, &j.Model, &j.Prompt, &j.Mode, &j.Status, &j.Took, &j.Result, &j.Summary,
 		&j.HoldID, &j.Actions, &j.TokensIn, &j.TokensOut, &j.Error, &created, &ended); err != nil {
 		return j, err
 	}
@@ -32,7 +32,7 @@ func (d *DB) CreateJam(ctx context.Context, j station.Jam) error {
 		j.CreatedAt = time.Now()
 	}
 	_, err := d.db.ExecContext(ctx, `INSERT INTO jams (`+jamCols+`) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)`,
-		j.ID, j.Subject, j.DeviceID, j.Model, j.Prompt, j.Mode, j.Status, j.Took, j.Verdict, j.Summary,
+		j.ID, j.Subject, j.DeviceID, j.Model, j.Prompt, j.Mode, j.Status, j.Took, j.Result, j.Summary,
 		j.HoldID, j.Actions, j.TokensIn, j.TokensOut, j.Error, j.CreatedAt.UnixNano())
 	return err
 }
@@ -43,8 +43,8 @@ func (d *DB) UpdateJam(ctx context.Context, j station.Jam) error {
 	if !j.EndedAt.IsZero() {
 		ended = j.EndedAt.UnixNano()
 	}
-	return d.update(ctx, `UPDATE jams SET status = ?, took = ?, verdict = ?, summary = ?, hold_id = ?, actions = ?, tokens_in = ?, tokens_out = ?, error = ?, ended_at = ? WHERE id = ?`,
-		j.Status, j.Took, j.Verdict, j.Summary, j.HoldID, j.Actions, j.TokensIn, j.TokensOut, j.Error, ended, j.ID)
+	return d.update(ctx, `UPDATE jams SET status = ?, took = ?, result = ?, summary = ?, hold_id = ?, actions = ?, tokens_in = ?, tokens_out = ?, error = ?, ended_at = ? WHERE id = ?`,
+		j.Status, j.Took, j.Result, j.Summary, j.HoldID, j.Actions, j.TokensIn, j.TokensOut, j.Error, ended, j.ID)
 }
 
 // Jam finds a jam by id.

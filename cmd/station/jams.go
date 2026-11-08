@@ -181,7 +181,7 @@ func (m *jams) start(ctx context.Context, p station.Principal, prompt, deviceID,
 		return j, errors.New("starting Vibium: " + err.Error())
 	}
 	lj.loop = jam.New(model.Client(), mcp, jam.Options{Prompt: prompt, Mode: mode, DeviceKind: dev.Kind, MaxActions: jamMaxActions, TimeLimit: jamTimeLimit,
-		Emit: func(ev jam.Event) { lj.emit(m, ev) }})
+		Shortcuts: jamShortcuts(dev.Shortcuts), Emit: func(ev jam.Event) { lj.emit(m, ev) }})
 	m.s.db.Audit(ctx, station.AuditEntry{Subject: p.Subject, Action: "jam", DeviceID: dev.ID, Detail: "started " + j.ID + " with " + model.Name})
 	go m.watchHold(lj)
 	go func() {
@@ -190,6 +190,38 @@ func (m *jams) start(ctx context.Context, p station.Principal, prompt, deviceID,
 		m.finish(lj, res, nil)
 	}()
 	return j, nil
+}
+
+// jamShortcuts turns the device's announced shortcuts, in the viewer's
+// key syntax, into Vibium's: GUI is Meta and Ctrl is Control.
+func jamShortcuts(in []station.Shortcut) []jam.Shortcut {
+	var out []jam.Shortcut
+	for _, s := range in {
+		parts := strings.Split(s.Keys, "+")
+		for i, p := range parts {
+			switch strings.ToLower(strings.TrimSpace(p)) {
+			case "gui", "cmd", "win", "super":
+				parts[i] = "Meta"
+			case "ctrl":
+				parts[i] = "Control"
+			default:
+				parts[i] = strings.TrimSpace(p)
+			}
+		}
+		out = append(out, jam.Shortcut{Label: s.Label, Keys: strings.Join(parts, "+")})
+	}
+	return out
+}
+
+// takeResult records a delivered result on the jam. The jam's result is
+// its first prompt's; a later result of the same kind replaces it, as
+// when a check is run again after a fix, and one of the other kind, an
+// errand after a check, shows in the transcript alone.
+func takeResult(j *station.Jam, v *jam.Verdict) {
+	if v == nil || (j.Took != "" && j.Took != v.Took) {
+		return
+	}
+	j.Took, j.Result, j.Summary = v.Took, v.Status, v.Summary
 }
 
 // pickDevice is the device a jam drives: the one named, or the only
@@ -300,9 +332,7 @@ func (lj *liveJam) emit(m *jams, ev jam.Event) {
 		lj.j.TokensIn += ev.In
 		lj.j.TokensOut += ev.Out
 	case "verdict":
-		if ev.Verdict != nil {
-			lj.j.Took, lj.j.Verdict, lj.j.Summary = ev.Verdict.Took, ev.Verdict.Status, ev.Verdict.Summary
-		}
+		takeResult(&lj.j, ev.Verdict)
 		j := lj.j
 		record = &j
 	}
@@ -571,8 +601,8 @@ func jamViews(list []station.Jam, devs []deviceView) []jamView {
 		if v.Label == "" {
 			v.Label = j.DeviceID
 		}
-		if j.Verdict != "" {
-			v.Word = (jam.Verdict{Status: j.Verdict}).Word()
+		if j.Result != "" {
+			v.Word = (jam.Verdict{Status: j.Result}).Word()
 		}
 		out = append(out, v)
 	}
@@ -631,8 +661,8 @@ func (s *server) jamPage(w http.ResponseWriter, r *http.Request, p station.Princ
 	}
 	data := map[string]any{"Page": "jams", "Principal": p, "CSRF": s.auth.csrfToken(r), "Jam": j, "Open": live, "Events": views, "Last": last,
 		"DeviceLabel": label, "When": j.CreatedAt.Local().Format("Jan 2, 2006 15:04"), "Took": j.Took, "Message": r.URL.Query().Get("msg")}
-	if j.Verdict != "" {
-		data["Word"] = (jam.Verdict{Status: j.Verdict}).Word()
+	if j.Result != "" {
+		data["Word"] = (jam.Verdict{Status: j.Result}).Word()
 	}
 	rigID, _, _ := station.SplitDeviceID(j.DeviceID)
 	if live && s.tunnel.IsOnline(rigID) {

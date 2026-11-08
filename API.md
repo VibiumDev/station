@@ -261,21 +261,26 @@ ends the jam. While Jams is off, every path here answers 404.
 | `POST /v1/jams` | Starts a jam: `{"prompt": ..., "device": "<rig>/<name>", "model": "<name>", "mode": "check" or "run"}`; the device may be left out when one is online, the model when one agent model is set, and the mode when the model should decide from the prompt. Needs control. Returns the jam, 201 |
 | `GET /v1/jams` | The caller's jams, newest first; every jam for the owner |
 | `GET /v1/jams/{id}` | `{"jam": ..., "events": [...], "recording": "<sha256>"}`: the jam, its transcript, and the host's recording of its hold when there is one |
-| `POST /v1/jams/{id}/turns` | `{"prompt": ...}`: a follow-up on an open jam, taken up once the current prompt has its result; 409 when the jam has ended or a prompt is already waiting |
+| `POST /v1/jams/{id}/turns` | `{"prompt": ...}`: a follow-up on an open jam, taken up once the current prompt has its result, and answered in words when it asks nothing of the device; 409 when the jam has ended or a prompt is already waiting |
 | `GET /v1/jams/{id}/events` | The transcript as server-sent events, each with `id` (the sequence number), `event` (the kind) and `data` (the event), from the start or after `?after=<seq>` or `Last-Event-ID`; a running jam streams on until its `end`, a finished one replays and closes |
 | `POST /v1/jams/{id}/stop` | Ends the jam, which releases the device |
 
 A jam is `running` until it ends `done` (it delivered at least one
 result), `stopped` or `failed`, with `took` saying whether the model
-read the prompt as a `check` or a `run`, `verdict` one of `passed`,
+read the prompt as a `check` or a `run`, `result` one of `passed`,
 `failed`, `inconclusive`, `completed` and `not_completed`, and
-`summary` the model's explanation. The event kinds are `start`, `turn`
+`summary` the model's explanation. The result is the first prompt's;
+a follow-up of the same kind replaces it, and one of the other kind
+shows in the transcript alone. The event kinds are `start`, `turn`
 (a prompt), `text` (the model's words), `call` (a tool and its
 arguments), `result` (what the tool returned, with `error` when it
-failed), `shot` (a screenshot, at `image`), `verdict`, `usage` (tokens
-in and out) and `end`, whose text carries the reason when the jam
-failed or was stopped. A jam ends on its own after thirty
-minutes, a hundred actions, or five minutes without a follow-up.
+failed), `shot` (a screenshot, at `image`), `verdict` (a result the
+model delivered, with its `took`, `status`, `summary` and `evidence`),
+`usage` (tokens in and out) and `end`, whose text carries the reason
+when the jam failed or was stopped. A jam ends on its own after thirty
+minutes, a hundred actions, or five minutes without a follow-up, and
+then presses the device's Home shortcut when it announces one, so the
+device is left on its home screen.
 
 ## station-probe
 
@@ -303,7 +308,7 @@ relay-only fails by design, since TURN refuses private peers.
 |---|---|
 | `/login` | Sign in with the password; in tailnet mode an allowed identity needs none |
 | `/` | The prompt box once an agent model is set and Jams is on, with a device picker when more than one device is online and a model picker when more than one agent model is set, and example prompts for the device's kind; sends to `/devices` otherwise |
-| `/jams` | The jams so far, newest first: when, who, the device, the model, the prompt, and the verdict or result |
+| `/jams` | The jams so far, newest first: when, who, the device, the model, the prompt, and the result |
 | `/jams/{id}` | One jam: its transcript as it happens, the viewer watching the device beside it while it runs, a box for a follow-up prompt, Stop, and Play for the host's recording of its hold when it ends |
 | `/devices` | The devices: rig, kind, online, who controls it, Open, Records |
 | `/devices/{rig}/{name}/view` | The viewer: Roadie's shell with the WebRTC picture, sound, touch and keyboard, the mic, the settings panel, the on-screen keyboard, stats, the device's own buttons and panels from its extras, and Hold and Release. One link for driving and watching: a free device is taken, a held one is watched, and Hold takes it; Release ends the hold and returns to the device list. `?watch=1` watches only; on a touchscreen two fingers moving together turn the wheel and a pinch becomes Apple Maps' one-finger zoom on a device whose pointer stands in for touch (see Roadie's `/view`); `?minimal=1`, `?input=`, `?transport=`, `?ice=relay`, `?toolbar=`, `?align=`, `?zoom=` (a percentage, or `fit` for the room the picture has, the default on a phone or tablet) and `?stats=1` as on a Roadie |

@@ -280,8 +280,8 @@ type Jam struct {
 	Mode      string    `json:"mode"`    // "check", "run", or "" when the model picks
 	Status    string    `json:"status"`  // running, done, stopped, failed
 	Took      string    `json:"took"`    // "check" or "run", once the model has chosen
-	Verdict   string    `json:"verdict"` // passed, failed, inconclusive, completed, not_completed
-	Summary   string    `json:"summary"` // the model's explanation of the verdict
+	Result    string    `json:"result"`  // passed, failed, inconclusive, completed, not_completed
+	Summary   string    `json:"summary"` // the model's explanation of the result
 	HoldID    string    `json:"hold"`    // the hold the jam drove the device on
 	Actions   int       `json:"actions"` // tool calls made
 	TokensIn  int       `json:"tokens_in"`

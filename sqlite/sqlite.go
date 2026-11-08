@@ -143,7 +143,7 @@ CREATE TABLE IF NOT EXISTS jams (
 	mode       TEXT NOT NULL DEFAULT '',
 	status     TEXT NOT NULL,
 	took       TEXT NOT NULL DEFAULT '',
-	verdict    TEXT NOT NULL DEFAULT '',
+	result     TEXT NOT NULL DEFAULT '',
 	summary    TEXT NOT NULL DEFAULT '',
 	hold_id    TEXT NOT NULL DEFAULT '',
 	actions    INTEGER NOT NULL DEFAULT 0,
@@ -189,6 +189,18 @@ func (d *DB) migrate() error {
 			return fmt.Errorf("schema: rename audit.lease_id: %w", err)
 		}
 	}
+	// A jam's verdict became its result when the list said Result, and
+	// the result became the first prompt's, replaced only by a later one
+	// of the same kind: jams from before are read again from their
+	// transcripts under that rule.
+	if has, err := d.hasColumn("jams", "verdict"); err == nil && has {
+		if _, err := d.db.Exec("ALTER TABLE jams RENAME COLUMN verdict TO result"); err != nil {
+			return fmt.Errorf("schema: rename jams.verdict: %w", err)
+		}
+		if _, err := d.db.Exec(rereadResults); err != nil {
+			return fmt.Errorf("schema: reread results: %w", err)
+		}
+	}
 	if _, err := d.db.Exec(schema); err != nil {
 		return fmt.Errorf("schema: %w", err)
 	}
@@ -217,6 +229,20 @@ func (d *DB) migrate() error {
 	}
 	return nil
 }
+
+// rereadResults sets each finished jam's took, result and summary from
+// its transcript: the first delivered result's kind, and the last
+// delivered result of that kind.
+const rereadResults = `
+UPDATE jams SET
+	took = (SELECT json_extract(data, '$.verdict.took') FROM jam_events WHERE jam_id = jams.id AND kind = 'verdict' ORDER BY seq LIMIT 1),
+	result = (SELECT json_extract(data, '$.verdict.status') FROM jam_events WHERE jam_id = jams.id AND kind = 'verdict'
+		AND json_extract(data, '$.verdict.took') = (SELECT json_extract(data, '$.verdict.took') FROM jam_events WHERE jam_id = jams.id AND kind = 'verdict' ORDER BY seq LIMIT 1)
+		ORDER BY seq DESC LIMIT 1),
+	summary = (SELECT json_extract(data, '$.verdict.summary') FROM jam_events WHERE jam_id = jams.id AND kind = 'verdict'
+		AND json_extract(data, '$.verdict.took') = (SELECT json_extract(data, '$.verdict.took') FROM jam_events WHERE jam_id = jams.id AND kind = 'verdict' ORDER BY seq LIMIT 1)
+		ORDER BY seq DESC LIMIT 1)
+WHERE EXISTS (SELECT 1 FROM jam_events WHERE jam_id = jams.id AND kind = 'verdict')`
 
 func (d *DB) hasTable(table string) (bool, error) {
 	var n int

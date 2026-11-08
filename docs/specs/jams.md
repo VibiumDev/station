@@ -131,6 +131,26 @@ second prompt while the jam is open continues the same conversation
 with the phone where the agent left it; a prompt after the jam has
 ended starts a new one.
 
+A follow-up that asks for another check or goal ends with a result of
+its own, and one that asks nothing of the device, a question or a
+thanks, is answered in words. The jam's result, in its header and on
+the list, is its first prompt's: a later result of the same kind
+replaces it, as when a check is run again after a fix, and one of the
+other kind shows in the transcript alone, so a check that passed is
+not reported as an errand because the person said "that's it" after.
+
+The agent leaves the device as it found it. The instruction asks the
+model to close the browser tabs it opened and return to the home
+screen before it delivers a result, and when a jam ends on its own,
+after its idle wait or at a limit, the loop presses the device's Home
+shortcut, the one the rig announces for the viewer's toolbar, so a
+model that forgot still leaves the device on its home screen. A jam a
+person stopped, or whose device was taken, leaves the screen as it is,
+since the person is about to look at it. The instruction names the
+device's shortcuts in Vibium's key syntax, Home is Meta+h and Back is
+Escape on an Android phone through Roadie, rather than key names a
+HID keyboard reads differently.
+
 ## The agent
 
 The agent has three parts, and only the first is new code.
@@ -295,7 +315,7 @@ online and a model picker when more than one agent model is set, and
 two or three example prompts under it for the device's kind and the
 tools it has, which a demo can click and a first-time visitor can learn
 from. The Jams page, at `/jams`, is the list of past jams, with when,
-who, the device, the model, the prompt, and the verdict where there is
+who, the device, the model, the prompt, and the result where there is
 one. The list of devices moves to `/devices`, and the docs that point
 at it follow. The sidebar reads New jam, Jams, Devices, Records,
 Settings, and the brand keeps linking to `/`. One jam lives at `/jams/{id}`, with the transcript,

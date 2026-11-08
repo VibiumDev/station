@@ -84,6 +84,14 @@ func toolReply(calls ...ToolCall) Reply {
 	return Reply{Message: Message{Role: "assistant", ToolCalls: calls}, FinishReason: "tool_calls", Usage: Usage{Prompt: 10, Completion: 2}}
 }
 
+// stuck is a model that answers only when the request is cancelled.
+type stuck struct{}
+
+func (stuck) Complete(ctx context.Context, _ []Message, _ []Tool, _ string) (Reply, error) {
+	<-ctx.Done()
+	return Reply{}, ctx.Err()
+}
+
 func textReply(text string) Reply {
 	return Reply{Message: Message{Role: "assistant", Content: text}, FinishReason: "stop"}
 }
@@ -259,5 +267,83 @@ func TestLoopStopAndFailure(t *testing.T) {
 	}
 	if err := l.Turn("more"); err != ErrEnded {
 		t.Errorf("turn after end: %v", err)
+	}
+}
+
+func TestLoopFollowUpInWordsAndTidy(t *testing.T) {
+	// A follow-up that asks nothing of the device is answered in words,
+	// with no result forced; the jam ends on its own and presses Home.
+	model := &scripted{replies: []Reply{
+		toolReply(call("c1", "return_verdict", verdict)),
+		textReply("Glad it helped. Nothing more to do here."),
+	}}
+	tools := &fakeTools{}
+	emit, events := collect()
+	l := New(model, tools, Options{Prompt: "home?", DeviceKind: "phone", Emit: emit, IdleWait: 300 * time.Millisecond,
+		Shortcuts: []Shortcut{{Label: "Home", Keys: "Meta+h"}, {Label: "Back", Keys: "Escape"}, {Label: "Recents", Keys: "Alt+Tab"}, {Label: "Lock", Keys: "Control+Meta+q"}}})
+	go l.Run(context.Background())
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		if ev := events(); len(ev) > 0 && ev[len(ev)-1].Kind == "verdict" {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("no verdict: %s", kinds(events()))
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	if err := l.Turn("cool, that's it"); err != nil {
+		t.Fatal(err)
+	}
+	<-l.Done()
+	res := l.Result()
+	if res.Status != "done" || res.Verdicts != 1 || res.Last.Took != "check" || res.Reason != "no follow-up" {
+		t.Errorf("result: %+v", res)
+	}
+	got, want := kinds(events()), "turn shot usage verdict turn usage text call result end"
+	if got != want {
+		t.Errorf("events:\n got %s\nwant %s", got, want)
+	}
+	if model.forced[1] != "" {
+		t.Errorf("a follow-up in words was forced to %q", model.forced[1])
+	}
+	if calls := strings.Join(tools.calls, " "); !strings.HasSuffix(calls, "browser_keys") {
+		t.Errorf("no Home at the end: %s", calls)
+	}
+	if ev := events(); string(ev[7].Args) != `{"keys":"Meta+h"}` || ev[8].Error {
+		t.Errorf("tidy events: %+v %+v", ev[7], ev[8])
+	}
+	// The instruction names the device's keys and asks for tidying.
+	sys, _ := model.requests[0][0].Content.(string)
+	for _, want := range []string{"On this device, Home is Meta+h, Back is Escape and Recents is Alt+Tab.", "close any browser tabs you opened", "reply in a sentence or two instead"} {
+		if !strings.Contains(sys, want) {
+			t.Errorf("instruction lacks %q", want)
+		}
+	}
+	if strings.Contains(sys, "Swiping up") || strings.Contains(sys, "Lock") {
+		t.Error("instruction keeps the gesture when the device has keys, or tells of the Lock chord")
+	}
+
+	// Stopped by a person: the screen stays as it is, no Home.
+	tools = &fakeTools{}
+	l = New(stuck{}, tools, Options{Prompt: "home?", Shortcuts: []Shortcut{{Label: "Home", Keys: "Meta+h"}}})
+	go func() { time.Sleep(20 * time.Millisecond); l.Stop("the owner took the device") }()
+	if res := l.Run(context.Background()); res.Status != "stopped" {
+		t.Errorf("stop: %+v", res)
+	}
+	if calls := strings.Join(tools.calls, " "); strings.Contains(calls, "browser_keys") {
+		t.Errorf("Home pressed after a stop: %s", calls)
+	}
+	// No keys announced: the instruction falls back to the gesture, and
+	// nothing is pressed at the end.
+	model = &scripted{replies: []Reply{toolReply(call("c1", "return_verdict", verdict))}}
+	tools = &fakeTools{}
+	l = New(model, tools, Options{Prompt: "home?", DeviceKind: "phone", IdleWait: 20 * time.Millisecond})
+	l.Run(context.Background())
+	if sys, _ := model.requests[0][0].Content.(string); !strings.Contains(sys, "Swiping up from the bottom") {
+		t.Error("instruction lacks the gesture")
+	}
+	if calls := strings.Join(tools.calls, " "); strings.Contains(calls, "browser_keys") {
+		t.Errorf("Home pressed with no Home announced: %s", calls)
 	}
 }
