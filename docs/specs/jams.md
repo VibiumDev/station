@@ -286,20 +286,19 @@ the store gets a subject column from the start, and it is built then.
 
 ## Pages and API
 
-`/` becomes a redirect: to `/devices` by default, and to `/jams` once an
-agent model is set and Jams is on, so each page has one address and the
-front page is whichever the station is for right now. The Jams page,
-at `/jams`, has the prompt box, sized and placed as the chat products
-place theirs rather than as a hero, a device picker beside it when more
-than one device is online and a model picker when more than one agent
-model is set, two or three example prompts under it for the device's
-kind and the tools it has, which a demo can click and a first-time
-visitor can learn from, and below that the list of past jams, with
-when, who, the device, the model, the prompt, and the verdict where
-there is one. The list of
-devices moves to `/devices`, and the docs that point at it follow. The
-sidebar reads Jams, Devices, Records, Settings, and the brand keeps
-linking to `/`. One jam lives at `/jams/{id}`, with the transcript,
+`/` is the prompt box alone once an agent model is set and Jams is on,
+as the chat products open, and a redirect to `/devices` otherwise, so
+the front page is whichever the station is for right now. The box is
+sized and placed as the chat products place theirs rather than as a
+hero, with a device picker beside it when more than one device is
+online and a model picker when more than one agent model is set, and
+two or three example prompts under it for the device's kind and the
+tools it has, which a demo can click and a first-time visitor can learn
+from. The Jams page, at `/jams`, is the list of past jams, with when,
+who, the device, the model, the prompt, and the verdict where there is
+one. The list of devices moves to `/devices`, and the docs that point
+at it follow. The sidebar reads New jam, Jams, Devices, Records,
+Settings, and the brand keeps linking to `/`. One jam lives at `/jams/{id}`, with the transcript,
 the prompt box for the next turn while the jam is open, the watching
 viewer while it is live, and the recording's Play when it is done.
 
@@ -310,8 +309,8 @@ section on Settings opens with a line saying that a model turns on
 Jams, a prompt on the front page that drives the station's devices. The
 owner is on Settings before anything can be jammed, to enroll a rig, so
 the line is seen in time without being shown to anyone who cannot act
-on it. Adding the first agent model turns Jams on and points `/` at
-`/jams`; the switch beside the list turns Jams off again without
+on it. Adding the first agent model turns Jams on and puts the prompt
+on `/`; the switch beside the list turns Jams off again without
 forgetting the keys, for a station that is only a broker and wants its devices on
 the front page. While Jams is off, its pages and its API answer 404
 with a line saying so. A greyed-out prompt with a polite note was the
@@ -398,9 +397,9 @@ question below until the loop records for itself.
 
 ## Milestone and acceptance
 
-- [ ] **R8 Jams on a phone**: the Jams page at `/jams` with the prompt
-  and the example prompts, the Devices page at `/devices`, `/` sending
-  to whichever is on, the AI section on Settings with the list of
+- [ ] **R8 Jams on a phone**: the prompt and the example prompts on
+  `/`, the list of jams at `/jams`, the Devices page at `/devices`, `/`
+  sending to the devices while Jams is off, the AI section on Settings with the list of
   models, the readiness request on each and the Jams switch, the model
   picker when more than one agent model is set, the `jam` package with
   the loop, the OpenAI-compatible client and the MCP client, `vibium

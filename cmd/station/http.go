@@ -721,12 +721,14 @@ func (s *server) releaseHold(w http.ResponseWriter, r *http.Request, p station.P
 
 // homePage is /: the Jams page once a model is set and Jams is on, the
 // Devices page otherwise, so each page has one address.
-func (s *server) homePage(w http.ResponseWriter, r *http.Request, _ station.Principal) {
-	if s.jams.on() {
-		http.Redirect(w, r, "/jams", http.StatusSeeOther)
+// homePage is GET /: the prompt box alone once Jams is on, as the chat
+// products open; the devices otherwise.
+func (s *server) homePage(w http.ResponseWriter, r *http.Request, p station.Principal) {
+	if !s.jams.on() {
+		http.Redirect(w, r, "/devices", http.StatusSeeOther)
 		return
 	}
-	http.Redirect(w, r, "/devices", http.StatusSeeOther)
+	s.render(w, "home", s.homeData(r, p, nil))
 }
 
 func (s *server) indexPage(w http.ResponseWriter, r *http.Request, p station.Principal) {

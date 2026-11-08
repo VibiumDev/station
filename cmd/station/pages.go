@@ -44,7 +44,8 @@ var pages = template.Must(template.New("").Funcs(template.FuncMap{"npub": npub, 
 <button class="iconbtn side-toggle" type="button" aria-label="Collapse the sidebar" aria-expanded="true"><span class="wide">{{template "icon-panel"}}</span><span class="narrow">{{template "icon-close"}}</span></button></div>
 {{if .Named}}<p class="station" title="{{.Name}}">{{.Name}}</p>{{end}}
 <nav class="side-nav" aria-label="Pages">
-{{if .JamsOn}}<a href="/jams" title="Jams"{{if eq (printf "%v" .Page) "jams"}} aria-current="page"{{end}}>{{template "icon-jams"}}<span class="label">Jams</span></a>{{end}}
+{{if .JamsOn}}<a href="/" title="New jam"{{if eq (printf "%v" .Page) "home"}} aria-current="page"{{end}}>{{template "icon-new"}}<span class="label">New jam</span></a>
+<a href="/jams" title="Jams"{{if eq (printf "%v" .Page) "jams"}} aria-current="page"{{end}}>{{template "icon-jams"}}<span class="label">Jams</span></a>{{end}}
 <a href="/devices" title="Devices"{{if eq (printf "%v" .Page) "index"}} aria-current="page"{{end}}>{{template "icon-devices"}}<span class="label">Devices</span></a>
 <a href="/records" title="Records"{{if eq (printf "%v" .Page) "records"}} aria-current="page"{{end}}>{{template "icon-records"}}<span class="label">Records</span></a>
 {{if .Principal.Admin}}<a href="/settings" title="Settings"{{if eq (printf "%v" .Page) "settings"}} aria-current="page"{{end}}>{{template "icon-settings"}}<span class="label">Settings</span></a>{{end}}
@@ -55,6 +56,7 @@ var pages = template.Must(template.New("").Funcs(template.FuncMap{"npub": npub, 
 </aside><div class="side-backdrop"></div>
 <header class="bar"><button class="iconbtn menu" type="button" aria-label="Menu" aria-controls="side" aria-expanded="false">{{template "icon-menu"}}</button><a class="brand" href="/"><img class="logo" src="/viewer/vibium-logo.png" alt=""><span class="wordmark">Vibium</span></a></header>{{end}}
 
+{{define "icon-new"}}<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7M18.5 2.5a2.1 2.1 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>{{end}}
 {{define "icon-jams"}}<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M13 2 3 14h9l-1 8 10-12h-9l1-8z" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>{{end}}
 {{define "icon-devices"}}<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="6" y="2" width="12" height="20" rx="2.5" stroke="currentColor" stroke-width="2" fill="none"/><path d="M11 18h2" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>{{end}}
 {{define "icon-records"}}<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="2" fill="none"/><circle cx="12" cy="12" r="2.5" stroke="currentColor" stroke-width="2" fill="none"/></svg>{{end}}
@@ -124,8 +126,8 @@ var pages = template.Must(template.New("").Funcs(template.FuncMap{"npub": npub, 
 {{define "icon-signout"}}<svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>{{end}}
 {{define "icon-send"}}<svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M12 20V5m0 0-6 6m6-6 6 6" stroke="currentColor" stroke-width="2.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>{{end}}
 
-{{define "jams"}}{{template "head" (dict "Title" "Jams" "Name" .Name "Named" .Named)}}{{template "header" .}}
-<main class="wrap jams">
+{{define "home"}}{{template "head" (dict "Title" "New jam" "Name" .Name "Named" .Named)}}{{template "header" .}}
+<main class="wrap home">
 {{if .Message}}<div class="msg error" role="alert">{{.Message}}</div>{{end}}
 <h1 class="ask">{{.Ask}} {{template "help" "jams"}}</h1>
 <div class="helptext" id="help-jams" hidden>
@@ -142,10 +144,17 @@ var pages = template.Must(template.New("").Funcs(template.FuncMap{"npub": npub, 
 <button class="primary send" type="submit" aria-label="Send">{{template "icon-send"}}</button>
 </div></form>
 <p class="examples">{{range .Examples}}<button class="example" type="button">{{.}}</button>{{end}}</p>
+
+</main>{{template "foot" .}}{{end}}
+
+{{define "jams"}}{{template "head" (dict "Title" "Jams" "Name" .Name "Named" .Named)}}{{template "header" .}}
+<main class="wrap jams">
+<h2 class="h2">Jams {{template "help" "jams"}}</h2>
+<p class="helptext" id="help-jams" hidden>Every jam session on this station, newest first: who asked, on which device and with which model, the prompt, and the verdict or result. Open one for its transcript and the recording. A new one starts from the <a href="/">front page</a>.</p>
 {{if .Jams}}<div class="tablewrap"><table><thead><tr><th>When</th><th>Who</th><th>Device</th><th>Model</th><th>Prompt</th><th>Verdict</th></tr></thead><tbody>
 {{range .Jams}}<tr><td data-l="When"><a href="/jams/{{.ID}}">{{.When}}</a></td><td data-l="Who">{{.Subject}}</td><td data-l="Device">{{.Label}}</td><td data-l="Model">{{.Model}}</td><td data-l="Prompt">{{.Prompt}}</td>
 <td data-l="Verdict">{{if .Open}}<span class="dot on"></span>running{{else if .Word}}<b class="verdict {{.Verdict}}">{{.Word}}</b>{{else}}<span class="muted">{{.Status}}</span>{{end}}</td></tr>{{end}}
-</tbody></table></div>{{end}}
+</tbody></table></div>{{else}}<p class="muted">No jams yet. <a href="/">Start one.</a></p>{{end}}
 </main>{{template "foot" .}}{{end}}
 
 {{define "jam"}}{{template "head" (dict "Title" "Jam" "Name" .Name "Named" .Named)}}{{template "header" .}}

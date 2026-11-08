@@ -28,10 +28,10 @@ These parts work:
   Blossom blobs, uploaded with authorizations the station signs for
   agents or a rig signs itself, listed per device and hold, and
   played in place by the embedded Record Player
-- Jams (R8, under way): a prompt on the station's front page, "What can
-  I check for you?", that a model the owner set up on Settings carries
-  out on a device through Vibium's tools, with each step shown as it
-  happens; [docs/specs/jams.md](docs/specs/jams.md)
+- Jams (R8, under way): a prompt on the station's front page that a
+  model the owner set up on Settings carries out on a device through
+  Vibium's tools, with each step shown as it happens, and the list of
+  jams at `/jams`; [docs/specs/jams.md](docs/specs/jams.md)
 
 Packaging and hardening (R6) are under review.
 

@@ -515,10 +515,10 @@ func eventViews(events []station.JamEvent) []eventView {
 	return out
 }
 
-// jamsData is what the Jams page shows.
-func (s *server) jamsData(r *http.Request, p station.Principal, extra map[string]any) map[string]any {
-	ctx := r.Context()
-	devs, _ := s.devices(ctx)
+// homeData is what the front page shows: the prompt box with its
+// pickers and examples.
+func (s *server) homeData(r *http.Request, p station.Principal, extra map[string]any) map[string]any {
+	devs, _ := s.devices(r.Context())
 	var online []deviceView
 	for _, d := range devs {
 		if d.ID != "" && d.Online && (p.Device == "" || p.Device == d.ID) {
@@ -529,17 +529,24 @@ func (s *server) jamsData(r *http.Request, p station.Principal, extra map[string
 	if len(online) > 0 {
 		kind = online[0].Kind
 	}
+	agents := s.jams.models.OfRole(jam.RoleAgent)
+	data := map[string]any{"Page": "home", "Principal": p, "CSRF": s.auth.csrfToken(r), "Devices": online, "Models": agents, "Examples": examplesFor(kind), "Ask": greeting()}
+	for k, v := range extra {
+		data[k] = v
+	}
+	return data
+}
+
+// jamsData is what the Jams page shows: the list.
+func (s *server) jamsData(r *http.Request, p station.Principal) map[string]any {
+	ctx := r.Context()
+	devs, _ := s.devices(ctx)
 	subject := p.Subject
 	if p.Admin {
 		subject = ""
 	}
 	list, _ := s.db.Jams(ctx, subject, 100)
-	agents := s.jams.models.OfRole(jam.RoleAgent)
-	data := map[string]any{"Page": "jams", "Principal": p, "CSRF": s.auth.csrfToken(r), "Devices": online, "Models": agents, "Examples": examplesFor(kind), "Jams": jamViews(list, devs), "Ask": greeting()}
-	for k, v := range extra {
-		data[k] = v
-	}
-	return data
+	return map[string]any{"Page": "jams", "Principal": p, "CSRF": s.auth.csrfToken(r), "Jams": jamViews(list, devs)}
 }
 
 type jamView struct {
@@ -572,12 +579,12 @@ func jamViews(list []station.Jam, devs []deviceView) []jamView {
 	return out
 }
 
-// jamsPage is GET /jams.
+// jamsPage is GET /jams, the list.
 func (s *server) jamsPage(w http.ResponseWriter, r *http.Request, p station.Principal) {
 	if s.jamsOff(w, r) {
 		return
 	}
-	s.render(w, "jams", s.jamsData(r, p, nil))
+	s.render(w, "jams", s.jamsData(r, p))
 }
 
 // startJamForm is POST /jams from the page.
@@ -586,12 +593,12 @@ func (s *server) startJamForm(w http.ResponseWriter, r *http.Request, p station.
 		return
 	}
 	if p.ReadOnly {
-		s.render(w, "jams", s.jamsData(r, p, map[string]any{"Message": "A read-only sign-in can watch jams, not start them.", "Prompt": r.FormValue("prompt")}))
+		s.render(w, "home", s.homeData(r, p, map[string]any{"Message": "A read-only sign-in can watch jams, not start them.", "Prompt": r.FormValue("prompt")}))
 		return
 	}
 	j, err := s.jams.start(r.Context(), p, r.FormValue("prompt"), r.FormValue("device"), r.FormValue("model"), r.FormValue("mode"))
 	if err != nil {
-		s.render(w, "jams", s.jamsData(r, p, map[string]any{"Message": err.Error(), "Prompt": r.FormValue("prompt")}))
+		s.render(w, "home", s.homeData(r, p, map[string]any{"Message": err.Error(), "Prompt": r.FormValue("prompt")}))
 		return
 	}
 	http.Redirect(w, r, "/jams/"+j.ID, http.StatusSeeOther)
