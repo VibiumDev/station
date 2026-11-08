@@ -65,21 +65,62 @@ pre { background: var(--surface); border: 1px solid var(--line-card); border-rad
 .brand .logo.square { width: 28px; }
 .brand .wordmark { font: 700 25px/1 var(--head); letter-spacing: 0.01em; }
 .brand .product { font: 13px var(--mono); letter-spacing: 0.08em; text-transform: uppercase; color: var(--text-muted); }
-/* The page links sit by the wordmark; who is signed in and Sign out sit
-   at the right, the theme button after them. */
+/* The top bar of Roadie's pages and the sign-in page: the page links by
+   the wordmark, the theme button at the right. A signed-in station page
+   has the sidebar instead. */
 .top .pages { display: flex; flex-wrap: wrap; gap: 6px 20px; align-items: center; margin-left: 12px; font-size: 15px; }
 .top .pages a { color: var(--text-2); text-decoration: none; }
 .top .pages a:hover { color: var(--text); }
 .top .pages a[aria-current="page"] { color: var(--text); font-weight: 600; }
-.top .account { display: flex; gap: 10px; align-items: center; margin-left: auto; font-size: 15px; }
-.top .who { color: var(--text-muted); font-family: var(--mono); font-size: 13px; max-width: 40vw; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .top .iconbtn { margin-left: auto; }
-.top .signout .iconbtn { margin-left: 0; }
-.top .account ~ .iconbtn { margin-left: 8px; }
 .top .break { display: none; flex-basis: 100%; height: 0; }
 
+/* The sidebar of a signed-in station page: the station's name, the pages
+   as icons with labels, and the account at the bottom, whose menu holds
+   the name and Sign out. Its toggle folds it to a rail of icons, kept
+   per browser; on a phone it is a drawer behind the bar's menu button. */
+:root { --side-w: 232px; }
+html[data-side="rail"] { --side-w: 60px; }
+body:has(> .side) { display: grid; grid-template-columns: var(--side-w) minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr); }
+body:has(> .side) > main { grid-column: 2; grid-row: 2; }
+.side { grid-row: 1 / -1; grid-column: 1; position: sticky; top: 0; height: 100vh; overflow-y: auto; display: flex; flex-direction: column; gap: 6px; padding: 14px 10px; background: var(--bg-band); border-right: 1px solid var(--line); }
+.side-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 0 2px 10px; }
+.side .brand { min-width: 0; }
+.side .brand .wordmark { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.side-toggle .narrow { display: none; }
+.side-toggle span { display: inline-flex; }
+.side-nav { display: flex; flex-direction: column; gap: 2px; }
+.side-nav a, .account summary, .menuitem { display: flex; align-items: center; gap: 12px; padding: 8px 10px; border-radius: 8px; color: var(--text-2); text-decoration: none; font-size: 15px; line-height: 1.3; cursor: pointer; }
+.side-nav a:hover, .account summary:hover { background: var(--surface); color: var(--text); }
+.side-nav a[aria-current="page"] { background: var(--surface); color: var(--text); font-weight: 600; }
+.side-nav svg { width: 20px; height: 20px; flex: 0 0 20px; }
+.side .label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.account { margin-top: auto; position: relative; }
+.account summary { list-style: none; }
+.account summary::-webkit-details-marker { display: none; }
+.account .label { font: 13px var(--mono); color: var(--text-3); }
+.avatar { display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 28px; flex: 0 0 28px; border-radius: 50%; background: var(--accent); color: var(--on-accent); font: 600 13px var(--sans); }
+.account .menu { position: absolute; left: 0; bottom: calc(100% + 6px); min-width: 220px; max-width: 320px; background: var(--surface); border: 1px solid var(--line-card); border-radius: 12px; padding: 6px; box-shadow: 0 8px 24px rgba(0, 0, 0, 0.25); z-index: 30; }
+.account .who { margin: 0; padding: 8px 10px 10px; font: 13px var(--mono); color: var(--text-muted); border-bottom: 1px solid var(--line); overflow-wrap: anywhere; }
+.menuitem { width: 100%; border: 0; background: none; min-height: 0; margin-top: 4px; justify-content: flex-start; font: 500 15px var(--sans); color: var(--text-2); }
+.menuitem:hover { background: var(--bg-band); color: var(--text); }
+.menuitem svg { width: 18px; height: 18px; }
+.bar { display: none; }
+/* The rail: icons alone, the menu opening to the right. */
+html[data-side="rail"] .side { padding: 14px 8px; }
+html[data-side="rail"] .side-top { flex-direction: column; gap: 10px; }
+html[data-side="rail"] .side .wordmark, html[data-side="rail"] .side .label { display: none; }
+html[data-side="rail"] .side-nav a, html[data-side="rail"] .account summary { justify-content: center; padding: 10px 0; }
+html[data-side="rail"] .account .menu { left: calc(100% + 8px); bottom: 0; }
+/* Appearance on Settings: three choices, the picked one outlined. */
+.themepick { display: flex; gap: 8px; flex-wrap: wrap; margin: 0; padding: 0; border: 0; }
+.themepick label { display: inline-flex; align-items: center; gap: 8px; padding: 8px 14px; border: 1px solid var(--line-strong); border-radius: 10px; cursor: pointer; font-size: 15px; color: var(--text-2); }
+.themepick label:has(input:checked) { border-color: var(--accent); color: var(--text); }
+.themepick input { margin: 0; accent-color: var(--accent); }
+.sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+
 main { flex: 1; }
-main.wrap { padding-top: 56px; padding-bottom: 88px; }
+main.wrap { padding-top: 44px; padding-bottom: 88px; }
 .kicker { margin: 0 0 12px; font: 13px var(--mono); letter-spacing: 0.08em; text-transform: uppercase; color: var(--text-muted); }
 .h1 { margin: 0; font: 700 clamp(40px, 6vw, 64px)/0.95 var(--head); letter-spacing: -0.01em; }
 .h2 { margin: 56px 0 16px; font: 700 clamp(28px, 3.6vw, 36px)/1.05 var(--head); }
@@ -179,18 +220,28 @@ input[type=radio], input[type=checkbox] { accent-color: var(--accent); width: 16
    lines, so nothing scrolls sideways or breaks mid-word. */
 @media (max-width: 640px) {
   .wrap { padding: 0 16px; }
-  /* Two rows: the wordmark, who is signed in and the theme button, then
-     the page links at the left and Sign out at the right. */
+  /* Two rows: the wordmark and the theme button, then the page links. */
   .top .wrap { padding: 14px 16px; gap: 10px 16px; }
   .top .brand { order: 1; }
-  .top .account { display: contents; }
-  .top .who { order: 2; margin-left: auto; max-width: 36vw; }
-  .top .iconbtn { order: 3; margin-left: auto; }
-  .top .account ~ .iconbtn { margin-left: 0; }
-  .top .break { order: 4; display: block; }
-  .top .pages { order: 5; margin-left: 0; gap: 6px 16px; }
-  .top .signout { order: 6; margin-left: auto; }
-  main.wrap { padding-top: 36px; padding-bottom: 56px; }
+  .top .iconbtn { order: 2; margin-left: auto; }
+  .top .break { order: 3; display: block; }
+  .top .pages { order: 4; margin-left: 0; gap: 6px 16px; }
+  main.wrap { padding-top: 24px; padding-bottom: 56px; }
+  /* The sidebar is a drawer: the bar's menu button slides it in over the
+     page, with labels whatever the rail choice, and its toggle closes it. */
+  body:has(> .side) { display: block; }
+  .bar { display: flex; align-items: center; gap: 10px; position: sticky; top: 0; z-index: 10; padding: 10px 16px; background: var(--bg); border-bottom: 1px solid var(--line); }
+  .bar .brand .logo { top: -3px; }
+  .side { position: fixed; top: 0; bottom: 0; left: 0; width: 272px; max-width: 85vw; height: auto; padding: 14px 10px; transform: translateX(-100%); transition: transform 0.2s ease; z-index: 30; }
+  html[data-drawer="open"] .side { transform: none; box-shadow: 0 0 40px rgba(0, 0, 0, 0.35); }
+  .side-backdrop { display: none; position: fixed; inset: 0; background: rgba(0, 0, 0, 0.4); z-index: 29; }
+  html[data-drawer="open"] .side-backdrop { display: block; }
+  .side-toggle .wide { display: none; }
+  .side-toggle .narrow { display: inline-flex; }
+  html[data-side="rail"] .side-top { flex-direction: row; gap: 8px; }
+  html[data-side="rail"] .side .wordmark, html[data-side="rail"] .side .label { display: inline; }
+  html[data-side="rail"] .side-nav a, html[data-side="rail"] .account summary { justify-content: flex-start; padding: 8px 10px; }
+  html[data-side="rail"] .account .menu { left: 0; bottom: calc(100% + 6px); }
   .h2 { margin-top: 40px; }
   .tablewrap table:not(.kv) thead { display: none; }
   .tablewrap table:not(.kv) tbody, .tablewrap table:not(.kv) tr, .tablewrap table:not(.kv) td { display: block; }
@@ -208,7 +259,7 @@ input[type=radio], input[type=checkbox] { accent-color: var(--accent); width: 16
 main.play { max-width: none; padding-top: 20px; padding-bottom: 24px; }
 .play .lead { max-width: none; font-size: 15px; margin: 0; }
 .play .lead .btn { margin-left: 8px; }
-.play iframe.player { display: block; width: 100%; height: calc(100vh - 170px); min-height: 520px; margin-top: 14px; border: 1px solid var(--line-card); border-radius: 8px; background: var(--bg); }
+.play iframe.player { display: block; width: 100%; height: calc(100vh - 120px); min-height: 520px; margin-top: 14px; border: 1px solid var(--line-card); border-radius: 8px; background: var(--bg); }
 /* The full page: the frame alone, filling the window, still on a station
    page so the player takes its colors. */
 iframe.player.full { position: fixed; inset: 0; width: 100%; height: 100%; border: 0; background: var(--bg); }

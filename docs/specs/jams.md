@@ -298,14 +298,14 @@ visitor can learn from, and below that the list of past jams, with
 when, who, the device, the model, the prompt, and the verdict where
 there is one. The list of
 devices moves to `/devices`, and the docs that point at it follow. The
-top bar reads Jams, Devices, Records, Settings, and the brand keeps
+sidebar reads Jams, Devices, Records, Settings, and the brand keeps
 linking to `/`. One jam lives at `/jams/{id}`, with the transcript,
 the prompt box for the next turn while the jam is open, the watching
 viewer while it is live, and the recording's Play when it is done.
 
 Jams exist only once an agent model is set. Until then the station
 looks as it does today, `/` sending to `/devices` and no Jams in the
-top bar, and the only mention is where the owner will act on it: the AI
+sidebar, and the only mention is where the owner will act on it: the AI
 section on Settings opens with a line saying that a model turns on
 Jams, a prompt on the front page that drives the station's devices. The
 owner is on Settings before anything can be jammed, to enroll a rig, so

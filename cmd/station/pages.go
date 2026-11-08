@@ -2,6 +2,7 @@ package main
 
 import (
 	"html/template"
+	"unicode"
 
 	"fiatjaf.com/nostr"
 	"fiatjaf.com/nostr/nip19"
@@ -28,9 +29,9 @@ func platformName(p string) string {
 
 // The station's pages, in the look of Vibium's web style guide: the
 // shared stylesheet and theme switch come from the viewer package, so a
-// Roadie's pages are the same. Signed in, the top bar is the station's
-// own name; the brand is on the sign-in page.
-var pages = template.Must(template.New("").Funcs(template.FuncMap{"npub": npub, "dict": dict, "platform": platformName}).Parse(`
+// Roadie's pages are the same. Signed in, the sidebar carries the
+// station's own name; the brand is on the sign-in page.
+var pages = template.Must(template.New("").Funcs(template.FuncMap{"npub": npub, "dict": dict, "platform": platformName, "initial": initial}).Parse(`
 {{define "head"}}<!DOCTYPE html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>{{.Title}} · {{if .Named}}{{.Name}}{{else}}Vibium Station{{end}}</title><link rel="icon" type="image/png" href="/favicon.png"><link rel="apple-touch-icon" href="/apple-touch-icon.png">
@@ -38,12 +39,28 @@ var pages = template.Must(template.New("").Funcs(template.FuncMap{"npub": npub, 
 
 {{define "theme"}}<button id="themeBtn" class="iconbtn" type="button" aria-label="Theme"></button>{{end}}
 
-{{define "header"}}<header class="top"><div class="wrap">
-<a class="brand" href="/"><img class="logo" src="/viewer/vibium-logo.png" alt="Vibium"><span class="wordmark">{{if .Named}}{{.Name}}{{else}}Station{{end}}</span></a>
-<nav class="pages">{{if .JamsOn}}<a href="/jams"{{if eq (printf "%v" .Page) "jams"}} aria-current="page"{{end}}>Jams</a>{{end}}<a href="/devices"{{if eq (printf "%v" .Page) "index"}} aria-current="page"{{end}}>Devices</a><a href="/records"{{if eq (printf "%v" .Page) "records"}} aria-current="page"{{end}}>Records</a>{{if .Principal.Admin}}<a href="/settings"{{if eq (printf "%v" .Page) "settings"}} aria-current="page"{{end}}>Settings</a>{{end}}</nav>
-<div class="account"><span class="who">{{.Principal.Subject}}</span>
-<form class="inline signout" method="post" action="/logout"><input type="hidden" name="csrf" value="{{.CSRF}}"><button class="iconbtn" type="submit" aria-label="Sign out" title="Sign out">{{template "icon-signout"}}</button></form></div>
-{{template "theme"}}<span class="break"></span></div></header>{{end}}
+{{define "header"}}<aside class="side" id="side">
+<div class="side-top"><a class="brand" href="/"><img class="logo" src="/viewer/vibium-logo.png" alt="Vibium"><span class="wordmark">{{if .Named}}{{.Name}}{{else}}Station{{end}}</span></a>
+<button class="iconbtn side-toggle" type="button" aria-label="Collapse the sidebar" aria-expanded="true"><span class="wide">{{template "icon-panel"}}</span><span class="narrow">{{template "icon-close"}}</span></button></div>
+<nav class="side-nav" aria-label="Pages">
+{{if .JamsOn}}<a href="/jams" title="Jams"{{if eq (printf "%v" .Page) "jams"}} aria-current="page"{{end}}>{{template "icon-jams"}}<span class="label">Jams</span></a>{{end}}
+<a href="/devices" title="Devices"{{if eq (printf "%v" .Page) "index"}} aria-current="page"{{end}}>{{template "icon-devices"}}<span class="label">Devices</span></a>
+<a href="/records" title="Records"{{if eq (printf "%v" .Page) "records"}} aria-current="page"{{end}}>{{template "icon-records"}}<span class="label">Records</span></a>
+{{if .Principal.Admin}}<a href="/settings" title="Settings"{{if eq (printf "%v" .Page) "settings"}} aria-current="page"{{end}}>{{template "icon-settings"}}<span class="label">Settings</span></a>{{end}}
+</nav>
+<details class="account"><summary title="{{.Principal.Subject}}"><span class="avatar" aria-hidden="true">{{initial .Principal.Subject}}</span><span class="label">{{.Principal.Subject}}</span></summary>
+<div class="menu"><p class="who">{{.Principal.Subject}}</p>
+<form method="post" action="/logout"><input type="hidden" name="csrf" value="{{.CSRF}}"><button class="menuitem" type="submit">{{template "icon-signout"}}Sign out</button></form></div></details>
+</aside><div class="side-backdrop"></div>
+<header class="bar"><button class="iconbtn menu" type="button" aria-label="Menu" aria-controls="side" aria-expanded="false">{{template "icon-menu"}}</button><a class="brand" href="/"><img class="logo" src="/viewer/vibium-logo.png" alt="Vibium"><span class="wordmark">{{if .Named}}{{.Name}}{{else}}Station{{end}}</span></a></header>{{end}}
+
+{{define "icon-jams"}}<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M13 2 3 14h9l-1 8 10-12h-9l1-8z" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>{{end}}
+{{define "icon-devices"}}<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="6" y="2" width="12" height="20" rx="2.5" stroke="currentColor" stroke-width="2" fill="none"/><path d="M11 18h2" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>{{end}}
+{{define "icon-records"}}<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="2" fill="none"/><circle cx="12" cy="12" r="2.5" stroke="currentColor" stroke-width="2" fill="none"/></svg>{{end}}
+{{define "icon-settings"}}<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 21v-7M4 10V3M12 21v-9M12 8V3M20 21v-5M20 12V3M1 14h6M9 8h6M17 16h6" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>{{end}}
+{{define "icon-panel"}}<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2" stroke="currentColor" stroke-width="2" fill="none"/><path d="M9 4v16" stroke="currentColor" stroke-width="2"/></svg>{{end}}
+{{define "icon-menu"}}<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h18M3 12h18M3 18h18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>{{end}}
+{{define "icon-close"}}<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>{{end}}
 
 {{define "foot"}}</body></html>{{end}}
 
@@ -179,7 +196,7 @@ var pages = template.Must(template.New("").Funcs(template.FuncMap{"npub": npub, 
 {{if .Message}}<div class="msg" role="alert">{{.Message}}</div>{{end}}
 
 <h2 class="h2">Name {{template "help" "name"}}</h2>
-<p class="helptext" id="help-name" hidden>What this station is called: in the top bar and the tab title here, and what a rig records when it enrolls. The <code>--name</code> flag sets it too.</p>
+<p class="helptext" id="help-name" hidden>What this station is called: in the sidebar and the tab title here, and what a rig records when it enrolls. The <code>--name</code> flag sets it too.</p>
 <form class="row" method="post" action="/settings/name"><input type="hidden" name="csrf" value="{{.CSRF}}">
 <input type="text" name="name" value="{{.Name}}" aria-label="Station name" maxlength="60" required> <input type="submit" value="Save"></form>
 
@@ -188,7 +205,7 @@ var pages = template.Must(template.New("").Funcs(template.FuncMap{"npub": npub, 
 <p>A model provider turns on Jams: a prompt on the front page that drives the station's devices. Bring your own keys: each model here is a name of your choosing, a role, a provider, the provider's name for the model, and its API key, which is seen once as it is typed and kept in a file only the station's user can read, under <code>ai/</code> in the data directory, in Vibium's own <code>ai.env</code> format.</p>
 <p><b>Roles.</b> An <i>agent</i> model is the brain of a jam session: it reasons, sees the screenshots and calls the tools. One is picked when a session starts, the default unless there are several to choose from. A <i>listen</i> model turns the device's sound into text and a <i>say</i> model turns text into speech, for Vibium's listen and say, which make those calls themselves; their settings go to Vibium, never the agent's key.</p>
 <p><b>Saving.</b> An agent model is asked for one word when it is saved, so a wrong key or an unknown model is seen here and not in a failed session. Saving a name again changes its settings and keeps its key unless a new one is typed. A model named <i>host</i> is the station's own environment, when it carries Vibium's variables, and is set there.</p>
-<p><b>Jams.</b> On by itself once an agent model is set, which puts Jams in the top bar and the prompt on the front page; off keeps the keys and puts the devices back on the front page. Sessions drive devices through <code>vibium mcp</code>, so the station needs the Vibium binary on its PATH or named with <code>--vibium</code>.</p>
+<p><b>Jams.</b> On by itself once an agent model is set, which puts Jams in the sidebar and the prompt on the front page; off keeps the keys and puts the devices back on the front page. Sessions drive devices through <code>vibium mcp</code>, so the station needs the Vibium binary on its PATH or named with <code>--vibium</code>.</p>
 </div>
 <p class="muted">A model provider turns on Jams: a prompt on the front page that drives the station's devices. Bring your own keys.</p>
 {{if .Models}}<div class="tablewrap"><table><thead><tr><th>Model</th><th>Role</th><th>Provider</th><th>Key</th><th></th></tr></thead><tbody>
@@ -273,8 +290,23 @@ var pages = template.Must(template.New("").Funcs(template.FuncMap{"npub": npub, 
 <tr><th>Directory</th><td><code>{{.RecordsDir}}</code></td></tr>
 <tr><th>Limits</th><td>{{.RecordsMaxFile}} a file, {{.RecordsMaxTotal}} in all, {{if .RecordsMaxAge}}{{.RecordsMaxAge}} each{{else}}no age limit{{end}}</td></tr>
 </table></div>
+
+<h2 class="h2">Appearance {{template "help" "appearance"}}</h2>
+<p class="helptext" id="help-appearance" hidden>Light or dark for this browser, or whatever the device is set to. The choice stays in the browser, not on the station, so each browser has its own.</p>
+<fieldset class="themepick" id="themePick"><legend class="sr">Theme</legend>
+<label><input type="radio" name="theme" value="system"><span>System</span></label>
+<label><input type="radio" name="theme" value="light"><span>Light</span></label>
+<label><input type="radio" name="theme" value="dark"><span>Dark</span></label></fieldset>
 </main>{{template "foot" .}}{{end}}
 `))
+
+// initial is the first letter of a name, for the account's avatar.
+func initial(s string) string {
+	for _, r := range s {
+		return string(unicode.ToUpper(r))
+	}
+	return "?"
+}
 
 func dict(kv ...any) map[string]any {
 	m := map[string]any{}

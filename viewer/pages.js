@@ -1,14 +1,20 @@
-// The theme switch for Vibium's pages, and the "?" help toggles. One
-// button cycles light, dark, and whatever the system says, showing the
-// current choice: light or dark is kept in this browser and applied
-// before the first paint, since this loads in the head; "system" keeps
-// nothing and follows the preference. The button is wired once the page
-// is there, and a choice made in another tab is followed here.
+// The theme for Vibium's pages, the "?" help toggles, and a station's
+// sidebar. The theme is light, dark, or whatever the system says: light
+// or dark is kept in this browser and applied before the first paint,
+// since this loads in the head; "system" keeps nothing and follows the
+// preference. Roadie's pages and the sign-in page have a button that
+// cycles the three; a station's Settings has the three as a choice. A
+// choice made in another tab is followed here. The sidebar's fold to a
+// rail is kept the same way and applied before the first paint too.
 (function () {
   var KEY = 'vibium-theme';
+  var SIDE = 'station-side';
   var saved = null;
   try { saved = localStorage.getItem(KEY); } catch (e) {}
   if (saved === 'light' || saved === 'dark') document.documentElement.setAttribute('data-theme', saved);
+  var side = null;
+  try { side = localStorage.getItem(SIDE); } catch (e) {}
+  if (side === 'rail') document.documentElement.setAttribute('data-side', 'rail');
   var btn = null;
   var NAMES = {light: 'light', dark: 'dark', system: 'the system default'};
   var NEXT = {light: 'dark', dark: 'system', system: 'light'};
@@ -21,6 +27,8 @@
   function applyTheme() {
     if (choice() === 'system') document.documentElement.removeAttribute('data-theme');
     else document.documentElement.setAttribute('data-theme', choice());
+    var pick = document.getElementById('themePick');
+    if (pick) Array.prototype.forEach.call(pick.querySelectorAll('input'), function (r) { r.checked = r.value === choice(); });
     if (!btn) return;
     btn.innerHTML = ICONS[choice()];
     btn.setAttribute('aria-label', 'Theme: ' + NAMES[choice()] + '. Switch to ' + NAMES[NEXT[choice()]] + '.');
@@ -65,6 +73,51 @@
     if (player) player.addEventListener('load', function () { player.focus(); });
     btn = document.getElementById('themeBtn');
     if (btn) btn.addEventListener('click', function () { pickTheme(NEXT[choice()]); });
+    var pick = document.getElementById('themePick');
+    if (pick) pick.addEventListener('change', function (e) { if (e.target.name === 'theme') pickTheme(e.target.value); });
     applyTheme();
+    // The sidebar: its toggle folds it to a rail on a wide screen and
+    // closes the drawer on a phone, where the bar's menu button opens it.
+    // The account menu closes on a click elsewhere or Escape.
+    var aside = document.getElementById('side');
+    if (aside) {
+      var root = document.documentElement;
+      var phone = window.matchMedia('(max-width: 640px)');
+      var toggle = aside.querySelector('.side-toggle');
+      var menuBtn = document.querySelector('.bar .menu');
+      var backdrop = document.querySelector('.side-backdrop');
+      var account = aside.querySelector('details.account');
+      var drawer = function (open) {
+        if (open) root.setAttribute('data-drawer', 'open'); else root.removeAttribute('data-drawer');
+        if (menuBtn) menuBtn.setAttribute('aria-expanded', open ? 'true' : 'false');
+        if (open && toggle) toggle.focus(); else if (!open && menuBtn && document.activeElement && aside.contains(document.activeElement)) menuBtn.focus();
+      };
+      var describe = function () {
+        if (!toggle) return;
+        var rail = root.getAttribute('data-side') === 'rail';
+        toggle.setAttribute('aria-expanded', phone.matches ? 'true' : (rail ? 'false' : 'true'));
+        toggle.setAttribute('aria-label', phone.matches ? 'Close the menu' : (rail ? 'Expand the sidebar' : 'Collapse the sidebar'));
+        toggle.title = toggle.getAttribute('aria-label');
+      };
+      if (toggle) toggle.addEventListener('click', function () {
+        if (phone.matches) { drawer(false); return; }
+        var rail = root.getAttribute('data-side') !== 'rail';
+        if (rail) root.setAttribute('data-side', 'rail'); else root.removeAttribute('data-side');
+        try { if (rail) localStorage.setItem(SIDE, 'rail'); else localStorage.removeItem(SIDE); } catch (e) {}
+        describe();
+      });
+      if (menuBtn) menuBtn.addEventListener('click', function () { drawer(true); });
+      if (backdrop) backdrop.addEventListener('click', function () { drawer(false); });
+      if (phone.addEventListener) phone.addEventListener('change', function () { drawer(false); describe(); });
+      document.addEventListener('keydown', function (e) {
+        if (e.key !== 'Escape') return;
+        if (root.getAttribute('data-drawer') === 'open') drawer(false);
+        if (account && account.open) account.open = false;
+      });
+      if (account) document.addEventListener('click', function (e) {
+        if (account.open && !account.contains(e.target)) account.open = false;
+      });
+      describe();
+    }
   });
 })();
