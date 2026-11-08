@@ -29,8 +29,8 @@ func platformName(p string) string {
 
 // The station's pages, in the look of Vibium's web style guide: the
 // shared stylesheet and theme switch come from the viewer package, so a
-// Roadie's pages are the same. Signed in, the sidebar carries the
-// station's own name; the brand is on the sign-in page.
+// Roadie's pages are the same. The mark reads Vibium everywhere; a
+// station's own name, when set, is the small line under it.
 var pages = template.Must(template.New("").Funcs(template.FuncMap{"npub": npub, "dict": dict, "platform": platformName, "initial": initial}).Parse(`
 {{define "head"}}<!DOCTYPE html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
@@ -40,8 +40,9 @@ var pages = template.Must(template.New("").Funcs(template.FuncMap{"npub": npub, 
 {{define "theme"}}<button id="themeBtn" class="iconbtn" type="button" aria-label="Theme"></button>{{end}}
 
 {{define "header"}}<aside class="side" id="side">
-<div class="side-top"><a class="brand" href="/"><img class="logo" src="/viewer/vibium-logo.png" alt="Vibium"><span class="wordmark">{{if .Named}}{{.Name}}{{else}}Station{{end}}</span></a>
+<div class="side-top"><a class="brand" href="/"><img class="logo" src="/viewer/vibium-logo.png" alt=""><span class="wordmark">Vibium</span></a>
 <button class="iconbtn side-toggle" type="button" aria-label="Collapse the sidebar" aria-expanded="true"><span class="wide">{{template "icon-panel"}}</span><span class="narrow">{{template "icon-close"}}</span></button></div>
+{{if .Named}}<p class="station" title="{{.Name}}">{{.Name}}</p>{{end}}
 <nav class="side-nav" aria-label="Pages">
 {{if .JamsOn}}<a href="/jams" title="Jams"{{if eq (printf "%v" .Page) "jams"}} aria-current="page"{{end}}>{{template "icon-jams"}}<span class="label">Jams</span></a>{{end}}
 <a href="/devices" title="Devices"{{if eq (printf "%v" .Page) "index"}} aria-current="page"{{end}}>{{template "icon-devices"}}<span class="label">Devices</span></a>
@@ -52,7 +53,7 @@ var pages = template.Must(template.New("").Funcs(template.FuncMap{"npub": npub, 
 <div class="menu"><p class="who">{{.Principal.Subject}}</p>
 <form method="post" action="/logout"><input type="hidden" name="csrf" value="{{.CSRF}}"><button class="menuitem" type="submit">{{template "icon-signout"}}Sign out</button></form></div></details>
 </aside><div class="side-backdrop"></div>
-<header class="bar"><button class="iconbtn menu" type="button" aria-label="Menu" aria-controls="side" aria-expanded="false">{{template "icon-menu"}}</button><a class="brand" href="/"><img class="logo" src="/viewer/vibium-logo.png" alt="Vibium"><span class="wordmark">{{if .Named}}{{.Name}}{{else}}Station{{end}}</span></a></header>{{end}}
+<header class="bar"><button class="iconbtn menu" type="button" aria-label="Menu" aria-controls="side" aria-expanded="false">{{template "icon-menu"}}</button><a class="brand" href="/"><img class="logo" src="/viewer/vibium-logo.png" alt=""><span class="wordmark">Vibium</span></a></header>{{end}}
 
 {{define "icon-jams"}}<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M13 2 3 14h9l-1 8 10-12h-9l1-8z" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>{{end}}
 {{define "icon-devices"}}<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="6" y="2" width="12" height="20" rx="2.5" stroke="currentColor" stroke-width="2" fill="none"/><path d="M11 18h2" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>{{end}}
@@ -196,7 +197,7 @@ var pages = template.Must(template.New("").Funcs(template.FuncMap{"npub": npub, 
 {{if .Message}}<div class="msg" role="alert">{{.Message}}</div>{{end}}
 
 <h2 class="h2">Name {{template "help" "name"}}</h2>
-<p class="helptext" id="help-name" hidden>What this station is called: in the sidebar and the tab title here, and what a rig records when it enrolls. The <code>--name</code> flag sets it too.</p>
+<p class="helptext" id="help-name" hidden>What this station is called: under the Vibium mark in the sidebar and in the tab title here, and what a rig records when it enrolls. The <code>--name</code> flag sets it too.</p>
 <form class="row" method="post" action="/settings/name"><input type="hidden" name="csrf" value="{{.CSRF}}">
 <input type="text" name="name" value="{{.Name}}" aria-label="Station name" maxlength="60" required> <input type="submit" value="Save"></form>
 
