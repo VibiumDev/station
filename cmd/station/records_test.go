@@ -154,7 +154,7 @@ func TestDevicesPageOffersDriveAndWatch(t *testing.T) {
 		t.Fatal(err)
 	}
 	html := out.String()
-	for _, want := range []string{`href="/devices/rig_a/iphone_1/drive" title="Drive"`, `href="/devices/rig_a/iphone_1/view" title="Watch, without touching it"`, `href="/records?device=rig_a%2fiphone_1"`, "iOS 26.6", "<b>iPhone 15 Pro Max</b>"} {
+	for _, want := range []string{`href="/devices/rig_a/iphone_1/drive" title="Drive"`, `href="/devices/rig_a/iphone_1/view" title="Watch"`, `href="/records?device=rig_a%2fiphone_1"`, "iOS 26.6", "<b>iPhone 15 Pro Max</b>"} {
 		if !strings.Contains(html, want) {
 			t.Errorf("devices page lacks %q", want)
 		}

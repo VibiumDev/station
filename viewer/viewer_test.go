@@ -68,3 +68,23 @@ func TestRenderWatchAndDriveLinks(t *testing.T) {
 		t.Error("driving page carries the watch flag or the wrong link")
 	}
 }
+
+// The panel's input rows are wrapped so a watching page can hide them,
+// and the shell hides them, the microphone and the keyboard, and tells
+// a rig's extras that it watches.
+func TestWatchingPageHidesInput(t *testing.T) {
+	var out strings.Builder
+	if err := Render(&out, Page{Title: "Watching", Config: Config{Mode: "local", Watch: true, API: Local()}}); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(out.String(), `id="inputRows"`) {
+		t.Error("the input rows have no wrapper to hide")
+	}
+	shell, _ := files.ReadFile("shell.js")
+	js := string(shell)
+	for _, want := range []string{"['ptt', 'kbdBtn', 'inputRows']", "watching: watchOnly,", "return !watchOnly && (!station", "'watching only'"} {
+		if !strings.Contains(js, want) {
+			t.Errorf("shell.js lacks %q", want)
+		}
+	}
+}

@@ -80,7 +80,7 @@ var pages = template.Must(template.New("").Funcs(template.FuncMap{"npub": npub, 
 {{template "foot" .}}{{end}}
 
 {{define "index"}}{{template "head" (dict "Title" "Devices" "Name" .Name "Named" .Named)}}{{template "header" .}}
-<main class="wrap"><p class="lead">Drive a device, or watch one without touching it. {{template "help" "devices"}}</p>
+<main class="wrap"><p class="lead">Drive a device, or just watch. {{template "help" "devices"}}</p>
 <div class="helptext" id="help-devices" hidden>
 <p>Every device on every host enrolled here. Drive, the wheel, takes a device nobody holds and gives you the picture, touch, keys and sound; a device someone else holds opens watching, and Hold in the viewer takes it from them, which ends an agent's run. Release in the viewer gives the device back and returns here, and a hold also ends after 5 idle minutes, or after 8 hours. Watch, the eye, only looks: it never takes the device and sends no input, so it is the safe way to follow someone else's session or a jam.</p>
 <p><b>Device.</b> The device's label, else its model, else its name, with its kind, its model when the label differs, its platform and version, and its name under it. The name is the last part of the device's address, rig/name, which holds and the API use; Roadie's <code>--label</code>, <code>--model</code>, <code>--os-version</code>, <code>--platform</code> and <code>--device-name</code> set the rest.</p>
@@ -93,7 +93,7 @@ var pages = template.Must(template.New("").Funcs(template.FuncMap{"npub": npub, 
 <td data-l="Device">{{if .ID}}<b>{{.Title}}</b><span class="sub">{{.Kind}}{{if and .Model (ne .Model .Title)}} · {{.Model}}{{end}}{{if .Platform}} · {{platform .Platform}}{{if .OSVersion}} {{.OSVersion}}{{end}}{{end}}{{if ne .Title .Name}} · {{.Name}}{{end}}</span>{{else}}<span class="muted">no devices announced</span>{{end}}</td>
 <td data-l="Host"><b>{{.Rig.Name}}</b><span class="sub">{{.Rig.ID}}{{if .Recorded}} · <span class="hint" title="This host records every session on the device: each input, and a frame of the screen after each burst of input, kept in the Record Store when the session ends.">records sessions</span>{{end}}</span></td>
 <td data-l="Status">{{if .Online}}<span class="dot on"></span>online{{else}}<span class="dot"></span><span class="muted">offline</span>{{end}}<span class="sub">{{if .Hold}}held by {{if .Hold.JamID}}<a href="/jams/{{.Hold.JamID}}">jam {{.Hold.JamID}}</a>{{else}}{{.Hold.Subject}}{{end}}{{else}}available{{end}}{{if .Waiting}} · {{.Waiting}} waiting{{end}}</span></td>
-<td class="act">{{if .ID}}<a class="btn small icon" href="/devices/{{.ID}}/drive" title="Drive" aria-label="Drive {{.Title}}">{{template "icon-drive"}}</a> <a class="btn small icon" href="/devices/{{.ID}}/view" title="Watch, without touching it" aria-label="Watch {{.Title}}">{{template "icon-watch"}}</a> <a class="btn small icon" href="/records?device={{.ID}}" title="Records" aria-label="Records of {{.Title}}">{{template "icon-records"}}</a>{{end}}</td>
+<td class="act">{{if .ID}}<a class="btn small icon" href="/devices/{{.ID}}/drive" title="Drive" aria-label="Drive {{.Title}}">{{template "icon-drive"}}</a> <a class="btn small icon" href="/devices/{{.ID}}/view" title="Watch" aria-label="Watch {{.Title}}">{{template "icon-watch"}}</a> <a class="btn small icon" href="/records?device={{.ID}}" title="Records" aria-label="Records of {{.Title}}">{{template "icon-records"}}</a>{{end}}</td>
 </tr>{{end}}</tbody></table></div>{{end}}
 </main>{{template "foot" .}}{{end}}
 

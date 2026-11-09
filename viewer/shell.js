@@ -20,6 +20,12 @@
   var assets = '';
   if (document.currentScript && document.currentScript.src) assets = document.currentScript.src.replace(/\/viewer\/shell\.js(\?.*)?$/, '');
   function $(id) { return document.getElementById(id); }
+  // A watching page shows nothing that would change the device or its
+  // host: no microphone, no keyboard, no pointer or wheel settings, and
+  // a rig's extras add none of their buttons or rows (shell.watching).
+  if (watchOnly) {
+    ['ptt', 'kbdBtn', 'inputRows'].forEach(function (id) { var el = $(id); if (el) el.style.display = 'none'; });
+  }
   var img = $('feed');
   var overlay = $('overlay');
   var unmuteBtn = $('unmute');
@@ -1500,8 +1506,10 @@
     hostURL: hostURL,
     fetch: function (path, o) {
       if (!holding()) return Promise.reject(new Error('no hold on the device'));  // a watcher of a free device asks the rig nothing
+      if (watchOnly && o && o.method && String(o.method).toUpperCase() !== 'GET') return Promise.reject(new Error('watching only'));
       return fetch(hostURL(path), opts(o));
     },
+    watching: watchOnly,
     addButton: addButton,
     // A settings row (an element styled like the others), in the top
     // (video) section, the middle (input) or the bottom; mjpegOnly rows
@@ -1528,7 +1536,7 @@
     holding: holding,
     observer: function () { return observer; },
     role: function () { return role; },  // 'drive' or 'watch'; a watcher sends no input
-    admin: function () { return !station || !!(hold && hold.scopes && hold.scopes.indexOf('admin') >= 0); },
+    admin: function () { return !watchOnly && (!station || !!(hold && hold.scopes && hold.scopes.indexOf('admin') >= 0)); },
     inputMode: function () { return inputMode; },
     setInputMode: setInputMode,
     relayout: relayout,
