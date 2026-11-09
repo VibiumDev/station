@@ -11,6 +11,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -145,9 +146,12 @@ func (m *jams) start(ctx context.Context, p station.Principal, prompt, deviceID,
 	if p.Device != "" && deviceID != "" && deviceID != p.Device {
 		return station.Jam{}, errors.New("this token may only use " + p.Device)
 	}
-	dev, err := m.pickDevice(ctx, deviceID)
+	dev, err := m.pickDevice(ctx, p, deviceID)
 	if err != nil {
 		return station.Jam{}, err
+	}
+	if err := m.s.auth.Authorize(ctx, p, station.ActionBidi, dev.ID); err != nil {
+		return station.Jam{}, errors.New("this login may not start jams on " + dev.ID)
 	}
 	// A jam does not wait in line: a held device is said so up front,
 	// before Vibium is started for nothing.
@@ -265,9 +269,12 @@ func takeResult(j *station.Jam, v *jam.Verdict) {
 }
 
 // pickDevice is the device a jam drives: the one named, or the only
-// online one.
-func (m *jams) pickDevice(ctx context.Context, want string) (deviceView, error) {
-	devs, err := m.s.devices(ctx)
+// online one, among those the principal may start jams on.
+func (m *jams) pickDevice(ctx context.Context, p station.Principal, want string) (deviceView, error) {
+	devs, err := m.s.visibleDevices(ctx, p)
+	if err == nil {
+		devs = slices.DeleteFunc(devs, func(d deviceView) bool { return !d.Level.AtLeast(station.LevelJam) })
+	}
 	if err != nil {
 		return deviceView{}, err
 	}
@@ -464,10 +471,31 @@ func (m *jams) get(ctx context.Context, p station.Principal, id string) (station
 			return j, false, err
 		}
 	}
-	if !p.Admin && j.Subject != p.Subject {
+	if !p.Admin && j.Subject != p.Subject && !m.s.auth.level(ctx, p, j.DeviceID).AtLeast(station.LevelWatch) {
 		return j, false, station.ErrNotFound
 	}
 	return j, lj != nil, nil
+}
+
+// visibleJams keeps the jams a principal may see: all for an admin, else
+// their own and those run on devices their teams may watch.
+func (s *server) visibleJams(ctx context.Context, p station.Principal, list []station.Jam) []station.Jam {
+	if p.Admin {
+		return list
+	}
+	out := []station.Jam{}
+	levels := map[string]station.Level{}
+	for _, j := range list {
+		l, ok := levels[j.DeviceID]
+		if !ok {
+			l = s.auth.level(ctx, p, j.DeviceID)
+			levels[j.DeviceID] = l
+		}
+		if j.Subject == p.Subject || l.AtLeast(station.LevelWatch) {
+			out = append(out, j)
+		}
+	}
+	return out
 }
 
 // turn queues a follow-up prompt on an open jam.
@@ -623,10 +651,10 @@ func eventViews(events []station.JamEvent) []eventView {
 // homeData is what the front page shows: the prompt box with its
 // pickers and examples.
 func (s *server) homeData(r *http.Request, p station.Principal, extra map[string]any) map[string]any {
-	devs, _ := s.devices(r.Context())
+	devs, _ := s.visibleDevices(r.Context(), p)
 	var online []deviceView
 	for _, d := range devs {
-		if d.ID != "" && d.Online && (p.Device == "" || p.Device == d.ID) {
+		if d.ID != "" && d.Online && d.Level.AtLeast(station.LevelJam) && (p.Device == "" || p.Device == d.ID) {
 			online = append(online, d)
 		}
 	}
@@ -646,12 +674,8 @@ func (s *server) homeData(r *http.Request, p station.Principal, extra map[string
 func (s *server) jamsData(r *http.Request, p station.Principal) map[string]any {
 	ctx := r.Context()
 	devs, _ := s.devices(ctx)
-	subject := p.Subject
-	if p.Admin {
-		subject = ""
-	}
-	list, _ := s.db.Jams(ctx, subject, 100)
-	return map[string]any{"Page": "jams", "Principal": p, "CSRF": s.auth.csrfToken(r), "Jams": jamViews(list, devs)}
+	list, _ := s.db.Jams(ctx, "", 200)
+	return map[string]any{"Page": "jams", "Principal": p, "CSRF": s.auth.csrfToken(r), "Jams": jamViews(s.visibleJams(ctx, p, list), devs)}
 }
 
 type jamView struct {
@@ -869,19 +893,12 @@ func (s *server) listJams(w http.ResponseWriter, r *http.Request, p station.Prin
 	if s.jamsOff(w, r) {
 		return
 	}
-	subject := p.Subject
-	if p.Admin {
-		subject = ""
-	}
-	list, err := s.db.Jams(r.Context(), subject, 200)
+	list, err := s.db.Jams(r.Context(), "", 400)
 	if err != nil {
 		apiError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
-	if list == nil {
-		list = []station.Jam{}
-	}
-	apiJSON(w, list)
+	apiJSON(w, s.visibleJams(r.Context(), p, list))
 }
 
 // getJam is GET /v1/jams/{id}: the jam, its transcript, and the

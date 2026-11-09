@@ -9,6 +9,7 @@ import (
 	"log"
 	"net/http"
 	"net/url"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -164,6 +165,8 @@ func (s *server) handler() http.Handler {
 	mux.Handle("POST /records/delete", s.page(station.ActionView, s.recordDelete))
 	mux.Handle("POST /records/golden", s.page(station.ActionView, s.recordGolden))
 	mux.Handle("POST /records/tags", s.page(station.ActionView, s.recordTags))
+	mux.Handle("GET /account", s.page(station.ActionView, s.accountPage))
+	mux.Handle("POST /account/password", s.page(station.ActionView, s.changePassword))
 	mux.Handle("GET /settings", s.page(station.ActionManage, s.settingsPage))
 	mux.Handle("POST /settings/name", s.page(station.ActionManage, s.setName))
 	mux.Handle("POST /settings/password", s.page(station.ActionManage, s.setPassword))
@@ -352,7 +355,7 @@ func (s *server) loginPage(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, "/", http.StatusSeeOther)
 		return
 	}
-	s.render(w, "login", map[string]any{"Next": safeNext(r.FormValue("next")), "NoPassword": s.cfg.PasswordHash == ""})
+	s.render(w, "login", map[string]any{"Next": safeNext(r.FormValue("next")), "NoUsers": !s.auth.hasUsers(r.Context())})
 }
 
 func safeNext(next string) string {
@@ -363,12 +366,67 @@ func safeNext(next string) string {
 }
 
 func (s *server) loginPost(w http.ResponseWriter, r *http.Request) {
-	if !s.auth.login(w, r, r.FormValue("password")) {
+	login := strings.TrimSpace(r.FormValue("login"))
+	if !s.auth.login(w, r, login, r.FormValue("password")) {
 		w.WriteHeader(http.StatusUnauthorized)
-		s.render(w, "login", map[string]any{"Next": safeNext(r.FormValue("next")), "Error": "That is not the password.", "NoPassword": s.cfg.PasswordHash == ""})
+		s.render(w, "login", map[string]any{"Next": safeNext(r.FormValue("next")), "Login": login, "Error": "That login and password do not match.", "NoUsers": !s.auth.hasUsers(r.Context())})
 		return
 	}
 	http.Redirect(w, r, safeNext(r.FormValue("next")), http.StatusSeeOther)
+}
+
+// accountPage is GET /account: who you are signed in as, your teams, and
+// a form for a new password. Everyone has one; Settings is for admins.
+func (s *server) accountPage(w http.ResponseWriter, r *http.Request, p station.Principal) {
+	s.render(w, "account", s.accountData(r, p, nil))
+}
+
+func (s *server) accountData(r *http.Request, p station.Principal, extra map[string]any) map[string]any {
+	ctx := r.Context()
+	u, _ := s.db.User(ctx, p.User)
+	var teams []string
+	if all, err := s.db.Teams(ctx); err == nil {
+		for _, t := range all {
+			if slices.Contains(u.Teams, t.ID) {
+				teams = append(teams, t.Name)
+			}
+		}
+	}
+	data := map[string]any{"Page": "account", "Principal": p, "CSRF": s.auth.csrfToken(r), "User": u, "TeamNames": teams, "Token": !person(p)}
+	for k, v := range extra {
+		data[k] = v
+	}
+	return data
+}
+
+// changePassword is POST /account/password: a new password for whoever
+// is signed in.
+func (s *server) changePassword(w http.ResponseWriter, r *http.Request, p station.Principal) {
+	msg, err := s.setUserPassword(r.Context(), p.User, r.FormValue("password"), r.FormValue("again"))
+	if err == nil {
+		s.db.Audit(r.Context(), station.AuditEntry{Subject: p.Subject, Action: "password", Detail: "changed their own"})
+	}
+	s.render(w, "account", s.accountData(r, p, map[string]any{"Message": msg}))
+}
+
+// setUserPassword checks a new password and stores its hash for a user.
+func (s *server) setUserPassword(ctx context.Context, userID, pw, again string) (string, error) {
+	switch {
+	case userID == "":
+		return "Only a signed-in person has a password.", station.ErrForbidden
+	case len(pw) < 8:
+		return "A password needs at least 8 characters.", station.ErrForbidden
+	case pw != again:
+		return "The two passwords differ.", station.ErrForbidden
+	}
+	h, err := hashPassword(pw)
+	if err == nil {
+		err = s.db.SetPassword(ctx, userID, h)
+	}
+	if err != nil {
+		return "Could not save the password: " + err.Error(), err
+	}
+	return "Password changed.", nil
 }
 
 func (s *server) logout(w http.ResponseWriter, r *http.Request) {
@@ -396,7 +454,9 @@ type deviceView struct {
 	Platform  string             `json:"platform,omitempty"`
 	Model     string             `json:"model,omitempty"`
 	OSVersion string             `json:"os_version,omitempty"`
-	Title     string             `json:"title"` // the label, else the model, else the name
+	Title     string             `json:"title"`           // the label, else the model, else the name
+	Level     station.Level      `json:"level,omitempty"` // what the caller may do with it: watch, drive or jam
+	CanDrive  bool               `json:"-"`
 	Rig       rigView            `json:"rig"`
 	Online    bool               `json:"online"`
 	Recorded  bool               `json:"recorded,omitempty"` // the rig records every hold, by its announcement
@@ -445,8 +505,34 @@ func (s *server) devices(ctx context.Context) ([]deviceView, error) {
 	return out, nil
 }
 
-func (s *server) listDevices(w http.ResponseWriter, r *http.Request, _ station.Principal) {
-	devs, err := s.devices(r.Context())
+// visibleDevices is what a principal may see: every device and every
+// rig for an admin, else the devices a team of theirs was given, each
+// with the caller's level on it.
+func (s *server) visibleDevices(ctx context.Context, p station.Principal) ([]deviceView, error) {
+	devs, err := s.devices(ctx)
+	if err != nil {
+		return nil, err
+	}
+	var out []deviceView
+	for _, d := range devs {
+		if d.ID == "" {
+			if p.Admin {
+				out = append(out, d)
+			}
+			continue
+		}
+		l := s.auth.level(ctx, p, d.ID)
+		if !l.AtLeast(station.LevelWatch) {
+			continue
+		}
+		d.Level, d.CanDrive = l, l.AtLeast(station.LevelDrive) && !p.ReadOnly
+		out = append(out, d)
+	}
+	return out, nil
+}
+
+func (s *server) listDevices(w http.ResponseWriter, r *http.Request, p station.Principal) {
+	devs, err := s.visibleDevices(r.Context(), p)
 	if err != nil {
 		apiError(w, http.StatusInternalServerError, err.Error())
 		return
@@ -739,7 +825,7 @@ func (s *server) homePage(w http.ResponseWriter, r *http.Request, p station.Prin
 }
 
 func (s *server) indexPage(w http.ResponseWriter, r *http.Request, p station.Principal) {
-	devs, err := s.devices(r.Context())
+	devs, err := s.visibleDevices(r.Context(), p)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -807,7 +893,7 @@ func (s *server) settingsData(r *http.Request, p station.Principal, extra map[st
 		"Page": "settings", "Principal": p, "CSRF": s.auth.csrfToken(r), "Tokens": tokens, "Rigs": rigs, "OpenCodes": codes,
 		"Mode": s.mode, "PublicURL": s.publicURL, "TunnelURL": s.enroll.TunnelURL, "MDNS": s.mdns,
 		"Npub": npub(s.key.Public()), "Fingerprint": enroll.Fingerprint(s.key.Public()), "Allow": s.cfg.Allow,
-		"NoPassword": s.cfg.PasswordHash == "", "TURN": s.turnInfo,
+		"NoPassword": !s.auth.hasUsers(ctx), "TURN": s.turnInfo,
 	}
 	if n, size, err := s.db.BlobTotal(ctx); err == nil {
 		data["RecordsCount"], data["RecordsTotal"] = n, humanSize(size)
@@ -826,22 +912,9 @@ func (s *server) settingsPage(w http.ResponseWriter, r *http.Request, p station.
 }
 
 func (s *server) setPassword(w http.ResponseWriter, r *http.Request, p station.Principal) {
-	pw, again := r.FormValue("password"), r.FormValue("again")
-	msg := "Password changed."
-	switch {
-	case len(pw) < 8:
-		msg = "A password needs at least 8 characters."
-	case pw != again:
-		msg = "The two passwords differ."
-	default:
-		h, err := hashPassword(pw)
-		if err == nil {
-			s.cfg.PasswordHash = h
-			err = saveConfig(s.dir, s.cfg)
-		}
-		if err != nil {
-			msg = "Could not save: " + err.Error()
-		}
+	msg, err := s.setUserPassword(r.Context(), p.User, r.FormValue("password"), r.FormValue("again"))
+	if err == nil {
+		s.db.Audit(r.Context(), station.AuditEntry{Subject: p.Subject, Action: "password", Detail: "changed their own"})
 	}
 	s.render(w, "settings", s.settingsData(r, p, map[string]any{"Message": msg}))
 }

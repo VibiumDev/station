@@ -25,8 +25,11 @@ const (
 // identity is what tailnet mode asks: who is behind an address.
 type identity func(ctx context.Context, remoteAddr string) (login string, tags []string, err error)
 
-// auth is the single-player Authenticator and Authorizer: the owner's
-// password session, API tokens, and Tailscale identities when allowed.
+// auth is the station's Authenticator and Authorizer: users signing in
+// with a login and a password, API tokens acting as their users, and
+// Tailscale identities, allowed or known as users. Admins see and do
+// everything; a regular user's teams decide what they may do with each
+// device.
 type auth struct {
 	cfg *Config
 	db  *sqlite.DB
@@ -42,9 +45,9 @@ type auth struct {
 }
 
 type session struct {
-	principal station.Principal
-	csrf      string
-	expires   time.Time
+	user    string // the user's id; the principal is read afresh each request
+	csrf    string
+	expires time.Time
 }
 
 func newAuth(cfg *Config, db *sqlite.DB, who identity, tls, proxied bool) *auth {
@@ -80,35 +83,119 @@ func ip(remoteAddr string) string {
 	return host
 }
 
-// owner is the principal the password gives.
-var owner = station.Principal{Subject: "owner", Admin: true}
+// principalOf is the principal a user signs in as, under a subject: the
+// user's login as a rule, or a token's name.
+func principalOf(u station.User, subject string) station.Principal {
+	if subject == "" {
+		subject = u.Login
+	}
+	return station.Principal{Subject: subject, Admin: u.Admin, User: u.ID, Teams: u.Teams}
+}
+
+// user finds the user a token acts as: its own, or the owner for a token
+// from before tokens had owners. A disabled user's tokens are no good.
+func (a *auth) tokenUser(ctx context.Context, tok sqlite.APIToken) (station.User, error) {
+	var u station.User
+	var err error
+	if tok.UserID != "" {
+		u, err = a.db.User(ctx, tok.UserID)
+	} else {
+		u, err = a.db.UserByLogin(ctx, station.OwnerLogin)
+	}
+	if err != nil || u.Disabled {
+		return station.User{}, station.ErrUnauthenticated
+	}
+	return u, nil
+}
+
+// identityUser is the user behind a tailnet identity: one on --allow is an
+// admin, made a user the first time they are seen; otherwise a user an
+// admin added with that login, regular or admin as the record says.
+func (a *auth) identityUser(ctx context.Context, login string, tags []string) (station.User, bool) {
+	if login == "" {
+		return station.User{}, false
+	}
+	u, err := a.db.UserByLogin(ctx, login)
+	if a.allowed(login, tags) {
+		if err != nil {
+			u = station.User{ID: station.NewID("usr"), Login: strings.ToLower(login), Admin: true}
+			if err := a.db.PutUser(ctx, u); err != nil {
+				log.Printf("identity: making a user for %s: %v", login, err)
+				return station.User{}, false
+			}
+		} else if !u.Admin && !u.Disabled {
+			u.Admin = true // --allow is the operator's word
+			a.db.PutUser(ctx, u)
+		}
+		return u, !u.Disabled
+	}
+	return u, err == nil && !u.Disabled
+}
 
 // Authenticate finds the principal: a bearer token, the session cookie, or
 // a tailnet identity.
 func (a *auth) Authenticate(r *http.Request) (station.Principal, error) {
+	ctx := r.Context()
 	if h := r.Header.Get("Authorization"); strings.HasPrefix(strings.ToLower(h), "bearer ") {
 		secret := strings.TrimSpace(h[7:])
-		tok, err := a.db.LookupToken(r.Context(), secret)
+		tok, err := a.db.LookupToken(ctx, secret)
 		if err != nil {
 			return station.Principal{}, station.ErrUnauthenticated
 		}
-		return station.Principal{Subject: "token:" + tok.Name, ReadOnly: tok.ReadOnly, Device: tok.Device}, nil
+		u, err := a.tokenUser(ctx, tok)
+		if err != nil {
+			return station.Principal{}, err
+		}
+		p := principalOf(u, "token:"+tok.Name)
+		p.ReadOnly, p.Device = tok.ReadOnly, tok.Device
+		return p, nil
 	}
 	if s := a.sessionOf(r); s != nil {
-		return s.principal, nil
+		u, err := a.db.User(ctx, s.user)
+		if err == nil && !u.Disabled {
+			return principalOf(u, ""), nil
+		}
+		a.drop(r) // the user is gone or disabled: so is the session
 	}
-	if a.who != nil && len(a.cfg.Allow) > 0 {
-		login, tags, err := a.who(r.Context(), r.RemoteAddr)
-		switch {
-		case err != nil:
+	if a.who != nil {
+		login, tags, err := a.who(ctx, r.RemoteAddr)
+		if err != nil {
 			log.Printf("identity: %s: %v", r.RemoteAddr, err)
-		case a.allowed(login, tags):
-			return station.Principal{Subject: login, Admin: true}, nil
-		default:
-			log.Printf("identity: %s is %s %v, not in --allow", r.RemoteAddr, login, tags)
+		} else if u, ok := a.identityUser(ctx, login, tags); ok {
+			return principalOf(u, ""), nil
+		} else if login != "" {
+			log.Printf("identity: %s is %s %v, not in --allow and not a user", r.RemoteAddr, login, tags)
 		}
 	}
 	return station.Principal{}, station.ErrUnauthenticated
+}
+
+// drop forgets the request's session.
+func (a *auth) drop(r *http.Request) {
+	if c, err := r.Cookie(sessionCookie); err == nil {
+		a.mu.Lock()
+		delete(a.sessions, c.Value)
+		a.mu.Unlock()
+	}
+}
+
+// hasUsers says whether anyone can sign in yet.
+func (a *auth) hasUsers(ctx context.Context) bool {
+	users, err := a.db.Users(ctx)
+	return err == nil && len(users) > 0
+}
+
+// level is what a principal may do with a device: everything for an
+// admin, else the highest level any of their teams was given.
+func (a *auth) level(ctx context.Context, p station.Principal, deviceID string) station.Level {
+	if p.Admin {
+		return station.LevelJam
+	}
+	l, err := a.db.LevelFor(ctx, p.Teams, deviceID)
+	if err != nil {
+		return station.LevelNone
+	}
+	return l
 }
 
 func (a *auth) allowed(login string, tags []string) bool {
@@ -125,27 +212,44 @@ func (a *auth) allowed(login string, tags []string) bool {
 	return false
 }
 
-// Authorize: the owner and allowed identities do everything; tokens
-// control devices unless read-only, and a token bound to a device acts
-// on that device alone; nobody but admins manages.
-func (a *auth) Authorize(_ context.Context, p station.Principal, action station.Action, deviceID string) error {
+// Authorize: admins do everything, and a regular user does with a device
+// what their teams' level allows: watch to view it, drive to control it,
+// jam to drive it with an agent. Only people manage, never tokens; a
+// read-only token never controls; a token bound to a device acts on that
+// device alone. A call about no device in particular passes for anyone
+// signed in, and the device's own check comes where the device is known.
+func (a *auth) Authorize(ctx context.Context, p station.Principal, action station.Action, deviceID string) error {
 	if p.Device != "" && deviceID != "" && deviceID != p.Device {
 		return station.ErrForbidden
 	}
+	var need station.Level
 	switch action {
-	case station.ActionView:
-		return nil
 	case station.ActionManage:
-		if p.Admin {
+		if p.Admin && person(p) {
 			return nil
 		}
 		return station.ErrForbidden
-	default:
-		if p.ReadOnly {
+	case station.ActionView:
+		need = station.LevelWatch
+	case station.ActionControl:
+		need = station.LevelDrive
+	case station.ActionBidi:
+		need = station.LevelJam
+	case station.ActionAdmin:
+		if p.ReadOnly || !p.Admin {
 			return station.ErrForbidden
 		}
 		return nil
+	default:
+		return station.ErrForbidden
 	}
+	if action != station.ActionView && p.ReadOnly {
+		return station.ErrForbidden
+	}
+	if deviceID == "" || a.level(ctx, p, deviceID).AtLeast(need) {
+		return nil
+	}
+	return station.ErrForbidden
 }
 
 func (a *auth) sessionOf(r *http.Request) *session {
@@ -188,9 +292,9 @@ func (a *auth) csrfToken(r *http.Request) string {
 	return ""
 }
 
-// login checks the password, with a lockout after repeated failures from
-// one address, and starts a session.
-func (a *auth) login(w http.ResponseWriter, r *http.Request, password string) bool {
+// login checks a login and password, with a lockout after repeated
+// failures from one address, and starts a session.
+func (a *auth) login(w http.ResponseWriter, r *http.Request, login, password string) bool {
 	addr := a.clientIP(r)
 	a.mu.Lock()
 	now := time.Now()
@@ -207,17 +311,19 @@ func (a *auth) login(w http.ResponseWriter, r *http.Request, password string) bo
 		time.Sleep(time.Second)
 		return false
 	}
-	if a.cfg.PasswordHash == "" || !checkPassword(a.cfg.PasswordHash, password) {
+	u, hash, err := a.db.Credentials(r.Context(), login)
+	if err != nil || u.Disabled || hash == "" || !checkPassword(hash, password) {
 		a.mu.Lock()
 		a.failures[addr] = append(a.failures[addr], now)
 		a.mu.Unlock()
 		time.Sleep(500 * time.Millisecond)
 		return false
 	}
+	a.db.TouchUser(r.Context(), u.ID, now)
 	a.mu.Lock()
 	delete(a.failures, addr)
 	id := randomID()
-	a.sessions[id] = &session{principal: owner, csrf: randomID(), expires: now.Add(sessionLife)}
+	a.sessions[id] = &session{user: u.ID, csrf: randomID(), expires: now.Add(sessionLife)}
 	a.mu.Unlock()
 	http.SetCookie(w, &http.Cookie{Name: sessionCookie, Value: id, Path: "/", HttpOnly: true, Secure: a.tls,
 		SameSite: http.SameSiteLaxMode, MaxAge: int(sessionLife / time.Second)})

@@ -52,6 +52,7 @@ var pages = template.Must(template.New("").Funcs(template.FuncMap{"npub": npub, 
 </nav>
 <details class="account"><summary title="{{.Principal.Subject}}"><span class="avatar" aria-hidden="true">{{initial .Principal.Subject}}</span><span class="label">{{.Principal.Subject}}</span></summary>
 <div class="menu"><p class="who">{{.Principal.Subject}}</p>
+<a class="menuitem" href="/account">{{template "icon-account"}}Account</a>
 <form method="post" action="/logout"><input type="hidden" name="csrf" value="{{.CSRF}}"><button class="menuitem" type="submit">{{template "icon-signout"}}Sign out</button></form></div></details>
 </aside><div class="side-backdrop"></div>
 <header class="bar"><button class="iconbtn menu" type="button" aria-label="Menu" aria-controls="side" aria-expanded="false">{{template "icon-menu"}}</button><a class="brand" href="/"><img class="logo" src="/viewer/vibium-logo.png" alt=""><span class="wordmark">Vibium</span></a></header>{{end}}
@@ -72,10 +73,11 @@ var pages = template.Must(template.New("").Funcs(template.FuncMap{"npub": npub, 
 {{define "login"}}{{template "head" (dict "Title" "Sign in" "Name" .Name "Named" .Named)}}
 <header class="top"><div class="wrap"><a class="brand" href="/"><img class="logo" src="/viewer/vibium-logo.png" alt=""><span class="wordmark">Vibium</span><span class="product">Station</span></a>{{template "theme"}}</div></header>
 <main class="wrap login">{{template "kicker" .}}<h1 class="h1">Sign in.</h1>
-{{if .NoPassword}}<div class="msg">No password is set yet. On the station's machine, run <code>station passwd</code>.</div>{{end}}
+{{if .NoUsers}}<div class="msg">Nobody can sign in yet. On the station's machine, run <code>station passwd</code> to set the owner's password.</div>{{end}}
 {{if .Error}}<div class="msg error" role="alert">{{.Error}}</div>{{end}}
 <div class="card"><form method="post" action="/login"><input type="hidden" name="next" value="{{.Next}}">
-<label for="password">Password</label><input id="password" type="password" name="password" autofocus autocomplete="current-password">
+<label for="login">Login</label><input id="login" type="text" name="login" value="{{.Login}}" autofocus autocomplete="username" autocapitalize="none" spellcheck="false" placeholder="you@example.com">
+<label for="password">Password</label><input id="password" type="password" name="password" autocomplete="current-password">
 <input class="primary" type="submit" value="Sign in"></form></div></main>
 {{template "foot" .}}{{end}}
 
@@ -87,13 +89,13 @@ var pages = template.Must(template.New("").Funcs(template.FuncMap{"npub": npub, 
 <p><b>Host.</b> The machine the device is wired to or runs on, a Roadie rig today: the name it enrolled with, and the id the station gave it. <i>Records sessions</i> means the host records every hold on the device, yours as much as an agent's: each input, and a frame of the screen after each burst of input, go into a recording that is uploaded to the Record Store when the hold ends, where the Records page lists it. That is the host's own setting (Roadie's <code>--record</code>), which the host announces when it connects; the viewer shows REC while such a session is live.</p>
 <p><b>Status.</b> Online while the host's tunnel to the station is up, offline otherwise. Under it, available when nobody holds the device, or who holds it and how many agents are waiting their turn. Someone watching a free device is shown too; they hold it view only, anyone who drives takes it over at once, and the watch ends when they press Stop watching or close the page.</p>
 </div>
-{{if not .Devices}}<div class="msg">No hosts yet. Make an enrollment code on <a href="/settings">Settings</a>, then on the host run <code>roadie enroll --code …</code>.</div>{{end}}
+{{if not .Devices}}<div class="msg">{{if .Principal.Admin}}No hosts yet. Make an enrollment code on <a href="/settings">Settings</a>, then on the host run <code>roadie enroll --code …</code>.{{else}}Nothing is shared with you yet. An admin shares a device with one of your teams on Settings, and it appears here.{{end}}</div>{{end}}
 {{if .Devices}}<div class="tablewrap"><table><thead><tr><th>Device</th><th>Host</th><th>Status</th><th></th></tr></thead><tbody>
 {{range .Devices}}<tr>
 <td data-l="Device">{{if .ID}}<b><a href="/devices/{{.ID}}/view">{{.Title}}</a></b><span class="sub">{{.Kind}}{{if and .Model (ne .Model .Title)}} · {{.Model}}{{end}}{{if .Platform}} · {{platform .Platform}}{{if .OSVersion}} {{.OSVersion}}{{end}}{{end}}{{if ne .Title .Name}} · {{.Name}}{{end}}</span>{{else}}<span class="muted">no devices announced</span>{{end}}</td>
 <td data-l="Host"><b>{{.Rig.Name}}</b><span class="sub">{{.Rig.ID}}{{if .Recorded}} · <span class="hint" title="This host records every session on the device: each input, and a frame of the screen after each burst of input, kept in the Record Store when the session ends.">records sessions</span>{{end}}</span></td>
 <td data-l="Status">{{if .Online}}<span class="dot on"></span>online{{else}}<span class="dot"></span><span class="muted">offline</span>{{end}}<span class="sub">{{if and .Hold (not .Hold.Watching)}}held by {{if .Hold.JamID}}<a href="/jams/{{.Hold.JamID}}">jam {{.Hold.JamID}}</a>{{else}}{{.Hold.Subject}}{{end}}{{else}}available{{if .Hold}} · watched by {{.Hold.Subject}}{{end}}{{end}}{{if .Waiting}} · {{.Waiting}} waiting{{end}}</span></td>
-<td class="act">{{if .ID}}<a class="btn small icon" href="/devices/{{.ID}}/drive" title="Drive" aria-label="Drive {{.Title}}">{{template "icon-drive"}}</a> <a class="btn small icon" href="/devices/{{.ID}}/view" title="Watch" aria-label="Watch {{.Title}}">{{template "icon-watch"}}</a> <a class="btn small icon" href="/records?device={{.ID}}" title="Records" aria-label="Records of {{.Title}}">{{template "icon-records"}}</a>{{end}}</td>
+<td class="act">{{if .ID}}{{if .CanDrive}}<a class="btn small icon" href="/devices/{{.ID}}/drive" title="Drive" aria-label="Drive {{.Title}}">{{template "icon-drive"}}</a> {{end}}<a class="btn small icon" href="/devices/{{.ID}}/view" title="Watch" aria-label="Watch {{.Title}}">{{template "icon-watch"}}</a> <a class="btn small icon" href="/records?device={{.ID}}" title="Records" aria-label="Records of {{.Title}}">{{template "icon-records"}}</a>{{end}}</td>
 </tr>{{end}}</tbody></table></div>{{end}}
 </main>{{template "foot" .}}{{end}}
 
@@ -134,6 +136,24 @@ var pages = template.Must(template.New("").Funcs(template.FuncMap{"npub": npub, 
 
 {{define "goldenbtn"}}{{if .R.CanEdit}}<form class="inline" method="post" action="/records/golden"><input type="hidden" name="csrf" value="{{.CSRF}}">{{range .Back}}<input type="hidden" name="{{.Name}}" value="{{.Value}}">{{end}}<input type="hidden" name="sha256" value="{{.R.SHA256}}"><input type="hidden" name="make" value="{{if .R.Golden}}plain{{else}}golden{{end}}"><button class="small icon star{{if .R.Golden}} on{{end}}" type="submit" title="{{if .R.Golden}}Golden. Make it plain{{else}}Make it golden{{end}}" aria-label="{{if .R.Golden}}Golden. Make it plain{{else}}Make it golden{{end}}" aria-pressed="{{if .R.Golden}}true{{else}}false{{end}}">{{template "icon-star"}}</button></form> {{else if .R.Golden}}<span class="btn small icon star on" title="Golden" aria-label="Golden">{{template "icon-star"}}</span> {{end}}{{end}}
 
+{{define "account"}}{{template "head" (dict "Title" "Account" "Name" .Name "Named" .Named)}}{{template "header" .}}
+<main class="wrap">
+<h2 class="h2">Account {{template "help" "account"}}</h2>
+<p class="helptext" id="help-account" hidden>Who you are signed in as, and the teams that decide what you see: an admin sees every device, jam and record and manages the station on Settings; a regular user sees the devices their teams were given, and the jams and records made on them.</p>
+{{if .Message}}<div class="msg">{{.Message}}</div>{{end}}
+<div class="tablewrap"><table class="kv">
+<tr><th>Login</th><td>{{.User.Login}}</td></tr>
+{{if .User.Name}}<tr><th>Name</th><td>{{.User.Name}}</td></tr>{{end}}
+<tr><th>Role</th><td>{{if .User.Admin}}admin{{else}}regular user{{end}}</td></tr>
+<tr><th>Teams</th><td>{{if .TeamNames}}{{range $i, $t := .TeamNames}}{{if $i}}, {{end}}{{$t}}{{end}}{{else}}<span class="muted">{{if .User.Admin}}all, as an admin{{else}}none yet{{end}}</span>{{end}}</td></tr>
+</table></div>
+<h2 class="h2">Password</h2>
+<form class="row" method="post" action="/account/password"><input type="hidden" name="csrf" value="{{.CSRF}}">
+<input type="password" name="password" placeholder="new password" aria-label="New password" autocomplete="new-password"> <input type="password" name="again" placeholder="again" aria-label="New password again" autocomplete="new-password">
+<input type="submit" value="Change"></form>
+</main>{{template "foot" .}}{{end}}
+
+{{define "icon-account"}}<svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><circle cx="12" cy="8" r="4" stroke="currentColor" stroke-width="2" fill="none"/><path d="M4 20.5c1.5-4 4.5-6 8-6s6.5 2 8 6" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round"/></svg>{{end}}
 {{define "icon-signout"}}<svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>{{end}}
 {{define "icon-send"}}<svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M12 20V5m0 0-6 6m6-6 6 6" stroke="currentColor" stroke-width="2.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>{{end}}
 
@@ -297,8 +317,8 @@ var pages = template.Must(template.New("").Funcs(template.FuncMap{"npub": npub, 
 <input type="submit" value="Create token"></form>
 
 <h2 class="h2">Password {{template "help" "password"}}</h2>
-<p class="helptext" id="help-password" hidden>The owner's password for signing in to these pages, kept as a hash in the station's config file. In tailnet mode the people under Tailnet identities sign in by their Tailscale identity and need no password, but one still works. Sign-ins are rate-limited, and <code>station passwd</code> sets the password from the command line.</p>
-{{if .NoPassword}}<div class="msg">No password is set; signing in by password is off until one is.</div>{{end}}
+<p class="helptext" id="help-password" hidden>Your own password for signing in, kept as an argon2id hash in the station's database; other users change theirs on their Account page, and an admin can set anyone's under Teams. In tailnet mode the people under Tailnet identities sign in by their Tailscale identity and need no password, but one still works. Sign-ins are rate-limited, and <code>station passwd [login]</code> sets a password from the command line.</p>
+{{if .NoPassword}}<div class="msg">Nobody can sign in yet; <code>station passwd</code> creates the owner.</div>{{end}}
 <form class="row" method="post" action="/settings/password"><input type="hidden" name="csrf" value="{{.CSRF}}">
 <input type="password" name="password" placeholder="new password" aria-label="New password" autocomplete="new-password"> <input type="password" name="again" placeholder="again" aria-label="New password again" autocomplete="new-password">
 <input type="submit" value="Change"></form>

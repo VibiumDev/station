@@ -77,6 +77,10 @@ type Store struct {
 	MaxAge   time.Duration
 	Audit    station.AuditSink // optional
 	Now      func() time.Time  // optional, for tests
+	// Access says whether a principal may see a device's records, as a
+	// station with teams decides from the device's sharing; nil means
+	// only admins, uploaders and holders may, besides public files.
+	Access func(ctx context.Context, p station.Principal, deviceID string) bool
 }
 
 // Error is a refusal with the HTTP status it maps to.
@@ -547,6 +551,9 @@ func (s *Store) mayRead(ctx context.Context, b station.Blob, p *station.Principa
 	}
 	if p != nil {
 		if p.Admin || p.Subject == b.Uploader {
+			return true
+		}
+		if s.Access != nil && b.DeviceID != "" && s.Access(ctx, *p, b.DeviceID) {
 			return true
 		}
 		if b.HoldID != "" {

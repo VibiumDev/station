@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"slices"
 	"sort"
 	"time"
 
@@ -82,7 +83,7 @@ func (s *server) serveSession(w http.ResponseWriter, r *http.Request, p station.
 		}
 		want = p.Device
 	}
-	devID, err := s.pickDevice(ctx, want)
+	devID, err := s.pickDevice(ctx, p, want)
 	if err != nil {
 		bidiError("session not created", err.Error())
 		return
@@ -168,11 +169,12 @@ func (s *server) releaseAfter(devID, holdID, subject string) {
 
 // pickDevice resolves what a client asked for at /session: a device id
 // or its name alone, or, with nothing asked, the first online device.
-func (s *server) pickDevice(ctx context.Context, want string) (string, error) {
-	devs, err := s.devices(ctx)
+func (s *server) pickDevice(ctx context.Context, p station.Principal, want string) (string, error) {
+	devs, err := s.visibleDevices(ctx, p)
 	if err != nil {
 		return "", err
 	}
+	devs = slices.DeleteFunc(devs, func(d deviceView) bool { return !d.Level.AtLeast(station.LevelJam) })
 	sort.Slice(devs, func(i, j int) bool { return devs[i].ID < devs[j].ID })
 	var online []deviceView
 	for _, d := range devs {

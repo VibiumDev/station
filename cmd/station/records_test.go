@@ -170,7 +170,7 @@ func TestRecordsTemplatesRender(t *testing.T) {
 // The Devices page offers Drive and Watch for each device, as the wheel
 // and the eye, plus Records.
 func TestDevicesPageOffersDriveAndWatch(t *testing.T) {
-	devs := []deviceView{{ID: "rig_a/iphone_1", Name: "iphone_1", Kind: "phone", Platform: "ios", OSVersion: "26.6", Model: "iPhone 15 Pro Max", Title: "iPhone 15 Pro Max", Online: true, Rig: rigView{ID: "rig_a", Name: "pi"}, Hold: &holdView{Subject: "guest", Watching: true}}}
+	devs := []deviceView{{ID: "rig_a/iphone_1", Name: "iphone_1", Kind: "phone", Platform: "ios", OSVersion: "26.6", Model: "iPhone 15 Pro Max", Title: "iPhone 15 Pro Max", Online: true, Level: station.LevelJam, CanDrive: true, Rig: rigView{ID: "rig_a", Name: "pi"}, Hold: &holdView{Subject: "guest", Watching: true}}}
 	var out strings.Builder
 	if err := pages.ExecuteTemplate(&out, "index", map[string]any{"Page": "index", "Devices": devs, "Principal": station.Principal{Subject: "owner", Admin: true}, "CSRF": "c", "JamsOn": true, "Name": "Station", "Named": true}); err != nil {
 		t.Fatal(err)

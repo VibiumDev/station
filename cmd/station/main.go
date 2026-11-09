@@ -51,7 +51,7 @@ func main() {
 
 func usage() {
 	fmt.Println(`usage: station [flags]                 run the station (station -h for the flags)
-       station passwd                  set the owner's password
+       station passwd [login]          set a user's password, the owner's by default
        station enroll                  make a one-time enrollment code for a rig
        station token create NAME [--read-only]
        station token list | revoke NAME
@@ -106,7 +106,7 @@ func runCommand(name string, args []string) int {
 		fmt.Printf("npub        %s\nhex         %s\nfingerprint %s\n", npub(sk.Public()), sk.Public().Hex(), enroll.Fingerprint(sk.Public()))
 		return 0
 	case "passwd":
-		return passwd(dir)
+		return passwd(dir, words)
 	case "enroll":
 		sk, err := loadKey(dir)
 		if err != nil {
@@ -171,9 +171,49 @@ func runCommand(name string, args []string) int {
 	return 2
 }
 
-// passwd asks for the password twice and saves its hash.
-func passwd(dir string) int {
+// ensureOwner finds the owner user, seeding them from the config file's
+// password hash when the station comes from before users, or making
+// them with no password yet.
+func ensureOwner(ctx context.Context, db *sqlite.DB, cfg *Config) (station.User, error) {
+	if _, err := db.SeedOwner(ctx, cfg.PasswordHash); err != nil {
+		return station.User{}, err
+	}
+	u, err := db.UserByLogin(ctx, station.OwnerLogin)
+	if errors.Is(err, station.ErrNotFound) {
+		u = station.User{ID: station.NewID("usr"), Login: station.OwnerLogin, Name: "Owner", Admin: true}
+		err = db.PutUser(ctx, u)
+	}
+	return u, err
+}
+
+// passwd asks for a password twice and stores its hash for a user: the
+// owner, or the login given.
+func passwd(dir string, words []string) int {
 	cfg, err := loadConfig(dir)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		return 1
+	}
+	db, err := openDB(dir)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		return 1
+	}
+	defer db.Close()
+	ctx := context.Background()
+	login := station.OwnerLogin
+	if len(words) > 0 {
+		login = words[0]
+	}
+	var user station.User
+	if login == station.OwnerLogin {
+		user, err = ensureOwner(ctx, db, cfg)
+	} else {
+		user, err = db.UserByLogin(ctx, login)
+		if errors.Is(err, station.ErrNotFound) {
+			err = fmt.Errorf("no user %q: an admin adds users on Settings", login)
+		}
+	}
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		return 1
@@ -203,15 +243,16 @@ func passwd(dir string) int {
 		fmt.Fprintln(os.Stderr, "the two differ")
 		return 1
 	}
-	if cfg.PasswordHash, err = hashPassword(pw); err != nil {
+	hash, err := hashPassword(pw)
+	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		return 1
 	}
-	if err := saveConfig(dir, cfg); err != nil {
+	if err := db.SetPassword(ctx, user.ID, hash); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		return 1
 	}
-	fmt.Println("Password set.")
+	fmt.Printf("Password set for %s.\n", user.Login)
 	return 0
 }
 
@@ -260,20 +301,6 @@ func serve(args []string) int {
 	if *allow != "" {
 		cfg.Allow, changed = strings.Split(*allow, ","), true
 	}
-	// A password from the environment, for a host where secrets are
-	// environment variables, such as Fly.io.
-	if pw := os.Getenv("STATION_PASSWORD"); pw != "" && !checkPassword(cfg.PasswordHash, pw) {
-		if len(pw) < 8 {
-			fmt.Fprintln(os.Stderr, "STATION_PASSWORD needs at least 8 characters")
-			return 1
-		}
-		if cfg.PasswordHash, err = hashPassword(pw); err != nil {
-			fmt.Fprintln(os.Stderr, err)
-			return 1
-		}
-		changed = true
-		fmt.Println("Password set from STATION_PASSWORD")
-	}
 	if changed {
 		if err := saveConfig(dir, cfg); err != nil {
 			fmt.Fprintln(os.Stderr, err)
@@ -291,6 +318,35 @@ func serve(args []string) int {
 		return 1
 	}
 	defer db.Close()
+	// The owner: seeded from the config file's password hash the first
+	// time, and given the password from the environment when there is
+	// one, for a host where secrets are environment variables, such as
+	// Fly.io.
+	if pw := os.Getenv("STATION_PASSWORD"); pw != "" {
+		if len(pw) < 8 {
+			fmt.Fprintln(os.Stderr, "STATION_PASSWORD needs at least 8 characters")
+			return 1
+		}
+		owner, err := ensureOwner(context.Background(), db, cfg)
+		if err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			return 1
+		}
+		if hash, _ := db.PasswordHash(context.Background(), owner.ID); !checkPassword(hash, pw) {
+			h, err := hashPassword(pw)
+			if err == nil {
+				err = db.SetPassword(context.Background(), owner.ID, h)
+			}
+			if err != nil {
+				fmt.Fprintln(os.Stderr, err)
+				return 1
+			}
+			fmt.Println("Owner's password set from STATION_PASSWORD")
+		}
+	} else if _, err := db.SeedOwner(context.Background(), cfg.PasswordHash); err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		return 1
+	}
 
 	ctx, stop := ossignal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
@@ -475,6 +531,10 @@ func serve(args []string) int {
 	s.records = &records.Store{Blobs: blob.Disk{Dir: blobDir}, Index: db, Events: db, Holds: db, Devices: db, Signer: records.Key(key),
 		HoldsOf: db.HoldsOf, BaseURL: base, UnpackDir: filepath.Join(blobDir, "unpacked"), MaxFile: maxFile, MaxTotal: maxTotal, MaxAge: *recordsMaxAge, Audit: db}
 	s.recordsDir = blobDir
+	// Whoever may watch a device may see its records.
+	s.records.Access = func(ctx context.Context, p station.Principal, deviceID string) bool {
+		return s.auth.level(ctx, p, deviceID).AtLeast(station.LevelWatch)
+	}
 	// Jams: the models the owner set up, under ai/ in the data directory,
 	// and the Vibium binary whose MCP server drives the devices.
 	s.jams = &jams{s: s, models: &jam.Store{Dir: filepath.Join(dir, "ai")}, dir: filepath.Join(dir, "jams"), live: map[string]*liveJam{}}
