@@ -318,9 +318,9 @@ td .sub.tags, .card.rec .meta .tags { display: flex; flex-wrap: wrap; gap: 4px; 
 .btn.icon svg, button.icon svg { display: block; width: 16px; height: 16px; }
 /* The jams list: the prompt leads and opens the jam, wrapping within
    a readable measure while the short columns stay on one line. */
-.jams td.prompt a, td b a { text-decoration: none; }
+.jams td.prompt a, td b a, .card.rec .meta b a { text-decoration: none; }
 .jams td.prompt a { display: block; max-width: 44ch; }
-.jams td.prompt a:hover, .jams td.prompt a:focus-visible, td b a:hover, td b a:focus-visible { text-decoration: underline; text-underline-offset: 3px; }
+.jams td.prompt a:hover, .jams td.prompt a:focus-visible, td b a:hover, td b a:focus-visible, .card.rec .meta b a:hover, .card.rec .meta b a:focus-visible { text-decoration: underline; text-underline-offset: 3px; }
 @media (min-width: 641px) { .jams td:not(.prompt) { white-space: nowrap; } }
 /* A card narrower than its text drops details rather than wrapping
    them: first the second line and the step count, then the name. */

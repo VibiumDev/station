@@ -121,6 +121,12 @@ func TestRecordsTemplatesRender(t *testing.T) {
 		if !grid && !strings.Contains(html, `class="minithumb"`) {
 			t.Error("the list has no tiny thumbnail")
 		}
+		if !strings.Contains(html, `<b><a href="/records/`+strings.Repeat("ab", 32)+`/play">record.zip</a></b>`) {
+			t.Errorf("grid=%v: the record's name should open it", grid)
+		}
+		if grid && strings.Contains(html, `?device=`) {
+			t.Error("the grid's device name should not be a filter link")
+		}
 		if strings.Count(html, `aria-pressed="true"`) != 1 {
 			t.Errorf("grid=%v: golden stars pressed: %d", grid, strings.Count(html, `aria-pressed="true"`))
 		}
