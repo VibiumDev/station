@@ -353,6 +353,9 @@ func (s *server) changePassword(w http.ResponseWriter, r *http.Request, p statio
 func (s *server) accountCodes(w http.ResponseWriter, r *http.Request, p station.Principal) {
 	var codes []string
 	msg := s.withPassword(r, p, func(u station.User) (string, error) {
+		if !u.HasPassword {
+			return "", errors.New("set a password first; a sign-in by identity has no authenticator")
+		}
 		if !u.TwoFactor {
 			return "", errors.New("set up an authenticator first")
 		}
@@ -371,14 +374,21 @@ func (s *server) accountCodes(w http.ResponseWriter, r *http.Request, p station.
 // accountAuthenticator is POST /account/authenticator: start replacing
 // the authenticator; the old one stands until a code confirms the new.
 func (s *server) accountAuthenticator(w http.ResponseWriter, r *http.Request, p station.Principal) {
-	msg := s.withPassword(r, p, func(u station.User) (string, error) { return "", nil })
+	msg := s.withPassword(r, p, func(u station.User) (string, error) {
+		if !u.HasPassword {
+			return "", errors.New("set a password first; a sign-in by identity has no authenticator")
+		}
+		return "", nil
+	})
+	sess := s.auth.sessionOf(r)
+	if msg == "" && sess == nil {
+		msg = "Sign in by password to replace the authenticator."
+	}
 	if msg != "" {
 		s.render(w, "account", s.accountData(r, p, map[string]any{"Message": msg}))
 		return
 	}
-	if sess := s.auth.sessionOf(r); sess != nil {
-		s.auth.startSetup(w, r, sess)
-	}
+	s.auth.startSetup(w, r, sess)
 	http.Redirect(w, r, "/account/setup", http.StatusSeeOther)
 }
 

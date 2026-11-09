@@ -151,11 +151,11 @@ func (s *server) handler() http.Handler {
 	mux.Handle("GET /{$}", s.page(station.ActionView, s.homePage))
 	mux.Handle("GET /devices", s.page(station.ActionView, s.indexPage))
 	mux.Handle("GET /jams", s.page(station.ActionView, s.jamsPage))
-	mux.Handle("POST /jams", s.page(station.ActionView, s.startJamForm))
+	mux.Handle("POST /jams", s.page(station.ActionControl, s.startJamForm))
 	mux.Handle("GET /jams/{id}", s.page(station.ActionView, s.jamPage))
-	mux.Handle("POST /jams/{id}/turns", s.page(station.ActionView, s.jamTurnForm))
-	mux.Handle("POST /jams/{id}/stop", s.page(station.ActionView, s.jamStopForm))
-	mux.Handle("POST /jams/{id}/keep", s.page(station.ActionView, s.jamKeepForm))
+	mux.Handle("POST /jams/{id}/turns", s.page(station.ActionControl, s.jamTurnForm))
+	mux.Handle("POST /jams/{id}/stop", s.page(station.ActionControl, s.jamStopForm))
+	mux.Handle("POST /jams/{id}/keep", s.page(station.ActionControl, s.jamKeepForm))
 	mux.Handle("GET /jams/{id}/shots/{seq}", s.page(station.ActionView, s.jamShot))
 	mux.Handle("GET /devices/{rig}/{name}/drive", s.page(station.ActionView, s.drivePage))
 	mux.Handle("GET /devices/{rig}/{name}/view", s.page(station.ActionView, s.viewPage))
@@ -167,16 +167,16 @@ func (s *server) handler() http.Handler {
 	mux.Handle("GET /records/{sha}/files/{path...}", s.page(station.ActionView, func(w http.ResponseWriter, r *http.Request, p station.Principal) {
 		s.records.ServeFile(w, r, r.PathValue("sha"), r.PathValue("path"), &p)
 	}))
-	mux.Handle("POST /records/public", s.page(station.ActionView, s.recordPublic))
-	mux.Handle("POST /records/delete", s.page(station.ActionView, s.recordDelete))
-	mux.Handle("POST /records/golden", s.page(station.ActionView, s.recordGolden))
-	mux.Handle("POST /records/tags", s.page(station.ActionView, s.recordTags))
+	mux.Handle("POST /records/public", s.page(station.ActionControl, s.recordPublic))
+	mux.Handle("POST /records/delete", s.page(station.ActionControl, s.recordDelete))
+	mux.Handle("POST /records/golden", s.page(station.ActionControl, s.recordGolden))
+	mux.Handle("POST /records/tags", s.page(station.ActionControl, s.recordTags))
 	mux.Handle("GET /account", s.page(station.ActionView, s.accountPage))
-	mux.Handle("POST /account/password", s.page(station.ActionView, s.changePassword))
-	mux.Handle("POST /account/codes", s.page(station.ActionView, s.accountCodes))
-	mux.Handle("POST /account/authenticator", s.page(station.ActionView, s.accountAuthenticator))
-	mux.Handle("POST /account/tokens", s.page(station.ActionView, s.accountTokens))
-	mux.Handle("POST /account/tokens/revoke", s.page(station.ActionView, s.accountTokenRevoke))
+	mux.Handle("POST /account/password", s.personPage(s.changePassword))
+	mux.Handle("POST /account/codes", s.personPage(s.accountCodes))
+	mux.Handle("POST /account/authenticator", s.personPage(s.accountAuthenticator))
+	mux.Handle("POST /account/tokens", s.personPage(s.accountTokens))
+	mux.Handle("POST /account/tokens/revoke", s.personPage(s.accountTokenRevoke))
 	mux.Handle("GET /settings", s.page(station.ActionManage, s.settingsPage))
 	mux.Handle("POST /settings/name", s.page(station.ActionManage, s.setName))
 	mux.Handle("POST /settings/tokens", s.page(station.ActionManage, s.createToken))
@@ -235,7 +235,7 @@ func (s *server) handler() http.Handler {
 	mux.Handle("DELETE /v1/devices/{rig}/{name}/hold", s.api(station.ActionView, s.releaseHold))
 	mux.Handle("POST /v1/devices/{rig}/{name}/hold/release", s.api(station.ActionView, s.releaseHold))
 	mux.Handle("POST /v1/devices/{rig}/{name}/reservation", s.api(station.ActionView, s.reserve))
-	mux.Handle("DELETE /v1/devices/{rig}/{name}/reservation", s.api(station.ActionView, s.unreserve))
+	mux.Handle("DELETE /v1/devices/{rig}/{name}/reservation", s.api(station.ActionControl, s.unreserve))
 	mux.Handle("GET /v1/devices/{rig}/{name}/signal", s.api(station.ActionView, func(w http.ResponseWriter, r *http.Request, _ station.Principal) {
 		s.signal.ServeDevice(w, r, deviceID(r))
 	}))
@@ -267,6 +267,16 @@ func (s *server) handler() http.Handler {
 }
 
 func deviceID(r *http.Request) string { return r.PathValue("rig") + "/" + r.PathValue("name") }
+
+// routeDevice is the device a route names, "" for one about no device
+// in particular: every device route is authorized against its device
+// before its handler runs, whatever the handler checks besides.
+func routeDevice(r *http.Request) string {
+	if r.PathValue("rig") == "" || r.PathValue("name") == "" {
+		return ""
+	}
+	return deviceID(r)
+}
 
 // pageCSP is the policy every page carries: no inline script anywhere;
 // inline style attributes are the viewer's layout (Roadie's markup),
@@ -311,8 +321,25 @@ func (s *server) page(action station.Action, next handlerWithPrincipal) http.Han
 			http.Error(w, "the form has expired; go back and try again", http.StatusForbidden)
 			return
 		}
-		if err := s.auth.Authorize(r.Context(), p, action, ""); err != nil {
+		dev := routeDevice(r)
+		if err := s.auth.Authorize(r.Context(), p, action, dev); err != nil {
+			if dev != "" {
+				http.NotFound(w, r) // a device not shared with them is not there
+				return
+			}
 			http.Error(w, "not allowed", http.StatusForbidden)
+			return
+		}
+		next(w, r, p)
+	})
+}
+
+// personPage gates an Account change: a person signed in, never a token,
+// since a token must not change the credentials of the user it acts as.
+func (s *server) personPage(next handlerWithPrincipal) http.Handler {
+	return s.page(station.ActionView, func(w http.ResponseWriter, r *http.Request, p station.Principal) {
+		if !person(p) {
+			http.Error(w, "not allowed: a token cannot change its user's account", http.StatusForbidden)
 			return
 		}
 		next(w, r, p)
@@ -360,7 +387,7 @@ func (s *server) api(action station.Action, next handlerWithPrincipal) http.Hand
 			apiError(w, http.StatusForbidden, "missing or stale CSRF token")
 			return
 		}
-		if err := s.auth.Authorize(r.Context(), p, action, ""); err != nil {
+		if err := s.auth.Authorize(r.Context(), p, action, routeDevice(r)); err != nil {
 			apiError(w, http.StatusForbidden, "not allowed")
 			return
 		}
@@ -694,7 +721,7 @@ func (s *server) relayTo(w http.ResponseWriter, r *http.Request, p station.Princ
 	case free:
 		if scope != "" && scope != station.ScopeView {
 			scopes = append(scopes, scope)
-		} else if scope == "" && !p.ReadOnly {
+		} else if scope == "" && s.auth.Authorize(r.Context(), p, station.ActionControl, id) == nil {
 			scopes = append(scopes, station.ScopeInput)
 		}
 	default:
@@ -804,8 +831,12 @@ func (s *server) viewPage(w http.ResponseWriter, r *http.Request, p station.Prin
 func (s *server) devicePage(w http.ResponseWriter, r *http.Request, p station.Principal, watch bool) {
 	id := deviceID(r)
 	dev, err := s.db.Device(r.Context(), id)
-	if err != nil {
-		http.NotFound(w, r)
+	if err != nil || s.auth.Authorize(r.Context(), p, station.ActionView, id) != nil {
+		http.NotFound(w, r) // a device not shared with them is not there
+		return
+	}
+	if !watch && s.auth.Authorize(r.Context(), p, station.ActionControl, id) != nil {
+		http.Redirect(w, r, "/devices/"+id+"/view", http.StatusSeeOther) // watching is what they may do
 		return
 	}
 	rg, _ := s.db.Rig(r.Context(), r.PathValue("rig"))

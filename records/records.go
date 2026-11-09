@@ -577,7 +577,7 @@ func (s *Store) MayRead(ctx context.Context, b station.Blob, p station.Principal
 // t=delete authorization for it signed by the station or the uploading
 // rig.
 func (s *Store) mayDelete(b station.Blob, p *station.Principal, auth *nostr.Event) bool {
-	if p != nil && (p.Admin || p.Subject == b.Uploader) {
+	if p != nil && (p.Manages() || p.Subject == b.Uploader) {
 		return true
 	}
 	if auth != nil && verb(auth) == "delete" && tagValue(auth, "x") == b.SHA256 {
@@ -703,7 +703,7 @@ func (s *Store) SetPublic(ctx context.Context, p station.Principal, sha string, 
 	if err != nil {
 		return err
 	}
-	if !p.Admin && p.Subject != b.Uploader {
+	if !p.Manages() && p.Subject != b.Uploader {
 		return refuse(http.StatusForbidden, "not yours to share")
 	}
 	if err := s.Index.SetBlobPublic(ctx, sha, public); err != nil {
@@ -727,7 +727,7 @@ func (s *Store) own(ctx context.Context, p station.Principal, sha string) (stati
 	if err != nil {
 		return b, err
 	}
-	if !p.Admin && p.Subject != b.Uploader {
+	if !p.Manages() && p.Subject != b.Uploader {
 		return b, refuse(http.StatusForbidden, "not yours to file")
 	}
 	return b, nil

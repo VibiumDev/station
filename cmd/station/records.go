@@ -640,6 +640,11 @@ func (s *server) recordTags(w http.ResponseWriter, r *http.Request, p station.Pr
 	sha := r.FormValue("sha256")
 	to := "/records/" + url.PathEscape(sha) + "/play"
 	if _, err := s.records.SetTags(r.Context(), p, sha, r.FormValue("tags")); err != nil {
+		var refusal *records.Error
+		if errors.As(err, &refusal) { // not theirs, or no such record: say so plainly
+			recordsError(w, err)
+			return
+		}
 		http.Redirect(w, r, to+"?msg="+urlQuery(err.Error()), http.StatusSeeOther)
 		return
 	}

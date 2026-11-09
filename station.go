@@ -194,6 +194,14 @@ type Principal struct {
 	Teams []string
 }
 
+// Manages says whether the principal wields an admin's power to change
+// what is not theirs: an admin in person, or an admin's admin token.
+// An admin's watch or drive token sees everything an admin sees and
+// changes only what the admin themselves made.
+func (p Principal) Manages() bool {
+	return p.Admin && (p.Token == "" || p.Token == TokenAdmin)
+}
+
 // User is someone who signs in: an admin, who sees and manages
 // everything, or a regular user, who sees what their teams are given.
 type User struct {

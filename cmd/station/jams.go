@@ -84,9 +84,6 @@ func (m *jams) on() bool {
 	if m == nil {
 		return false
 	}
-	if m == nil {
-		return false
-	}
 	m.s.nameMu.RLock()
 	off := m.s.cfg.JamsOff
 	m.s.nameMu.RUnlock()
@@ -143,18 +140,20 @@ func (m *jams) start(ctx context.Context, p station.Principal, prompt, deviceID,
 	if mode != "" && mode != "check" && mode != "run" {
 		return station.Jam{}, errors.New("mode is check, run, or left out")
 	}
-	if m.vibium == "" {
-		return station.Jam{}, errors.New("the station cannot find Vibium: " + m.missing)
-	}
+	// Who may, before what the station can: a refusal never says more
+	// than the caller is owed.
 	if p.Device != "" && deviceID != "" && deviceID != p.Device {
-		return station.Jam{}, errors.New("this token may only use " + p.Device)
+		return station.Jam{}, forbidden("this token may only use " + p.Device)
 	}
 	dev, err := m.pickDevice(ctx, p, deviceID)
 	if err != nil {
 		return station.Jam{}, err
 	}
 	if err := m.s.auth.Authorize(ctx, p, station.ActionBidi, dev.ID); err != nil {
-		return station.Jam{}, errors.New("this login may not start jams on " + dev.ID)
+		return station.Jam{}, forbidden("this login may not start jams on " + dev.ID)
+	}
+	if m.vibium == "" {
+		return station.Jam{}, errors.New("the station cannot find Vibium: " + m.missing)
 	}
 	// A jam does not wait in line: a held device is said so up front,
 	// before Vibium is started for nothing.
@@ -284,9 +283,9 @@ func (m *jams) pickDevice(ctx context.Context, p station.Principal, want string)
 	devs = slices.DeleteFunc(devs, func(d deviceView) bool { return d.ID == "" || !d.Level.AtLeast(station.LevelJam) })
 	if len(devs) == 0 && seen > 0 && !p.Admin {
 		if want != "" {
-			return deviceView{}, errors.New("you may not start jams on " + want + "; an admin sets the jam level on Settings")
+			return deviceView{}, forbidden("you may not start jams on " + want + "; an admin sets the jam level on Settings")
 		}
-		return deviceView{}, errors.New("none of your devices allows jams; an admin sets the jam level on Settings")
+		return deviceView{}, forbidden("none of your devices allows jams; an admin sets the jam level on Settings")
 	}
 	if err != nil {
 		return deviceView{}, err
@@ -308,7 +307,7 @@ func (m *jams) pickDevice(ctx context.Context, p station.Principal, want string)
 	}
 	switch {
 	case want != "":
-		return deviceView{}, errors.New("no device named " + want)
+		return deviceView{}, forbidden("no device named " + want + " is yours to use")
 	case len(online) == 0:
 		return deviceView{}, errors.New("no device is online")
 	case len(online) > 1:
@@ -488,6 +487,20 @@ func (m *jams) get(ctx context.Context, p station.Principal, id string) (station
 		return j, false, station.ErrNotFound
 	}
 	return j, lj != nil, nil
+}
+
+// act finds a jam the principal may act on, with a follow-up, Keep or
+// Stop: its starter, an admin, or someone at jam level on its device.
+// Watching the device lets one see the jam, not steer it.
+func (m *jams) act(ctx context.Context, p station.Principal, id string) (station.Jam, bool, error) {
+	j, live, err := m.get(ctx, p, id)
+	if err != nil {
+		return j, live, err
+	}
+	if p.Manages() || j.Subject == p.Subject || m.s.auth.Authorize(ctx, p, station.ActionBidi, j.DeviceID) == nil {
+		return j, live, nil
+	}
+	return j, live, station.ErrForbidden
 }
 
 // visibleJams keeps the jams a principal may see: all for an admin, else
@@ -791,8 +804,8 @@ func (s *server) jamTurnForm(w http.ResponseWriter, r *http.Request, p station.P
 		return
 	}
 	id := r.PathValue("id")
-	if _, _, err := s.jams.get(r.Context(), p, id); err != nil {
-		http.NotFound(w, r)
+	if _, _, err := s.jams.act(r.Context(), p, id); err != nil {
+		jamFormError(w, r, err)
 		return
 	}
 	if err := s.jams.turn(id, r.FormValue("prompt")); err != nil {
@@ -809,8 +822,8 @@ func (s *server) jamKeepForm(w http.ResponseWriter, r *http.Request, p station.P
 		return
 	}
 	id := r.PathValue("id")
-	if _, _, err := s.jams.get(r.Context(), p, id); err != nil {
-		http.NotFound(w, r)
+	if _, _, err := s.jams.act(r.Context(), p, id); err != nil {
+		jamFormError(w, r, err)
 		return
 	}
 	s.jams.keep(id)
@@ -823,8 +836,8 @@ func (s *server) jamStopForm(w http.ResponseWriter, r *http.Request, p station.P
 		return
 	}
 	id := r.PathValue("id")
-	if _, _, err := s.jams.get(r.Context(), p, id); err != nil {
-		http.NotFound(w, r)
+	if _, _, err := s.jams.act(r.Context(), p, id); err != nil {
+		jamFormError(w, r, err)
 		return
 	}
 	s.jams.stop(id, "stopped by "+p.Subject)
@@ -892,6 +905,10 @@ func (s *server) startJam(w http.ResponseWriter, r *http.Request, p station.Prin
 		return
 	}
 	j, err := s.jams.start(r.Context(), p, body.Prompt, body.Device, body.Model, body.Mode)
+	if errors.Is(err, station.ErrForbidden) {
+		apiError(w, http.StatusForbidden, err.Error())
+		return
+	}
 	if err != nil {
 		apiError(w, http.StatusBadRequest, err.Error())
 		return
@@ -942,8 +959,8 @@ func (s *server) jamTurn(w http.ResponseWriter, r *http.Request, p station.Princ
 		return
 	}
 	id := r.PathValue("id")
-	if _, _, err := s.jams.get(r.Context(), p, id); err != nil {
-		apiError(w, http.StatusNotFound, "no such jam")
+	if _, _, err := s.jams.act(r.Context(), p, id); err != nil {
+		jamActError(w, err)
 		return
 	}
 	var body struct{ Prompt string }
@@ -966,9 +983,9 @@ func (s *server) keepJam(w http.ResponseWriter, r *http.Request, p station.Princ
 		return
 	}
 	id := r.PathValue("id")
-	j, _, err := s.jams.get(r.Context(), p, id)
+	j, _, err := s.jams.act(r.Context(), p, id)
 	if err != nil {
-		apiError(w, http.StatusNotFound, "no such jam")
+		jamActError(w, err)
 		return
 	}
 	apiJSON(w, map[string]any{"kept": s.jams.keep(id), "jam": j})
@@ -980,8 +997,8 @@ func (s *server) stopJam(w http.ResponseWriter, r *http.Request, p station.Princ
 		return
 	}
 	id := r.PathValue("id")
-	if _, _, err := s.jams.get(r.Context(), p, id); err != nil {
-		apiError(w, http.StatusNotFound, "no such jam")
+	if _, _, err := s.jams.act(r.Context(), p, id); err != nil {
+		jamActError(w, err)
 		return
 	}
 	stopped := s.jams.stop(id, "stopped by "+p.Subject)
@@ -995,6 +1012,32 @@ func (s *server) stopJam(w http.ResponseWriter, r *http.Request, p station.Princ
 // jamEvents is GET /v1/jams/{id}/events: the transcript as server-sent
 // events from the start, or after ?after=<seq> or Last-Event-ID, then
 // live until the jam ends; a finished jam replays and closes.
+// forbidden is a refusal that reads as its message and is ErrForbidden
+// to errors.Is, so the API answers 403 and the page shows the words.
+type forbidden string
+
+func (f forbidden) Error() string      { return string(f) }
+func (forbidden) Is(target error) bool { return target == station.ErrForbidden }
+
+// jamFormError is jamActError for the page's forms.
+func jamFormError(w http.ResponseWriter, r *http.Request, err error) {
+	if errors.Is(err, station.ErrForbidden) {
+		http.Error(w, "watching a jam does not let you steer it", http.StatusForbidden)
+		return
+	}
+	http.NotFound(w, r)
+}
+
+// jamActError words a refusal to act on a jam: hidden when they may not
+// even see it, forbidden when they may watch it but not steer it.
+func jamActError(w http.ResponseWriter, err error) {
+	if errors.Is(err, station.ErrForbidden) {
+		apiError(w, http.StatusForbidden, "watching a jam does not let you steer it")
+		return
+	}
+	apiError(w, http.StatusNotFound, "no such jam")
+}
+
 func (s *server) jamEvents(w http.ResponseWriter, r *http.Request, p station.Principal) {
 	if s.jamsOff(w, r) {
 		return
