@@ -133,7 +133,7 @@ var pages = template.Must(template.New("").Funcs(template.FuncMap{"npub": npub, 
 <div class="helptext" id="help-jams" hidden>
 <p>Type something to check or try, and a jam session begins. A model set up on Settings drives the device through Vibium's tools, and the page shows each step as it happens. A check ends with a verdict, PASS, FAIL or REVIEW. A try ends with COMPLETED or NOT COMPLETED. The session's header shows which one it was, and a follow-up of the same kind can change it.</p>
 <p><b>Device and model.</b> If more than one device is online, or more than one agent model is set up, pick which to use beside the prompt. The examples under the box match the kind of device that is online.</p>
-<p><b>While it runs.</b> The session holds the device, so Devices shows it as the holder. Taking the device from there ends the session at once. If the host records holds, the recording is linked from the session when it ends. A PASS, FAIL or COMPLETED ends the session at once and frees the device. A REVIEW or NOT COMPLETED keeps it open for five minutes, so a person can look and send a follow-up, which continues the same conversation from where the model left off.</p>
+<p><b>While it runs.</b> The session holds the device, so Devices shows it as the holder. Taking the device from there ends the session at once. If the host records holds, the recording is linked from the session when it ends. A PASS, FAIL or COMPLETED ends the session and frees the device: at once when nobody is watching, and after a ten-second countdown when someone has the session's page open, who can keep it open or send a follow-up in that time. A REVIEW or NOT COMPLETED keeps it open for five minutes, so a person can look and send a follow-up, which continues the same conversation from where the model left off.</p>
 <p><b>Cost.</b> Model calls go to the provider on the key the model was set up with, and the session's page shows the tokens used. A session ends after thirty minutes or a hundred actions.</p>
 </div>
 <form class="promptbox" method="post" action="/jams"><input type="hidden" name="csrf" value="{{.CSRF}}">
@@ -169,7 +169,8 @@ var pages = template.Must(template.New("").Funcs(template.FuncMap{"npub": npub, 
 </div>
 {{if .Watch}}<iframe class="watch" src="{{.Watch}}" title="Watching {{.DeviceLabel}}" allow="autoplay"></iframe>{{end}}
 </div>
-{{if .Open}}<form class="promptbox" method="post" action="/jams/{{.Jam.ID}}/turns"><input type="hidden" name="csrf" value="{{.CSRF}}">
+{{if .Open}}<div class="grace" id="grace" data-until="{{.GraceUntil}}" data-total="{{.GraceSeconds}}" hidden><div class="bar"><span></span></div><p>The result is in. The session ends in <b class="left">{{.GraceSeconds}}</b> s unless you keep it open or send a follow-up.</p><form method="post" action="/jams/{{.Jam.ID}}/keep"><input type="hidden" name="csrf" value="{{.CSRF}}"><button class="small" type="submit">Keep it open</button></form></div>
+<form class="promptbox" method="post" action="/jams/{{.Jam.ID}}/turns"><input type="hidden" name="csrf" value="{{.CSRF}}">
 <textarea name="prompt" class="prompt" rows="2" placeholder="A follow-up, once the result is in" required maxlength="4000" aria-label="Follow-up prompt"></textarea>
 <div class="promptbar"><button class="primary send" type="submit" aria-label="Send">{{template "icon-send"}}</button></div></form>
 {{else}}<p class="muted">{{.Jam.Status}} · {{.Jam.Actions}} actions · {{.Jam.TokensIn}} tokens in, {{.Jam.TokensOut}} out</p>{{end}}
@@ -177,6 +178,7 @@ var pages = template.Must(template.New("").Funcs(template.FuncMap{"npub": npub, 
 
 {{define "event"}}{{if eq .Kind "turn"}}<div class="ev turn"><span class="t">{{.When}}</span><div class="body"><b>Prompt</b><p>{{.Text}}</p></div></div>
 {{else if eq .Kind "start"}}<div class="ev start"><span class="t">{{.When}}</span><div class="body muted">{{.Text}}</div></div>
+{{else if eq .Kind "kept"}}<div class="ev kept"><span class="t">{{.When}}</span><div class="body muted">{{.Text}}</div></div>
 {{else if eq .Kind "text"}}<div class="ev text"><span class="t">{{.When}}</span><div class="body"><p>{{.Text}}</p></div></div>
 {{else if eq .Kind "call"}}<div class="ev call"><span class="t">{{.When}}</span><div class="body"><code>{{.Tool}}{{if .Args}} {{.Args}}{{end}}</code></div></div>
 {{else if eq .Kind "result"}}<div class="ev result{{if .Error}} error{{end}}"><span class="t">{{.When}}</span><div class="body">{{.Text}}</div></div>

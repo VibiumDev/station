@@ -21,7 +21,7 @@
     var body = h('div', 'body');
     switch (kind) {
       case 'turn': body.appendChild(h('b', null, 'Prompt')); body.appendChild(h('p', null, d.text)); break;
-      case 'start': case 'end': body.className += ' muted'; body.textContent = d.text || ''; break;
+      case 'start': case 'kept': case 'end': body.className += ' muted'; body.textContent = d.text || ''; break;
       case 'text': body.appendChild(h('p', null, d.text)); break;
       case 'call':
         var args = d.args && JSON.stringify(d.args);
@@ -64,11 +64,34 @@
     });
     var tr = document.getElementById('transcript');
     if (!tr || !tr.dataset.open) return;
+    // The grace after a settled result: a bar runs down to the moment
+    // the jam ends, with the seconds left and the button that keeps it
+    // open. A page opened during the grace picks it up from the server.
+    var g = document.getElementById('grace'), timer;
+    function showGrace(until) {
+      if (!g || !(until > Date.now())) return;
+      var total = (parseInt(g.dataset.total, 10) || 10) * 1000;
+      var left = g.querySelector('.left'), bar = g.querySelector('.bar span');
+      g.hidden = false;
+      clearInterval(timer);
+      function tick() {
+        var ms = until - Date.now();
+        if (ms <= 0) { clearInterval(timer); ms = 0; }
+        left.textContent = Math.ceil(ms / 1000);
+        bar.style.width = Math.min(100, 100 * ms / total) + '%';
+      }
+      tick();
+      timer = setInterval(tick, 100);
+    }
+    function hideGrace() { if (g) { g.hidden = true; } clearInterval(timer); }
+    showGrace(parseInt(g && g.dataset.until, 10));
     var es = new EventSource('/v1/jams/' + tr.dataset.jam + '/events?after=' + (tr.dataset.after || 0));
-    ['start', 'turn', 'text', 'call', 'result', 'shot', 'verdict', 'error', 'end'].forEach(function (kind) {
+    ['start', 'turn', 'text', 'call', 'result', 'shot', 'verdict', 'error', 'grace', 'kept', 'end'].forEach(function (kind) {
       es.addEventListener(kind, function (e) {
         var d = {};
         try { d = JSON.parse(e.data); } catch (err) {}
+        if (kind === 'grace') { showGrace(d.until); return; }
+        hideGrace();
         var node = render(kind, d);
         if (node) { tr.appendChild(node); node.scrollIntoView({block: 'nearest'}); }
         if (kind === 'end') { es.close(); setTimeout(function () { location.reload(); }, 800); }

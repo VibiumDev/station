@@ -43,12 +43,22 @@ type liveJam struct {
 	seq     int
 	subs    map[chan station.JamEvent]struct{}
 	unwatch func()
+	grace   int64 // when the jam ends after a settled result, Unix milliseconds, while a watcher may still keep it open
+}
+
+// watched says whether anyone follows the jam's events right now, which
+// is what the page does while a jam runs.
+func (lj *liveJam) watched() bool {
+	lj.mu.Lock()
+	defer lj.mu.Unlock()
+	return len(lj.subs) > 0
 }
 
 // Limits a jam has of its own, which the token's expiry backs.
 const (
 	jamTimeLimit  = 30 * time.Minute
 	jamMaxActions = 100
+	jamGrace      = 10 * time.Second
 	jamMaxPrompt  = 4000
 )
 
@@ -181,7 +191,7 @@ func (m *jams) start(ctx context.Context, p station.Principal, prompt, deviceID,
 		return j, errors.New("starting Vibium: " + err.Error())
 	}
 	lj.loop = jam.New(model.Client(), mcp, jam.Options{Prompt: prompt, Mode: mode, DeviceKind: dev.Kind, MaxActions: jamMaxActions, TimeLimit: jamTimeLimit,
-		Shortcuts: jamShortcuts(dev.Shortcuts), Emit: func(ev jam.Event) { lj.emit(m, ev) }})
+		Grace: jamGrace, Watched: lj.watched, Shortcuts: jamShortcuts(dev.Shortcuts), Emit: func(ev jam.Event) { lj.emit(m, ev) }})
 	m.s.db.Audit(ctx, station.AuditEntry{Subject: p.Subject, Action: "jam", DeviceID: dev.ID, Detail: "started " + j.ID + " with " + model.Name})
 	go m.watchHold(lj)
 	go func() {
@@ -323,9 +333,14 @@ func (lj *liveJam) emit(m *jams, ev jam.Event) {
 		}
 	}
 	// The record keeps up with the transcript: the count of actions and
-	// tokens as they happen, written with each verdict.
+	// tokens as they happen, written with each verdict. The grace after
+	// a settled result is a moment, not history: the watchers hear of
+	// it and the page shows it, but the transcript does not keep it.
 	var record *station.Jam
+	lj.grace = 0
 	switch ev.Kind {
+	case "grace":
+		lj.grace = ev.Until
 	case "call":
 		lj.j.Actions++
 	case "usage":
@@ -343,7 +358,9 @@ func (lj *liveJam) emit(m *jams, ev jam.Event) {
 		subs = append(subs, ch)
 	}
 	lj.mu.Unlock()
-	m.s.db.AddJamEvent(context.Background(), e)
+	if ev.Kind != "grace" {
+		m.s.db.AddJamEvent(context.Background(), e)
+	}
 	if record != nil {
 		m.s.db.UpdateJam(context.Background(), *record)
 	}
@@ -436,6 +453,34 @@ func (m *jams) turn(id, prompt string) error {
 		return jam.ErrEnded
 	}
 	return lj.loop.Turn(prompt)
+}
+
+// keep holds a jam open through the grace after a settled result.
+func (m *jams) keep(id string) bool {
+	m.mu.Lock()
+	lj := m.live[id]
+	m.mu.Unlock()
+	if lj == nil || lj.loop == nil {
+		return false
+	}
+	lj.mu.Lock()
+	lj.grace = 0
+	lj.mu.Unlock()
+	return lj.loop.Keep() == nil
+}
+
+// graceUntil is when an open jam ends after a settled result, in Unix
+// milliseconds, or 0 when it is not in that moment.
+func (m *jams) graceUntil(id string) int64 {
+	m.mu.Lock()
+	lj := m.live[id]
+	m.mu.Unlock()
+	if lj == nil {
+		return 0
+	}
+	lj.mu.Lock()
+	defer lj.mu.Unlock()
+	return lj.grace
 }
 
 // stop ends an open jam.
@@ -664,6 +709,10 @@ func (s *server) jamPage(w http.ResponseWriter, r *http.Request, p station.Princ
 	if j.Result != "" {
 		data["Word"] = (jam.Verdict{Status: j.Result}).Word()
 	}
+	if live {
+		data["GraceUntil"] = s.jams.graceUntil(j.ID)
+		data["GraceSeconds"] = int(jamGrace / time.Second)
+	}
 	rigID, _, _ := station.SplitDeviceID(j.DeviceID)
 	if live && s.tunnel.IsOnline(rigID) {
 		data["Watch"] = "/devices/" + j.DeviceID + "/view?minimal=1&watch=1"
@@ -689,6 +738,21 @@ func (s *server) jamTurnForm(w http.ResponseWriter, r *http.Request, p station.P
 		http.Redirect(w, r, "/jams/"+id+"?msg="+urlQuery(err.Error()), http.StatusSeeOther)
 		return
 	}
+	http.Redirect(w, r, "/jams/"+id, http.StatusSeeOther)
+}
+
+// jamKeepForm is POST /jams/{id}/keep from the page: the watcher keeps
+// a jam open through the grace after a settled result.
+func (s *server) jamKeepForm(w http.ResponseWriter, r *http.Request, p station.Principal) {
+	if s.jamsOff(w, r) {
+		return
+	}
+	id := r.PathValue("id")
+	if _, _, err := s.jams.get(r.Context(), p, id); err != nil {
+		http.NotFound(w, r)
+		return
+	}
+	s.jams.keep(id)
 	http.Redirect(w, r, "/jams/"+id, http.StatusSeeOther)
 }
 
@@ -840,6 +904,20 @@ func (s *server) jamTurn(w http.ResponseWriter, r *http.Request, p station.Princ
 	default:
 		apiJSON(w, map[string]any{"queued": true})
 	}
+}
+
+// keepJam is POST /v1/jams/{id}/keep.
+func (s *server) keepJam(w http.ResponseWriter, r *http.Request, p station.Principal) {
+	if s.jamsOff(w, r) {
+		return
+	}
+	id := r.PathValue("id")
+	j, _, err := s.jams.get(r.Context(), p, id)
+	if err != nil {
+		apiError(w, http.StatusNotFound, "no such jam")
+		return
+	}
+	apiJSON(w, map[string]any{"kept": s.jams.keep(id), "jam": j})
 }
 
 // stopJam is POST /v1/jams/{id}/stop.

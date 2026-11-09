@@ -264,6 +264,7 @@ ends the jam. While Jams is off, every path here answers 404.
 | `POST /v1/jams/{id}/turns` | `{"prompt": ...}`: a follow-up on an open jam, one still running or whose last result was `inconclusive` or `not_completed`, taken up once the current prompt has its result, and answered in words when it asks nothing of the device; 409 when the jam has ended or a prompt is already waiting |
 | `GET /v1/jams/{id}/events` | The transcript as server-sent events, each with `id` (the sequence number), `event` (the kind) and `data` (the event), from the start or after `?after=<seq>` or `Last-Event-ID`; a running jam streams on until its `end`, a finished one replays and closes |
 | `POST /v1/jams/{id}/stop` | Ends the jam, which releases the device |
+| `POST /v1/jams/{id}/keep` | Keeps a jam open through the ten seconds after a settled result, for a follow-up; `kept` says whether it was in that moment |
 
 A jam is `running` until it ends `done` (it delivered at least one
 result), `stopped` or `failed`, with `took` saying whether the model
@@ -276,14 +277,19 @@ shows in the transcript alone. The event kinds are `start`, `turn`
 arguments), `result` (what the tool returned, with `error` when it
 failed), `shot` (a screenshot, at `image`), `verdict` (a result the
 model delivered, with its `took`, `status`, `summary` and `evidence`),
-`usage` (tokens in and out) and `end`, whose text carries the reason
-when the jam failed or was stopped. A jam ends on its own when a
-result settles the prompt, `passed`, `failed` or `completed`, or after
-thirty minutes, a hundred actions, or five minutes without a follow-up
-on an `inconclusive` or `not_completed` result, which stays open for a
-person to look and follow up. It then presses the device's Home
-shortcut when it announces one, so the device is left on its home
-screen.
+`usage` (tokens in and out), `grace` (a settled result landed while
+someone was watching: the jam ends at `until`, Unix milliseconds,
+unless a follow-up or `keep` arrives first; sent to watchers, not kept
+in the transcript), `kept` (someone kept it open) and `end`, whose
+text carries the reason when the jam failed or was stopped. A jam ends
+on its own when a result settles the prompt, `passed`, `failed` or
+`completed`: at once when nobody follows its events, and ten seconds
+later when someone does, who can send a follow-up or `keep` in that
+time. It also ends after thirty minutes, a hundred actions, or five
+minutes without a follow-up on an `inconclusive` or `not_completed`
+result, or a kept one, which stay open for a person to look and follow
+up. It then presses the device's Home shortcut when it announces one,
+so the device is left on its home screen.
 
 ## station-probe
 

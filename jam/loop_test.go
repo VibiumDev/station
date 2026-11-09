@@ -369,3 +369,82 @@ func TestLoopFollowUpInWordsAndTidy(t *testing.T) {
 		t.Errorf("Home pressed with no Home announced: %s", calls)
 	}
 }
+
+// A settled result ends the jam at once when nobody watches, and after a
+// grace when someone does, which a follow-up or Keep cuts short.
+func TestLoopGraceForWatchers(t *testing.T) {
+	watching := func() bool { return true }
+	waitFor := func(t *testing.T, events func() []Event, kind string) {
+		t.Helper()
+		deadline := time.Now().Add(5 * time.Second)
+		for {
+			if ev := events(); len(ev) > 0 && ev[len(ev)-1].Kind == kind {
+				return
+			}
+			if time.Now().After(deadline) {
+				t.Fatalf("no %s: %s", kind, kinds(events()))
+			}
+			time.Sleep(10 * time.Millisecond)
+		}
+	}
+	// Kept open: the grace is cancelled and the jam waits as an open
+	// result does, then ends when no follow-up comes.
+	model := &scripted{replies: []Reply{toolReply(call("c1", "return_verdict", verdict))}}
+	emit, events := collect()
+	l := New(model, &fakeTools{}, Options{Prompt: "home?", Emit: emit, Watched: watching, Grace: 5 * time.Second, IdleWait: 200 * time.Millisecond})
+	if err := l.Keep(); err != nil { // a Keep before the moment means nothing
+		t.Fatal(err)
+	}
+	go l.Run(context.Background())
+	waitFor(t, events, "grace")
+	if u := events()[4].Until; u < time.Now().Add(3*time.Second).UnixMilli() || u > time.Now().Add(6*time.Second).UnixMilli() {
+		t.Errorf("grace until: %d", u)
+	}
+	if err := l.Keep(); err != nil {
+		t.Fatal(err)
+	}
+	<-l.Done()
+	res := l.Result()
+	if res.Status != "done" || res.Reason != "no follow-up" {
+		t.Errorf("kept: %+v", res)
+	}
+	if got, want := kinds(events()), "turn shot usage verdict grace kept end"; got != want {
+		t.Errorf("kept events:\n got %s\nwant %s", got, want)
+	}
+	if err := l.Keep(); err != ErrEnded {
+		t.Errorf("keep after the end: %v", err)
+	}
+	// A follow-up during the grace continues the conversation.
+	model = &scripted{replies: []Reply{toolReply(call("c1", "return_verdict", verdict)), textReply("Yes: the clock and the icons were there.")}}
+	emit, events = collect()
+	l = New(model, &fakeTools{}, Options{Prompt: "home?", Emit: emit, Watched: watching, Grace: 5 * time.Second, IdleWait: 200 * time.Millisecond})
+	go l.Run(context.Background())
+	waitFor(t, events, "grace")
+	if err := l.Turn("are you sure?"); err != nil {
+		t.Fatal(err)
+	}
+	<-l.Done()
+	if got, want := kinds(events()), "turn shot usage verdict grace turn usage text end"; got != want {
+		t.Errorf("follow-up events:\n got %s\nwant %s", got, want)
+	}
+	// Nobody speaks up: the jam ends when the grace runs out.
+	model = &scripted{replies: []Reply{toolReply(call("c1", "return_verdict", verdict))}}
+	emit, events = collect()
+	l = New(model, &fakeTools{}, Options{Prompt: "home?", Emit: emit, Watched: watching, Grace: 100 * time.Millisecond, IdleWait: time.Hour})
+	started := time.Now()
+	res = l.Run(context.Background())
+	if res.Status != "done" || res.Reason != "" || time.Since(started) > 2*time.Second {
+		t.Errorf("grace over: %+v after %s", res, time.Since(started))
+	}
+	if got, want := kinds(events()), "turn shot usage verdict grace end"; got != want {
+		t.Errorf("grace events:\n got %s\nwant %s", got, want)
+	}
+	// Nobody watching: no grace at all.
+	model = &scripted{replies: []Reply{toolReply(call("c1", "return_verdict", verdict))}}
+	emit, events = collect()
+	l = New(model, &fakeTools{}, Options{Prompt: "home?", Emit: emit, Watched: func() bool { return false }, Grace: time.Hour, IdleWait: time.Hour})
+	l.Run(context.Background())
+	if got, want := kinds(events()), "turn shot usage verdict end"; got != want {
+		t.Errorf("unwatched events:\n got %s\nwant %s", got, want)
+	}
+}

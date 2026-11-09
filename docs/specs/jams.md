@@ -131,10 +131,14 @@ second prompt while the jam is open continues the same conversation
 with the phone where the agent left it; a prompt after the jam has
 ended starts a new one.
 
-A settled result, passed, failed or completed, ends the jam at once
-and frees the device, since whoever asked may not be watching; an
-inconclusive check or an errand not completed wants a person, so the
-jam stays open for five minutes for someone to look and follow up. A
+A settled result, passed, failed or completed, ends the jam and frees
+the device, since whoever asked may not be watching. Someone who is,
+with the jam's page open, may disagree with the result, so for them
+the jam ends ten seconds later, under a bar that runs down on the
+page, and a follow-up or Keep it open in that time holds the jam open
+as an open result would. An inconclusive check or an errand not
+completed wants a person, so the jam stays open for five minutes for
+someone to look and follow up. A
 follow-up that asks for another check or goal ends with a result of
 its own, and one that asks nothing of the device, a question or a
 thanks, is answered in words. The jam's result, in its header and on
@@ -352,6 +356,7 @@ The API follows the pages, under the token model R5 built:
 | `GET /v1/jams/{id}` | One jam with its model, its transcript and the recording's SHA-256. |
 | `GET /v1/models` | The models set on Settings, by name and role, so a caller knows what to pass. Never a key. |
 | `POST /v1/jams/{id}/turns` | A follow-up prompt on an open jam. |
+| `POST /v1/jams/{id}/keep` | Keeps a jam open through the moment after a settled result. |
 | `GET /v1/jams/{id}/events` | The event stream, as server-sent events, from the start of the jam; a finished jam replays and closes. |
 | `POST /v1/jams/{id}/stop` | Ends the jam and releases the hold. |
 

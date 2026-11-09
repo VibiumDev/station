@@ -34,6 +34,8 @@ type Options struct {
 	MaxActions int           // tool calls in all; 0 means DefaultMaxActions
 	TimeLimit  time.Duration // for the whole jam; 0 means DefaultTimeLimit
 	IdleWait   time.Duration // how long an open result waits for a follow-up; 0 means DefaultIdleWait
+	Grace      time.Duration // how long a settled result waits when someone is watching; 0 means DefaultGrace
+	Watched    func() bool   // whether anyone is watching the jam; nil means nobody
 	Shortcuts  []Shortcut    // the device's own keys, as its provider announces them
 	Emit       func(Event)   // every step, in order
 }
@@ -52,6 +54,7 @@ const (
 	DefaultMaxActions = 100
 	DefaultTimeLimit  = 30 * time.Minute
 	DefaultIdleWait   = 5 * time.Minute
+	DefaultGrace      = 10 * time.Second
 	KeptScreenshots   = 2 // older ones are detached from the conversation
 	MaxText           = 16000
 	callTimeout       = 90 * time.Second
@@ -60,7 +63,7 @@ const (
 // Event is one step of a jam, as the page shows it and the transcript
 // keeps it.
 type Event struct {
-	Kind    string          `json:"kind"`              // turn, text, call, result, shot, verdict, usage, end
+	Kind    string          `json:"kind"`              // turn, text, call, result, shot, verdict, usage, grace, kept, end
 	Text    string          `json:"text,omitempty"`    // the prompt, the model's text, a tool's text, the end's status and reason
 	Tool    string          `json:"tool,omitempty"`    // call, result, shot: the tool
 	Args    json.RawMessage `json:"args,omitempty"`    // call: the arguments
@@ -71,6 +74,7 @@ type Event struct {
 	Verdict *Verdict        `json:"verdict,omitempty"` // verdict
 	In      int             `json:"in,omitempty"`      // usage: prompt tokens
 	Out     int             `json:"out,omitempty"`     // usage: completion tokens
+	Until   int64           `json:"until,omitempty"`   // grace: when the jam ends, in Unix milliseconds, unless kept open
 	PNG     []byte          `json:"-"`                 // shot: the picture itself
 }
 
@@ -123,6 +127,7 @@ type Loop struct {
 	tools  Tools
 	opt    Options
 	turns  chan string
+	keep   chan struct{}
 	stop   chan struct{}
 	once   sync.Once
 	why    string
@@ -148,10 +153,13 @@ func New(model Completer, tools Tools, opt Options) *Loop {
 	if opt.IdleWait <= 0 {
 		opt.IdleWait = DefaultIdleWait
 	}
+	if opt.Grace <= 0 {
+		opt.Grace = DefaultGrace
+	}
 	if opt.Emit == nil {
 		opt.Emit = func(Event) {}
 	}
-	return &Loop{model: model, tools: tools, opt: opt, turns: make(chan string, 4), stop: make(chan struct{}), done: make(chan struct{})}
+	return &Loop{model: model, tools: tools, opt: opt, turns: make(chan string, 4), keep: make(chan struct{}, 1), stop: make(chan struct{}), done: make(chan struct{})}
 }
 
 // Turn queues a follow-up prompt, which the loop takes up once the
@@ -168,6 +176,21 @@ func (l *Loop) Turn(prompt string) error {
 	default:
 		return ErrBusy
 	}
+}
+
+// Keep holds a jam open through the grace after a settled result, for
+// a follow-up; it does nothing when the jam is not in that moment.
+func (l *Loop) Keep() error {
+	select {
+	case <-l.done:
+		return ErrEnded
+	default:
+	}
+	select {
+	case l.keep <- struct{}{}:
+	default:
+	}
+	return nil
 }
 
 // Stop ends the jam after the current tool call.
@@ -312,10 +335,25 @@ func (l *Loop) run(ctx context.Context) Result {
 			res.Verdicts++
 			res.Last = v
 			// A settled result ends the jam and frees the device, since
-			// whoever asked may not be watching; an open one waits for
-			// a person to look and follow up.
+			// whoever asked may not be watching. Someone who is gets a
+			// moment to disagree: a follow-up or Keep holds the jam open,
+			// and then it waits as an open result does.
 			if v.Settled() {
-				return res
+				if l.opt.Watched == nil || !l.opt.Watched() {
+					return res
+				}
+				prompt, reason, what := l.grace(ctx)
+				switch what {
+				case graceOver:
+					return res
+				case graceStopped:
+					res.Reason = reason
+					return res
+				case graceTurn:
+					l.opt.Emit(Event{Kind: "turn", Text: prompt})
+					messages = append(messages, Message{Role: "user", Content: prompt})
+					continue
+				}
 			}
 		}
 		// The prompt is answered; a follow-up continues from here.
@@ -333,6 +371,41 @@ func (l *Loop) run(ctx context.Context) Result {
 			res.Reason = "no follow-up"
 			return res
 		}
+	}
+}
+
+// How the grace after a settled result came out.
+type graceEnd int
+
+const (
+	graceOver    graceEnd = iota // nobody spoke up: the jam ends
+	graceTurn                    // a follow-up arrived
+	graceKept                    // someone kept the jam open
+	graceStopped                 // the jam was stopped or closed
+)
+
+// grace tells the watchers the jam is about to end and waits a moment
+// for a follow-up or Keep.
+func (l *Loop) grace(ctx context.Context) (prompt, reason string, what graceEnd) {
+	select { // a Keep from before this moment means nothing now
+	case <-l.keep:
+	default:
+	}
+	until := time.Now().Add(l.opt.Grace)
+	l.opt.Emit(Event{Kind: "grace", Until: until.UnixMilli()})
+	select {
+	case prompt := <-l.turns:
+		return prompt, "", graceTurn
+	case <-l.keep:
+		l.opt.Emit(Event{Kind: "kept", Text: "kept open for a follow-up"})
+		return "", "", graceKept
+	case <-l.stop:
+		return "", l.why, graceStopped
+	case <-ctx.Done():
+		reason, _ := l.stopped(ctx)
+		return "", reason, graceStopped
+	case <-time.After(time.Until(until)):
+		return "", "", graceOver
 	}
 }
 

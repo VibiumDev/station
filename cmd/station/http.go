@@ -148,6 +148,7 @@ func (s *server) handler() http.Handler {
 	mux.Handle("GET /jams/{id}", s.page(station.ActionView, s.jamPage))
 	mux.Handle("POST /jams/{id}/turns", s.page(station.ActionView, s.jamTurnForm))
 	mux.Handle("POST /jams/{id}/stop", s.page(station.ActionView, s.jamStopForm))
+	mux.Handle("POST /jams/{id}/keep", s.page(station.ActionView, s.jamKeepForm))
 	mux.Handle("GET /jams/{id}/shots/{seq}", s.page(station.ActionView, s.jamShot))
 	mux.Handle("GET /devices/{rig}/{name}/view", s.page(station.ActionView, s.viewPage))
 	mux.Handle("GET /records", s.page(station.ActionView, s.recordsPage))
@@ -182,6 +183,7 @@ func (s *server) handler() http.Handler {
 	mux.Handle("POST /v1/jams/{id}/turns", s.api(station.ActionControl, s.jamTurn))
 	mux.Handle("GET /v1/jams/{id}/events", s.api(station.ActionView, s.jamEvents))
 	mux.Handle("POST /v1/jams/{id}/stop", s.api(station.ActionControl, s.stopJam))
+	mux.Handle("POST /v1/jams/{id}/keep", s.api(station.ActionControl, s.keepJam))
 	// The Record Store: Blossom at the root, the station's own calls under /v1/records.
 	mux.HandleFunc("PUT /upload", func(w http.ResponseWriter, r *http.Request) { s.records.ServeUpload(w, r) })
 	mux.HandleFunc("GET /list/{pubkey}", s.blossomList)
