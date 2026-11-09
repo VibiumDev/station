@@ -162,7 +162,7 @@ td code { word-break: break-all; }
 td.act { text-align: right; white-space: nowrap; }
 .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--line-strong); margin-right: 8px; vertical-align: 1px; }
 /* The note that a host records every session: a property, not a live state. */
-.rec { cursor: help; text-decoration: underline dotted; text-underline-offset: 3px; }
+.hint { cursor: help; text-decoration: underline dotted; text-underline-offset: 3px; }
 .dot.on { background: var(--success); }
 .kv th { width: 180px; color: var(--text-muted); font-weight: 500; background: none; }
 
