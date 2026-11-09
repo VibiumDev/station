@@ -272,8 +272,18 @@ func takeResult(j *station.Jam, v *jam.Verdict) {
 // online one, among those the principal may start jams on.
 func (m *jams) pickDevice(ctx context.Context, p station.Principal, want string) (deviceView, error) {
 	devs, err := m.s.visibleDevices(ctx, p)
-	if err == nil {
-		devs = slices.DeleteFunc(devs, func(d deviceView) bool { return !d.Level.AtLeast(station.LevelJam) })
+	if err != nil {
+		return deviceView{}, err
+	}
+	// A device the person sees but may not start jams on gets its own
+	// answer, rather than looking absent.
+	seen := len(devs)
+	devs = slices.DeleteFunc(devs, func(d deviceView) bool { return d.ID == "" || !d.Level.AtLeast(station.LevelJam) })
+	if len(devs) == 0 && seen > 0 && !p.Admin {
+		if want != "" {
+			return deviceView{}, errors.New("you may not start jams on " + want + "; an admin sets the jam level on Settings")
+		}
+		return deviceView{}, errors.New("none of your devices allows jams; an admin sets the jam level on Settings")
 	}
 	if err != nil {
 		return deviceView{}, err

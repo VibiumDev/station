@@ -196,3 +196,18 @@ func TestRecordTitle(t *testing.T) {
 		t.Errorf("nameless: %q", got)
 	}
 }
+
+// The sign-in page asks for a login and a password, and says how the
+// first user comes to be while there is none.
+func TestLoginPageRenders(t *testing.T) {
+	var out strings.Builder
+	if err := pages.ExecuteTemplate(&out, "login", map[string]any{"Next": "/", "Login": "ann@example.com", "NoUsers": true, "Name": "Station", "Named": true}); err != nil {
+		t.Fatal(err)
+	}
+	html := out.String()
+	for _, want := range []string{`name="login" value="ann@example.com"`, `name="password"`, "station passwd", `autocomplete="username"`} {
+		if !strings.Contains(html, want) {
+			t.Errorf("login page lacks %q", want)
+		}
+	}
+}
