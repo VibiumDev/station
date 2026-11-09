@@ -3,6 +3,7 @@ package sqlite
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
@@ -120,4 +121,80 @@ func shas(bs []station.Blob) []string {
 		out = append(out, b.SHA256[:1])
 	}
 	return out
+}
+
+// Tags and the golden mark: set, listed, searched, and gone with the blob.
+func TestBlobTagsAndGolden(t *testing.T) {
+	d := open(t)
+	ctx := context.Background()
+	now := time.Now()
+	a := station.Blob{SHA256: "a" + repeat("0", 63), Size: 10, Type: "application/zip", Name: "record.zip", Uploader: "token:ci", HoldID: "hld_1", DeviceID: "rig_1/phone", RigID: "rig_1", CreatedAt: now.Add(-time.Hour)}
+	b := station.Blob{SHA256: "b" + repeat("0", 63), Size: 20, Type: "image/jpeg", Name: "shot.jpg", Uploader: "rig:rig_1", DeviceID: "rig_1/phone", RigID: "rig_1", CreatedAt: now}
+	for _, x := range []station.Blob{a, b} {
+		if err := d.PutBlob(ctx, x); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := d.SetBlobTags(ctx, a.SHA256, []string{"release-1.2", "flaky", "flaky"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := d.SetBlobTags(ctx, b.SHA256, []string{"flaky"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := d.SetBlobTags(ctx, "d"+repeat("0", 63), []string{"x"}); !errors.Is(err, station.ErrNotFound) {
+		t.Errorf("tags on a missing blob: %v", err)
+	}
+	if err := d.SetBlobGolden(ctx, a.SHA256, true); err != nil {
+		t.Fatal(err)
+	}
+	if err := d.SetBlobGolden(ctx, "d"+repeat("0", 63), true); !errors.Is(err, station.ErrNotFound) {
+		t.Errorf("golden on a missing blob: %v", err)
+	}
+	got, _ := d.Blob(ctx, a.SHA256)
+	if !got.Golden || len(got.Tags) != 2 || got.Tags[0] != "flaky" || got.Tags[1] != "release-1.2" {
+		t.Errorf("blob a: golden %v tags %v", got.Golden, got.Tags)
+	}
+	// Stored again, as a re-upload does, it keeps both.
+	if err := d.PutBlob(ctx, a); err != nil {
+		t.Fatal(err)
+	}
+	if got, _ = d.Blob(ctx, a.SHA256); !got.Golden || len(got.Tags) != 2 {
+		t.Errorf("after a second put: golden %v tags %v", got.Golden, got.Tags)
+	}
+	all, _ := d.Blobs(ctx, station.BlobQuery{})
+	if len(all) != 2 || len(all[0].Tags) != 1 || len(all[1].Tags) != 2 {
+		t.Errorf("listing carries tags: %v %v", all[0].Tags, all[1].Tags)
+	}
+	cases := []struct {
+		q    station.BlobQuery
+		want string
+	}{
+		{station.BlobQuery{Tags: []string{"flaky"}}, "b a"},
+		{station.BlobQuery{Tags: []string{"flaky", "release-1.2"}}, "a"},
+		{station.BlobQuery{Golden: true}, "a"},
+		{station.BlobQuery{Text: "record"}, "a"},
+		{station.BlobQuery{Text: "release"}, "a"},
+		{station.BlobQuery{Text: "rig_1 jpeg"}, "b"},
+		{station.BlobQuery{Text: "100%"}, ""},
+		{station.BlobQuery{Text: "nothing-like-it"}, ""},
+	}
+	for _, c := range cases {
+		got, err := d.Blobs(ctx, c.q)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if s := strings.Join(shas(got), " "); s != c.want {
+			t.Errorf("%+v: got %q, want %q", c.q, s, c.want)
+		}
+	}
+	counts, _ := d.BlobTagCounts(ctx)
+	if len(counts) != 2 || counts[0].Tag != "flaky" || counts[0].N != 2 || counts[1].Tag != "release-1.2" || counts[1].N != 1 {
+		t.Errorf("tag counts: %+v", counts)
+	}
+	if err := d.DeleteBlob(ctx, a.SHA256); err != nil {
+		t.Fatal(err)
+	}
+	if counts, _ = d.BlobTagCounts(ctx); len(counts) != 1 || counts[0].N != 1 {
+		t.Errorf("tags after a delete: %+v", counts)
+	}
 }

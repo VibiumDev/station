@@ -130,6 +130,10 @@ type Descriptor struct {
 	Device   string `json:"device,omitempty"`
 	Public   bool   `json:"public,omitempty"`
 	Event    string `json:"event,omitempty"`
+	// Golden is the station's word for a pinned or bookmarked record;
+	// Tags are the words people filed it under.
+	Golden bool     `json:"golden,omitempty"`
+	Tags   []string `json:"tags,omitempty"`
 	// A recording's contents, once unpacked.
 	Steps      int    `json:"steps,omitempty"`
 	Frames     int    `json:"frames,omitempty"`
@@ -141,7 +145,7 @@ type Descriptor struct {
 func (s *Store) Describe(b station.Blob) Descriptor {
 	d := Descriptor{URL: s.URL(b), SHA256: b.SHA256, Size: b.Size, Type: b.Type, Uploaded: b.CreatedAt.Unix(),
 		Name: b.Name, Uploader: b.Uploader, Hold: b.HoldID, Device: b.DeviceID, Public: b.Public, Event: b.EventID,
-		Steps: b.Steps, Frames: b.Frames, DurationMS: b.Duration.Milliseconds()}
+		Steps: b.Steps, Frames: b.Frames, DurationMS: b.Duration.Milliseconds(), Golden: b.Golden, Tags: b.Tags}
 	if b.Type == "application/zip" && s.UnpackDir != "" {
 		d.Files = strings.TrimSuffix(s.BaseURL, "/") + "/records/" + b.SHA256 + "/files/"
 	}
@@ -704,6 +708,103 @@ func (s *Store) SetPublic(ctx context.Context, p station.Principal, sha string, 
 	}
 	s.audit(ctx, station.AuditEntry{Subject: p.Subject, Action: action, DeviceID: b.DeviceID, HoldID: b.HoldID, Detail: b.Name + " " + sha[:12]})
 	return nil
+}
+
+// own returns the blob when p may change how it is filed: an admin or
+// the uploader.
+func (s *Store) own(ctx context.Context, p station.Principal, sha string) (station.Blob, error) {
+	b, err := s.Index.Blob(ctx, sha)
+	if errors.Is(err, station.ErrNotFound) {
+		return b, refuse(http.StatusNotFound, "no such blob")
+	}
+	if err != nil {
+		return b, err
+	}
+	if !p.Admin && p.Subject != b.Uploader {
+		return b, refuse(http.StatusForbidden, "not yours to file")
+	}
+	return b, nil
+}
+
+// SetGolden marks a blob golden, the station's word for pinned or
+// bookmarked, or plain again; admins and the uploader may.
+func (s *Store) SetGolden(ctx context.Context, p station.Principal, sha string, golden bool) error {
+	b, err := s.own(ctx, p, sha)
+	if err != nil {
+		return err
+	}
+	if err := s.Index.SetBlobGolden(ctx, sha, golden); err != nil {
+		return err
+	}
+	action := "plain"
+	if golden {
+		action = "golden"
+	}
+	s.audit(ctx, station.AuditEntry{Subject: p.Subject, Action: action, DeviceID: b.DeviceID, HoldID: b.HoldID, Detail: b.Name + " " + sha[:12]})
+	return nil
+}
+
+// SetTags files a blob under the tags typed, replacing those it had;
+// admins and the uploader may. It returns the tags as kept.
+func (s *Store) SetTags(ctx context.Context, p station.Principal, sha, typed string) ([]string, error) {
+	tags, err := ParseTags(typed)
+	if err != nil {
+		return nil, err
+	}
+	b, err := s.own(ctx, p, sha)
+	if err != nil {
+		return nil, err
+	}
+	if err := s.Index.SetBlobTags(ctx, sha, tags); err != nil {
+		return nil, err
+	}
+	s.audit(ctx, station.AuditEntry{Subject: p.Subject, Action: "tags", DeviceID: b.DeviceID, HoldID: b.HoldID, Detail: b.Name + " " + sha[:12] + ": " + strings.Join(tags, " ")})
+	return tags, nil
+}
+
+// Tag limits: a tag is a word of letters, digits and . _ -, lowercased,
+// with or without a leading #.
+const (
+	MaxTags   = 20
+	MaxTagLen = 40
+)
+
+// ParseTags reads the tags a person typed, separated by spaces or
+// commas, with or without a leading #, and returns them lowercased,
+// without repeats, in the order typed.
+func ParseTags(typed string) ([]string, error) {
+	var out []string
+	seen := map[string]bool{}
+	for _, word := range strings.FieldsFunc(typed, func(r rune) bool { return r == ' ' || r == ',' || r == '\n' || r == '\t' }) {
+		tag := strings.ToLower(strings.TrimPrefix(word, "#"))
+		if tag == "" {
+			continue
+		}
+		if len(tag) > MaxTagLen || !tagOK(tag) {
+			return nil, refuse(http.StatusBadRequest, "a tag is letters, digits, . _ or -, up to %d characters: %q is not", MaxTagLen, word)
+		}
+		if seen[tag] {
+			continue
+		}
+		seen[tag] = true
+		out = append(out, tag)
+	}
+	if len(out) > MaxTags {
+		return nil, refuse(http.StatusBadRequest, "at most %d tags", MaxTags)
+	}
+	return out, nil
+}
+
+func tagOK(tag string) bool {
+	for i, r := range tag {
+		switch {
+		case r >= 'a' && r <= 'z', r >= '0' && r <= '9':
+		case i > 0 && (r == '.' || r == '_' || r == '-'):
+		default:
+			return false
+		}
+	}
+	return true
 }
 
 // ServeList is GET /list/<pubkey> (BUD-02): the blobs a key uploaded,

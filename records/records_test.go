@@ -423,3 +423,67 @@ func TestReadAuthEdges(t *testing.T) {
 	}
 	_ = io.EOF
 }
+
+func TestParseTags(t *testing.T) {
+	cases := []struct {
+		in   string
+		want string
+		bad  bool
+	}{
+		{"", "", false},
+		{"#Flaky, release-1.2 flaky", "flaky release-1.2", false},
+		{"checkout\tVAR.parts\nhome_screen", "checkout var.parts home_screen", false},
+		{"has space?", "", true},
+		{"-leading", "", true},
+		{"#", "", false},
+		{strings.Repeat("a", 41), "", true},
+	}
+	for _, c := range cases {
+		got, err := ParseTags(c.in)
+		if (err != nil) != c.bad || strings.Join(got, " ") != c.want {
+			t.Errorf("%q: got %v, %v", c.in, got, err)
+		}
+	}
+	var many []string
+	for i := 0; i <= MaxTags; i++ {
+		many = append(many, "t"+strings.Repeat("x", i))
+	}
+	if _, err := ParseTags(strings.Join(many, " ")); err == nil {
+		t.Error("twenty-one tags passed")
+	}
+}
+
+// Golden and tags: the uploader and the owner may file a record, a
+// stranger may not, and the descriptor carries both.
+func TestGoldenAndTags(t *testing.T) {
+	f := setup(t)
+	ctx := context.Background()
+	d, w := f.upload("token:ci", []byte("PK a recording"), "record.zip", "")
+	if w.Code != 200 {
+		t.Fatalf("upload: %d %s", w.Code, w.Body)
+	}
+	if err := f.store.SetGolden(ctx, station.Principal{Subject: "token:other"}, d.SHA256, true); err == nil {
+		t.Fatal("a stranger made it golden")
+	}
+	if _, err := f.store.SetTags(ctx, station.Principal{Subject: "token:other"}, d.SHA256, "flaky"); err == nil {
+		t.Fatal("a stranger tagged it")
+	}
+	if err := f.store.SetGolden(ctx, station.Principal{Subject: "token:ci"}, d.SHA256, true); err != nil {
+		t.Fatal(err)
+	}
+	tags, err := f.store.SetTags(ctx, station.Principal{Subject: "owner", Admin: true}, d.SHA256, "#Flaky release-1.2")
+	if err != nil || strings.Join(tags, " ") != "flaky release-1.2" {
+		t.Fatalf("tags: %v %v", tags, err)
+	}
+	if _, err := f.store.SetTags(ctx, station.Principal{Subject: "owner", Admin: true}, d.SHA256, "bad?tag"); err == nil {
+		t.Fatal("a bad tag passed")
+	}
+	b, _ := f.store.Index.Blob(ctx, d.SHA256)
+	desc := f.store.Describe(b)
+	if !desc.Golden || strings.Join(desc.Tags, " ") != "flaky release-1.2" {
+		t.Errorf("descriptor: %+v", desc)
+	}
+	if err := f.store.SetGolden(ctx, station.Principal{Subject: "owner", Admin: true}, "0000000000000000000000000000000000000000000000000000000000000000", true); err == nil {
+		t.Fatal("golden on nothing")
+	}
+}

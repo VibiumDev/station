@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -98,11 +99,154 @@ func (s *server) downloadAuth(w http.ResponseWriter, r *http.Request, p station.
 	})
 }
 
-// visibleRecords lists the blobs a principal may read, narrowed by
-// device and hold.
-func (s *server) visibleRecords(r *http.Request, p station.Principal, device string) ([]station.Blob, error) {
-	q := station.BlobQuery{DeviceID: device, HoldID: r.FormValue("hold"), Limit: 500}
-	bs, err := s.db.Blobs(r.Context(), q)
+// recordsQuery is what the Records page is asked to show: the device
+// and hold, the words and #tags typed, golden records alone, the view,
+// and which page of how many.
+type recordsQuery struct {
+	Device, Hold string
+	Raw          string   // the search as typed
+	Text         string   // its words that are not tags
+	Tags         []string // its #tags, as filed
+	Golden       bool
+	List         bool
+	Per, Page    int
+}
+
+// perPage is the choice of records per page; defaultPer is the first
+// page's.
+var perPage = []int{10, 25, 50, 100}
+
+const defaultPer = 25
+
+// parseRecordsQuery reads the page's query: q is words and #tags, n one
+// of 10, 25, 50 or 100, page from 1, golden=1 golden records alone,
+// view=list the list.
+func parseRecordsQuery(r *http.Request) recordsQuery {
+	q := recordsQuery{Device: r.FormValue("device"), Hold: r.FormValue("hold"), Raw: strings.TrimSpace(r.FormValue("q")),
+		Golden: r.FormValue("golden") == "1", List: r.FormValue("view") == "list", Per: defaultPer, Page: 1}
+	var words []string
+	for _, w := range strings.Fields(q.Raw) {
+		if strings.HasPrefix(w, "#") && len(w) > 1 {
+			if tags, err := records.ParseTags(w); err == nil && len(tags) == 1 {
+				q.Tags = append(q.Tags, tags[0])
+				continue
+			}
+		}
+		words = append(words, w)
+	}
+	q.Text = strings.Join(words, " ")
+	if n, err := strconv.Atoi(r.FormValue("n")); err == nil {
+		for _, per := range perPage {
+			if n == per {
+				q.Per = n
+			}
+		}
+	}
+	if p, err := strconv.Atoi(r.FormValue("page")); err == nil && p > 1 {
+		q.Page = p
+	}
+	return q
+}
+
+// values is the query as URL parameters, with the changes given as
+// key, value pairs; an empty value drops the key, and any change but
+// the page itself goes back to the first page.
+func (q recordsQuery) values(changes ...string) url.Values {
+	v := url.Values{}
+	set := func(k, val string) {
+		if val == "" || (k == "page" && val == "1") {
+			v.Del(k)
+			return
+		}
+		v.Set(k, val)
+	}
+	set("device", q.Device)
+	set("hold", q.Hold)
+	set("q", q.Raw)
+	if q.List {
+		v.Set("view", "list")
+	}
+	if q.Golden {
+		v.Set("golden", "1")
+	}
+	if q.Per != defaultPer {
+		v.Set("n", strconv.Itoa(q.Per))
+	}
+	set("page", strconv.Itoa(q.Page))
+	paged := false
+	for i := 0; i+1 < len(changes); i += 2 {
+		set(changes[i], changes[i+1])
+		paged = paged || changes[i] == "page"
+	}
+	if len(changes) > 0 && !paged {
+		v.Del("page")
+	}
+	return v
+}
+
+// Link is the Records page with the query changed, for the templates.
+func (q recordsQuery) Link(changes ...string) string {
+	v := q.values(changes...)
+	if len(v) == 0 {
+		return "/records"
+	}
+	return "/records?" + v.Encode()
+}
+
+// field is one hidden form field.
+type field struct{ Name, Value string }
+
+// back is the query as hidden fields, so a form returns to the same
+// page; keep leaves out what the search form sets itself.
+func (q recordsQuery) back(keep bool) []field {
+	var out []field
+	v := q.values()
+	for _, k := range []string{"device", "hold", "view", "golden", "q", "n", "page"} {
+		if keep && (k == "q" || k == "n" || k == "page") {
+			continue
+		}
+		if val := v.Get(k); val != "" {
+			out = append(out, field{k, val})
+		}
+	}
+	return out
+}
+
+// withTag is the search with a tag added, or taken out when it is there.
+func (q recordsQuery) withTag(tag string) string {
+	var words []string
+	found := false
+	for _, w := range strings.Fields(q.Raw) {
+		if strings.EqualFold(w, "#"+tag) {
+			found = true
+			continue
+		}
+		words = append(words, w)
+	}
+	if !found {
+		words = append(words, "#"+tag)
+	}
+	return strings.Join(words, " ")
+}
+
+// paging places a page in a list of found records: the page as clamped,
+// how many pages there are, and the slice bounds.
+func paging(found, per, page int) (p, pages, from, to int) {
+	pages = (found + per - 1) / per
+	if pages < 1 {
+		pages = 1
+	}
+	p = min(max(page, 1), pages)
+	from = (p - 1) * per
+	to = min(from+per, found)
+	return p, pages, from, to
+}
+
+// visibleRecords lists the blobs a principal may read, as the query
+// narrows them.
+func (s *server) visibleRecords(r *http.Request, p station.Principal, q recordsQuery) ([]station.Blob, error) {
+	bq := station.BlobQuery{DeviceID: q.Device, HoldID: q.Hold, Text: q.Text, Tags: q.Tags, Golden: q.Golden, Limit: 5000}
+	bs, err := s.db.Blobs(r.Context(), bq)
 	if err != nil {
 		return nil, err
 	}
@@ -115,14 +259,20 @@ func (s *server) visibleRecords(r *http.Request, p station.Principal, device str
 	return out, nil
 }
 
-// listRecords is GET /v1/records (?device=, ?hold=) and
-// GET /v1/devices/{rig}/{name}/recordings: the blobs the caller may read.
+// listRecords is GET /v1/records (?device=, ?hold=, ?q=, ?tag=,
+// ?golden=1) and GET /v1/devices/{rig}/{name}/recordings: the blobs the
+// caller may read.
 func (s *server) listRecords(w http.ResponseWriter, r *http.Request, p station.Principal) {
-	device := r.FormValue("device")
+	q := parseRecordsQuery(r)
 	if r.PathValue("rig") != "" {
-		device = deviceID(r)
+		q.Device = deviceID(r)
 	}
-	bs, err := s.visibleRecords(r, p, device)
+	for _, t := range r.Form["tag"] {
+		if tags, err := records.ParseTags(t); err == nil {
+			q.Tags = append(q.Tags, tags...)
+		}
+	}
+	bs, err := s.visibleRecords(r, p, q)
 	if err != nil {
 		apiError(w, http.StatusInternalServerError, err.Error())
 		return
@@ -132,6 +282,53 @@ func (s *server) listRecords(w http.ResponseWriter, r *http.Request, p station.P
 		out = append(out, s.records.Describe(b))
 	}
 	apiJSON(w, out)
+}
+
+// setRecordGolden is POST /v1/records/{sha}/golden: {"golden": true}
+// marks the record golden, false plain again.
+func (s *server) setRecordGolden(w http.ResponseWriter, r *http.Request, p station.Principal) {
+	var body struct {
+		Golden bool `json:"golden"`
+	}
+	if err := json.NewDecoder(io.LimitReader(r.Body, 4096)).Decode(&body); err != nil {
+		apiError(w, http.StatusBadRequest, "a JSON body with golden is needed")
+		return
+	}
+	sha := r.PathValue("sha")
+	if err := s.records.SetGolden(r.Context(), p, sha, body.Golden); err != nil {
+		recordsError(w, err)
+		return
+	}
+	b, _ := s.db.Blob(r.Context(), sha)
+	apiJSON(w, s.records.Describe(b))
+}
+
+// setRecordTags is PUT /v1/records/{sha}/tags: {"tags": ["flaky",
+// "release-1.2"]}, or the tags as one string of words, replaces the
+// record's tags.
+func (s *server) setRecordTags(w http.ResponseWriter, r *http.Request, p station.Principal) {
+	var body struct {
+		Tags json.RawMessage `json:"tags"`
+	}
+	if err := json.NewDecoder(io.LimitReader(r.Body, 8192)).Decode(&body); err != nil {
+		apiError(w, http.StatusBadRequest, "a JSON body with tags is needed")
+		return
+	}
+	var typed string
+	var list []string
+	if json.Unmarshal(body.Tags, &list) == nil {
+		typed = strings.Join(list, " ")
+	} else if json.Unmarshal(body.Tags, &typed) != nil {
+		apiError(w, http.StatusBadRequest, "tags is a list of words, or one string of them")
+		return
+	}
+	sha := r.PathValue("sha")
+	if _, err := s.records.SetTags(r.Context(), p, sha, typed); err != nil {
+		recordsError(w, err)
+		return
+	}
+	b, _ := s.db.Blob(r.Context(), sha)
+	apiJSON(w, s.records.Describe(b))
 }
 
 // recordView is a blob as the Records page shows it.
@@ -150,6 +347,23 @@ type recordView struct {
 	HasThumb bool
 	// Meta is what a recording holds, such as "17 steps · 18 s".
 	Meta string
+	// TagLinks are the record's tags, each a link that searches for it.
+	TagLinks []chip
+}
+
+// chip is a tag as the page shows it: a link that adds it to the
+// search, or takes it out when it is on, with how many records carry it.
+type chip struct {
+	Tag string
+	N   int
+	URL string
+	On  bool
+}
+
+// perChoice is one of the page sizes on offer.
+type perChoice struct {
+	N  int
+	On bool
 }
 
 // recordingMeta words a recording's steps and length.
@@ -193,8 +407,8 @@ func humanSize(n int64) string {
 }
 
 func (s *server) recordsData(r *http.Request, p station.Principal, extra map[string]any) (map[string]any, error) {
-	device := r.FormValue("device")
-	bs, err := s.visibleRecords(r, p, device)
+	q := parseRecordsQuery(r)
+	bs, err := s.visibleRecords(r, p, q)
 	if err != nil {
 		return nil, err
 	}
@@ -208,17 +422,69 @@ func (s *server) recordsData(r *http.Request, p station.Principal, extra map[str
 			}
 		}
 	}
-	views := make([]recordView, 0, len(bs))
+	// The tags in use among what matched, most used first, as chips
+	// that narrow the search further or let a tag go.
+	counts := map[string]int{}
 	for _, b := range bs {
-		views = append(views, recordView{Blob: b, URL: s.records.URL(b), Play: playURL(b), When: b.CreatedAt.Local().Format("Jan 2 15:04"), Size: humanSize(b.Size),
+		for _, t := range b.Tags {
+			counts[t]++
+		}
+	}
+	var chips []chip
+	for t, n := range counts {
+		chips = append(chips, chip{Tag: t, N: n, URL: q.Link("q", q.withTag(t)), On: slices.Contains(q.Tags, t)})
+	}
+	slices.SortFunc(chips, func(a, b chip) int {
+		if a.On != b.On {
+			if a.On {
+				return -1
+			}
+			return 1
+		}
+		if a.N != b.N {
+			return b.N - a.N
+		}
+		return strings.Compare(a.Tag, b.Tag)
+	})
+	if len(chips) > 16 {
+		chips = chips[:16]
+	}
+	found := len(bs)
+	pageNo, pages, from, to := paging(found, q.Per, q.Page)
+	q.Page = pageNo
+	views := make([]recordView, 0, to-from)
+	for _, b := range bs[from:to] {
+		v := recordView{Blob: b, URL: s.records.URL(b), Play: playURL(b), When: b.CreatedAt.Local().Format("Jan 2 15:04"), Size: humanSize(b.Size),
 			Device: b.DeviceID, Label: labels[b.DeviceID], CanEdit: p.Admin || p.Subject == b.Uploader, CanPlay: viewer.HasPlayer() && (b.Type == "application/zip"),
-			HasThumb: b.Type == "application/zip" || strings.HasPrefix(b.Type, "image/"), Meta: recordingMeta(b)})
+			HasThumb: b.Type == "application/zip" || strings.HasPrefix(b.Type, "image/"), Meta: recordingMeta(b)}
+		for _, t := range b.Tags {
+			v.TagLinks = append(v.TagLinks, chip{Tag: t, URL: q.Link("q", q.withTag(t)), On: slices.Contains(q.Tags, t)})
+		}
+		views = append(views, v)
+	}
+	var pers []perChoice
+	for _, n := range perPage {
+		pers = append(pers, perChoice{N: n, On: n == q.Per})
+	}
+	golden := "1"
+	if q.Golden {
+		golden = ""
 	}
 	count, size, _ := s.db.BlobTotal(r.Context())
 	data := map[string]any{
-		"Page": "records", "Principal": p, "CSRF": s.auth.csrfToken(r), "Records": views, "Device": device, "Grid": r.FormValue("view") != "list", "Hold": r.FormValue("hold"),
-		"DeviceLabel": labels[device], "Count": count, "Total": humanSize(size),
+		"Page": "records", "Principal": p, "CSRF": s.auth.csrfToken(r), "Records": views, "Device": q.Device, "Grid": !q.List, "Hold": q.Hold,
+		"DeviceLabel": labels[q.Device], "Count": count, "Total": humanSize(size),
 		"MaxFile": humanSize(s.records.MaxFile), "MaxTotal": humanSize(s.records.MaxTotal), "MaxAge": humanAge(s.records.MaxAge),
+		"Q": q, "Query": q.Raw, "GoldenOnly": q.Golden, "Filtered": q.Raw != "" || q.Golden,
+		"GridURL": q.Link("view", ""), "ListURL": q.Link("view", "list"), "GoldenURL": q.Link("golden", golden), "ClearURL": q.Link("q", "", "golden", ""), "AllURL": q.Link("device", "", "hold", ""),
+		"Keep": q.back(true), "Back": q.back(false), "Chips": chips, "Pers": pers,
+		"Found": found, "From": from + 1, "To": to, "PageNo": pageNo, "Pages": pages,
+	}
+	if pageNo > 1 {
+		data["PrevURL"] = q.Link("page", strconv.Itoa(pageNo-1))
+	}
+	if pageNo < pages {
+		data["NextURL"] = q.Link("page", strconv.Itoa(pageNo+1))
 	}
 	for k, v := range extra {
 		data[k] = v
@@ -244,9 +510,15 @@ func (s *server) playPage(w http.ResponseWriter, r *http.Request, p station.Prin
 	if name == "" {
 		name = sha[:12]
 	}
+	var tagLinks []chip
+	for _, t := range b.Tags {
+		tagLinks = append(tagLinks, chip{Tag: t, URL: "/records?q=" + url.QueryEscape("#"+t)})
+	}
 	data := map[string]any{"Page": "records", "Principal": p, "CSRF": s.auth.csrfToken(r), "Title": name,
 		"Player": playURL(b), "Full": "/records/" + sha + "/play?full", "Download": s.records.URL(b) + "?download", "Device": b.DeviceID, "Hold": b.HoldID, "Uploader": b.Uploader,
-		"When": b.CreatedAt.Local().Format("Jan 2, 2006 15:04"), "Size": humanSize(b.Size)}
+		"When": b.CreatedAt.Local().Format("Jan 2, 2006 15:04"), "Size": humanSize(b.Size),
+		"SHA": sha, "Golden": b.Golden, "Tags": strings.Join(b.Tags, " "), "TagLinks": tagLinks, "CanEdit": p.Admin || p.Subject == b.Uploader,
+		"Return": "/records/" + sha + "/play", "Message": r.URL.Query().Get("msg")}
 	// ?full is the same frame filling the window, without the bar.
 	if r.URL.Query().Has("full") {
 		s.render(w, "playfull", data)
@@ -272,10 +544,16 @@ func (s *server) recordsPage(w http.ResponseWriter, r *http.Request, p station.P
 	s.render(w, "records", data)
 }
 
-// backToRecords returns to the Records page the form came from.
+// backToRecords returns to the Records page the form came from, with
+// its search, view and page, or to the record's own page when the form
+// says so.
 func backToRecords(w http.ResponseWriter, r *http.Request) {
+	if ret := r.FormValue("return"); strings.HasPrefix(ret, "/records/") && !strings.Contains(ret, "//") {
+		http.Redirect(w, r, ret, http.StatusSeeOther)
+		return
+	}
 	q := url.Values{}
-	for _, k := range []string{"device", "view", "hold"} {
+	for _, k := range []string{"device", "view", "hold", "q", "n", "page", "golden"} {
 		if v := r.FormValue(k); v != "" {
 			q.Set(k, v)
 		}
@@ -283,6 +561,27 @@ func backToRecords(w http.ResponseWriter, r *http.Request) {
 	to := "/records"
 	if len(q) > 0 {
 		to += "?" + q.Encode()
+	}
+	http.Redirect(w, r, to, http.StatusSeeOther)
+}
+
+// recordGolden is POST /records/golden: sha256 and golden=1|0.
+func (s *server) recordGolden(w http.ResponseWriter, r *http.Request, p station.Principal) {
+	if err := s.records.SetGolden(r.Context(), p, r.FormValue("sha256"), r.FormValue("golden") == "1"); err != nil {
+		recordsError(w, err)
+		return
+	}
+	backToRecords(w, r)
+}
+
+// recordTags is POST /records/tags from a record's Play page: sha256
+// and the tags as typed.
+func (s *server) recordTags(w http.ResponseWriter, r *http.Request, p station.Principal) {
+	sha := r.FormValue("sha256")
+	to := "/records/" + url.PathEscape(sha) + "/play"
+	if _, err := s.records.SetTags(r.Context(), p, sha, r.FormValue("tags")); err != nil {
+		http.Redirect(w, r, to+"?msg="+urlQuery(err.Error()), http.StatusSeeOther)
+		return
 	}
 	http.Redirect(w, r, to, http.StatusSeeOther)
 }

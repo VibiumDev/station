@@ -129,11 +129,18 @@ CREATE TABLE IF NOT EXISTS blobs (
 	steps      INTEGER NOT NULL DEFAULT 0,
 	frames     INTEGER NOT NULL DEFAULT 0,
 	duration_ms INTEGER NOT NULL DEFAULT 0,
-	thumb      TEXT NOT NULL DEFAULT ''
+	thumb      TEXT NOT NULL DEFAULT '',
+	golden     INTEGER NOT NULL DEFAULT 0
 );
 CREATE INDEX IF NOT EXISTS blobs_device ON blobs(device_id, created_at);
 CREATE INDEX IF NOT EXISTS blobs_hold ON blobs(hold_id);
 CREATE INDEX IF NOT EXISTS blobs_age ON blobs(created_at);
+CREATE TABLE IF NOT EXISTS blob_tags (
+	sha256 TEXT NOT NULL,
+	tag    TEXT NOT NULL,
+	PRIMARY KEY (sha256, tag)
+);
+CREATE INDEX IF NOT EXISTS blob_tags_tag ON blob_tags(tag);
 CREATE TABLE IF NOT EXISTS jams (
 	id         TEXT PRIMARY KEY,
 	subject    TEXT NOT NULL,
@@ -214,6 +221,7 @@ func (d *DB) migrate() error {
 		{"blobs", "frames", "INTEGER NOT NULL DEFAULT 0"},
 		{"blobs", "duration_ms", "INTEGER NOT NULL DEFAULT 0"},
 		{"blobs", "thumb", "TEXT NOT NULL DEFAULT ''"},
+		{"blobs", "golden", "INTEGER NOT NULL DEFAULT 0"},
 		{"api_tokens", "device", "TEXT NOT NULL DEFAULT ''"},
 		{"api_tokens", "expires_at", "INTEGER NOT NULL DEFAULT 0"},
 	} {

@@ -224,8 +224,19 @@ bearer, travels in a header and never in a URL. `?download` adds a
 `Content-Disposition` with the file's name.
 
 `GET /v1/records` lists what the caller may read, newest first, narrowed
-by `?device=<rig>/<name>` or `?hold=<id>`, and
-`GET /v1/devices/{rig}/{name}/recordings` is the same for one device.
+by `?device=<rig>/<name>`, `?hold=<id>`, `?q=<words and #tags>` (every
+word against the name, type, uploader, hold, device, rig, hash and
+tags; a `#tag` keeps records so tagged), `?tag=<tag>` (repeatable) or
+`?golden=1`, and `GET /v1/devices/{rig}/{name}/recordings` is the same
+for one device. Each entry carries `golden` and `tags` when set.
+`POST /v1/records/{sha256}/golden` with `{"golden": true}` marks a
+record golden, the station's word for pinned or bookmarked, or plain
+again with `false`, and `PUT /v1/records/{sha256}/tags` with `{"tags":
+["flaky", "release-1.2"]}`, or the tags as one string of words, files
+it under those tags in place of the ones it had; both for the owner or
+the uploader, and both answer with the record's entry. A tag is
+letters, digits and `.`, `_` or `-`, lowercased, up to 40 characters
+and twenty per record; a leading `#` is dropped.
 `GET /list/<pubkey hex>` is Blossom's listing of what a key uploaded, for
 the owner or for a `t=list` event signed by that key.
 
@@ -321,10 +332,10 @@ relay-only fails by design, since TURN refuses private peers.
 | `/jams/{id}` | One jam: its transcript as it happens, the viewer watching the device beside it while it runs, a box for a follow-up prompt, Stop, and Play for the host's recording of its hold when it ends |
 | `/devices` | The devices: rig, kind, online, who controls it, Open, Records |
 | `/devices/{rig}/{name}/view` | The viewer: Roadie's shell with the WebRTC picture, sound, touch and keyboard, the mic, the settings panel, the on-screen keyboard, stats, the device's own buttons and panels from its extras, and Hold and Release. One link for driving and watching: a free device is taken, a held one is watched, and Hold takes it; Release ends the hold and returns to the device list. `?watch=1` watches only; on a touchscreen two fingers moving together turn the wheel and a pinch becomes Apple Maps' one-finger zoom on a device whose pointer stands in for touch (see Roadie's `/view`); `?minimal=1`, `?input=`, `?transport=`, `?ice=relay`, `?toolbar=`, `?align=`, `?zoom=` (a percentage, or `fit` for the room the picture has, the default on a phone or tablet) and `?stats=1` as on a Roadie |
-| `/records` | The Record Store: every recording, screenshot and log the caller may read, newest first, or one device's with `?device=`, as cards showing each recording's last frame, or with `?view=list` as a list; Play, Download, make a file public or private, Delete |
+| `/records` | The Record Store: every recording, screenshot and log the caller may read, newest first, or one device's with `?device=`, as cards showing each recording's last frame, or with `?view=list` as a list with a tiny thumbnail that opens the record; searched with `?q=` (words and `#tags`), `?golden=1` for golden records alone, in pages of `?n=` 10, 25, 50 or 100 (`?page=`); the tags in use as chips; Play, Download, a star that makes a record golden or plain, make a file public or private, Delete |
 | `/records/{sha256}/thumb.jpg` | A recording's last frame, from its unpacked copy, or a screenshot itself; the same readers as the file |
 | `/records/{sha256}/files/{path}` | One file out of a recording's unpacked copy, such as `trace.trace` or `resources/<frame>`; the same readers as the file |
-| `/records/{sha256}/play` | A recording in the embedded [Record Player](https://github.com/VibiumDev/record-player), framed under the station's own bar with Download and a full-page link; the player is served by the station at `/viewer/player/app/?record=<sha256>.zip` and fetches the file with the browser's own session. In the frame it runs with `chrome=hidden`, without its own logo, title and theme switch, and paints with the station's colors and theme, which it reads from the framing page; `?full` is the same frame filling the window, without the bar |
+| `/records/{sha256}/play` | A recording in the embedded [Record Player](https://github.com/VibiumDev/record-player), framed under the station's own bar with the golden star, the record's tags to edit, Download and a full-page link; the player is served by the station at `/viewer/player/app/?record=<sha256>.zip` and fetches the file with the browser's own session. In the frame it runs with `chrome=hidden`, without its own logo, title and theme switch, and paints with the station's colors and theme, which it reads from the framing page; `?full` is the same frame filling the window, without the bar |
 | `/settings` | The AI models and the Jams switch, enrollment codes, rigs, API tokens, the password, the network, the Record Store's room and limits |
 
 The viewer's files are at `/viewer/shell.js`, `/viewer/shell.css`,

@@ -53,6 +53,14 @@
         q.setAttribute('aria-expanded', open ? 'true' : 'false');
       });
     });
+    // A select that files its form as soon as it changes, such as how
+    // many records a page shows.
+    Array.prototype.forEach.call(document.querySelectorAll('select[data-submit]'), function (sel) {
+      sel.addEventListener('change', function () {
+        if (!sel.form) return;
+        if (sel.form.requestSubmit) sel.form.requestSubmit(); else sel.form.submit();
+      });
+    });
     // The Records grid: a slider sets the card size, kept per browser.
     var size = document.getElementById('cardSize');
     var cards = document.querySelector('.cards');

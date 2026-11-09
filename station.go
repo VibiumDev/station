@@ -327,6 +327,16 @@ type Blob struct {
 	Frames   int
 	Duration time.Duration
 	Thumb    string
+	// Golden marks a record worth keeping in view, the station's word
+	// for a pin or a bookmark; Tags are the words people filed it under.
+	Golden bool
+	Tags   []string
+}
+
+// TagCount is a tag in use and how many blobs carry it.
+type TagCount struct {
+	Tag string
+	N   int
 }
 
 // BlobQuery narrows a listing of blobs; the zero value lists them all,
@@ -338,6 +348,12 @@ type BlobQuery struct {
 	Before      time.Time // only blobs stored before this time
 	OldestFirst bool
 	Limit       int
+	// Text keeps the blobs whose name, type, uploader, hold, device,
+	// rig, hash or tags contain every word of it; Tags those carrying
+	// every tag named; Golden the golden ones.
+	Text   string
+	Tags   []string
+	Golden bool
 }
 
 // BlobIndex is the Record Store's index of what the blob store holds.
@@ -347,6 +363,11 @@ type BlobIndex interface {
 	Blobs(ctx context.Context, q BlobQuery) ([]Blob, error)
 	DeleteBlob(ctx context.Context, sha256 string) error
 	SetBlobPublic(ctx context.Context, sha256 string, public bool) error
+	SetBlobGolden(ctx context.Context, sha256 string, golden bool) error
+	// SetBlobTags replaces a blob's tags.
+	SetBlobTags(ctx context.Context, sha256 string, tags []string) error
+	// BlobTagCounts lists the tags in use, most used first.
+	BlobTagCounts(ctx context.Context) ([]TagCount, error)
 	// BlobTotal is how many blobs the index holds and their size in bytes.
 	BlobTotal(ctx context.Context) (count int, size int64, err error)
 }
