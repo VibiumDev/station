@@ -67,7 +67,8 @@ device-neutral from the start.
   password sign-in (TOTP from an authenticator app, backup codes kept
   hashed; `docs/specs/second-factor.md`), new users through single-use
   setup links rather than passwords anyone else chose, login throttled
-  by address and by login with lockout, cookies `HttpOnly` `Secure`
+  by address with lockout and by login with a growing wait that a
+  browser's device cookie from an earlier sign-in bypasses, cookies `HttpOnly` `Secure`
   `SameSite=Lax`, CSRF tokens on state-changing requests, a strict
   Content Security Policy.
 - Named API tokens stored hashed, optionally read-only. Tokens travel only

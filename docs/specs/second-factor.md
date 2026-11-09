@@ -44,10 +44,31 @@ factor: Tailscale and the token's own entropy do that work.
 
 A password has at least 12 characters, does not contain the login or
 the part of it before the `@`, and is not a common word dressed up with
-digits. Beside the lockout by address, five failures against one login
-within 15 minutes lock that login for the rest of the quarter hour,
-whatever the address, so a guesser moving between addresses is slowed
-all the same. Changing one's own password asks for the current one.
+digits. Changing one's own password asks for the current one.
+
+## Slowing a guesser down
+
+Three brakes, as NIST 800-63B and OWASP suggest, none of them a hard
+lock on the account:
+
+- **By address**, five misses in 15 minutes lock that address out for
+  the rest of the window, as before.
+- **By login**, each miss after the first two lengthens the wait before
+  the next try at that login is looked at: a second, then two, four,
+  doubling up to 15 minutes, whatever address the tries come from.
+  Misses are forgotten by a successful sign-in or after a quiet quarter
+  hour. A guesser moving between addresses gets a couple of dozen
+  tries an hour; a person who mistypes twice feels nothing.
+- **Device cookies.** A browser that signs all the way in gets a
+  signed cookie naming its user, good for a year. Tries carrying that
+  cookie skip the login's wait and are measured by the cookie instead,
+  five misses locking it like an address. So a stranger guessing at a
+  login never holds its owner up on their own browser, and a stolen
+  browser gets no more tries than a stranger. The cookie vouches for
+  nothing else: it is not a session and signs nobody in.
+
+Wrong passwords and wrong codes count alike. Every wrong answer waits
+half a second before it is refused.
 
 ## Admins
 

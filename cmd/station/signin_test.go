@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"regexp"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -245,8 +246,8 @@ func TestSetupLinkToSignedIn(t *testing.T) {
 	}
 }
 
-// Five wrong codes end the attempt, and the login is throttled with the
-// address.
+// Five wrong codes end the attempt, the address is locked, and the
+// login waits.
 func TestWrongCodesEndTheAttempt(t *testing.T) {
 	s, _ := signinServer(t)
 	a, ctx := s.auth, context.Background()
@@ -258,6 +259,13 @@ func TestWrongCodesEndTheAttempt(t *testing.T) {
 		t.Fatalf("login: %v %v", st, ok)
 	}
 	for i := 0; i < maxFailures; i++ {
+		// As if the login's wait had passed: a try during it is refused
+		// unseen and counts for nothing.
+		a.mu.Lock()
+		if m := a.logins["owner"]; m != nil {
+			m.last = m.last.Add(-backoff(m.n))
+		}
+		a.mu.Unlock()
 		r := cookies(lw, httptest.NewRequest("POST", "/login/code", nil))
 		if ok, _, _ := a.code(httptest.NewRecorder(), r, "000000"); ok {
 			t.Fatal("a wrong code passed")
@@ -269,14 +277,123 @@ func TestWrongCodesEndTheAttempt(t *testing.T) {
 	if _, ok := a.login(httptest.NewRecorder(), httptest.NewRequest("POST", "/login", nil), "owner", "owner-secret-123", "/"); ok {
 		t.Error("the right password signed in while throttled")
 	}
-	// Another address is throttled too, by the login.
+	// Another address waits too, by the login: five misses mean four
+	// seconds.
 	r := httptest.NewRequest("POST", "/login", nil)
 	r.RemoteAddr = "198.51.100.7:4000"
 	if _, ok := a.login(httptest.NewRecorder(), r, "owner", "owner-secret-123", "/"); ok {
-		t.Error("the login was not throttled across addresses")
+		t.Error("the login was not slowed across addresses")
 	}
-	if a.throttled("login:nobody") {
-		t.Error("an untouched login is throttled")
+	if w := a.loginWait("owner"); w <= 3*time.Second || w > 4*time.Second {
+		t.Errorf("the login's wait is %v, want about 4 s", w)
+	}
+	if a.loginWait("nobody") != 0 {
+		t.Error("an untouched login waits")
+	}
+}
+
+// A login's wait doubles with each miss after the first two and is
+// forgotten after a quiet lockout; a browser with the user's device
+// cookie from an earlier sign-in is never held up by it, and is measured
+// by its own cookie instead.
+func TestLoginBackoffAndDeviceCookie(t *testing.T) {
+	for _, c := range []struct {
+		n    int
+		want time.Duration
+	}{{0, 0}, {1, 0}, {2, 0}, {3, time.Second}, {4, 2 * time.Second}, {6, 8 * time.Second}, {12, 512 * time.Second}, {13, lockout}, {40, lockout}} {
+		if got := backoff(c.n); got != c.want {
+			t.Errorf("backoff(%d) = %v, want %v", c.n, got, c.want)
+		}
+	}
+	s, _ := signinServer(t)
+	a, ctx := s.auth, context.Background()
+	owner, _ := s.db.UserByLogin(ctx, station.OwnerLogin)
+	secret := newTOTPSecret()
+	s.db.SetSecondFactor(ctx, owner.ID, secret, time.Now())
+	addr := 0
+	from := func(method, target string) *http.Request {
+		addr++
+		r := httptest.NewRequest(method, target, nil)
+		r.RemoteAddr = "203.0.113." + strconv.Itoa(addr) + ":5000"
+		return r
+	}
+	// A full sign-in marks the browser as the owner's device.
+	lw := httptest.NewRecorder()
+	if _, ok := a.login(lw, from("POST", "/login"), "owner", "owner-secret-123", "/"); !ok {
+		t.Fatal("login")
+	}
+	code, _ := totpCode(secret, totpStep(time.Now()))
+	cw := httptest.NewRecorder()
+	if ok, _, _ := a.code(cw, cookies(lw, from("POST", "/login/code")), code); !ok {
+		t.Fatal("code")
+	}
+	var device *http.Cookie
+	for _, c := range cw.Result().Cookies() {
+		if c.Name == deviceCookie {
+			device = c
+		}
+	}
+	if device == nil || !device.HttpOnly || device.MaxAge != int(deviceLife/time.Second) {
+		t.Fatalf("device cookie: %+v", device)
+	}
+	if nonce, ok := a.deviceOf(cookies(cw, from("GET", "/")), owner.ID); !ok || nonce == "" {
+		t.Error("the device cookie is not the owner's")
+	}
+	if _, ok := a.deviceOf(cookies(cw, from("GET", "/")), "usr_other"); ok {
+		t.Error("the device cookie vouched for another user")
+	}
+	forged := httptest.NewRequest("GET", "/", nil)
+	forged.AddCookie(&http.Cookie{Name: deviceCookie, Value: owner.ID + ".nonce.0000"})
+	if _, ok := a.deviceOf(forged, owner.ID); ok {
+		t.Error("a forged device cookie passed")
+	}
+	// Three misses from three addresses: the login now waits a second,
+	// and the right password from a fourth address is refused unseen.
+	for i := 0; i < 3; i++ {
+		if _, ok := a.login(httptest.NewRecorder(), from("POST", "/login"), "Owner", "wrong", "/"); ok {
+			t.Fatal("a wrong password passed")
+		}
+	}
+	if w := a.loginWait("owner"); w <= 0 || w > time.Second {
+		t.Fatalf("wait after three misses: %v", w)
+	}
+	if _, ok := a.login(httptest.NewRecorder(), from("POST", "/login"), "owner", "owner-secret-123", "/"); ok {
+		t.Error("the right password passed during the wait")
+	}
+	// The owner's own browser is not held up, and its sign-in forgets
+	// the misses.
+	r := from("POST", "/login")
+	r.AddCookie(device)
+	if st, ok := a.login(httptest.NewRecorder(), r, "owner", "owner-secret-123", "/"); !ok || st != stageCode {
+		t.Errorf("the device cookie did not vouch: %v %v", st, ok)
+	}
+	if a.loginWait("owner") != 0 {
+		t.Error("a sign-in did not clear the login's misses")
+	}
+	// The device cookie is measured on its own: five misses with it from
+	// five addresses lock that cookie, not the login.
+	for i := 0; i < maxFailures; i++ {
+		r := from("POST", "/login")
+		r.AddCookie(device)
+		a.login(httptest.NewRecorder(), r, "owner", "wrong", "/")
+	}
+	r = from("POST", "/login")
+	r.AddCookie(device)
+	if _, ok := a.login(httptest.NewRecorder(), r, "owner", "owner-secret-123", "/"); ok {
+		t.Error("a locked device cookie still signed in")
+	}
+	if a.loginWait("owner") != 0 {
+		t.Error("misses with a device cookie counted against the login")
+	}
+	// Misses are forgotten after a quiet lockout.
+	a.loginMiss("ann@example.com")
+	a.loginMiss("ann@example.com")
+	a.loginMiss("ann@example.com")
+	a.mu.Lock()
+	a.logins["ann@example.com"].last = time.Now().Add(-lockout - time.Second)
+	a.mu.Unlock()
+	if a.loginWait("ann@example.com") != 0 || a.logins["ann@example.com"] != nil {
+		t.Error("old misses were kept")
 	}
 }
 

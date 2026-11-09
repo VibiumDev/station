@@ -2,7 +2,9 @@ package main
 
 import (
 	"context"
+	"crypto/hmac"
 	"crypto/rand"
+	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
 	"log"
@@ -25,6 +27,14 @@ const (
 	setupLife   = 30 * time.Minute
 	maxFailures = 5
 	lockout     = 15 * time.Minute
+	// A login's wait grows with each miss after the first two, doubling
+	// from a second up to the lockout; misses are forgotten after a
+	// quiet lockout's worth of time.
+	backoffAfter = 2
+	// deviceCookie marks a browser that has signed in as a user before,
+	// so a stranger guessing at that login cannot hold the user up.
+	deviceCookie = "station_device"
+	deviceLife   = 365 * 24 * time.Hour
 )
 
 // A session's stage: the password passed and a code from the
@@ -66,11 +76,25 @@ type auth struct {
 	// twice that when throttled; tests set it to zero.
 	delay time.Duration
 
+	// deviceKey signs the device cookies; the station's own key derives
+	// it, so they outlive restarts.
+	deviceKey []byte
+
 	mu       sync.Mutex
 	sessions map[string]*session
-	// failures are the recent wrong passwords and codes, by address and
-	// by login, so a guesser moving between addresses is slowed too.
+	// failures are the recent wrong passwords and codes by address, and
+	// by device cookie for a browser that has one: five in the lockout
+	// window lock the key hard.
 	failures map[string][]time.Time
+	// logins are the recent misses by login: each one lengthens the wait
+	// before the next try is looked at, so a guesser moving between
+	// addresses is slowed all the same, without locking the login shut.
+	logins map[string]*misses
+}
+
+type misses struct {
+	n    int
+	last time.Time
 }
 
 type session struct {
@@ -84,7 +108,10 @@ type session struct {
 }
 
 func newAuth(cfg *Config, db *sqlite.DB, who identity, tls, proxied bool) *auth {
-	return &auth{cfg: cfg, db: db, who: who, tls: tls, proxied: proxied, delay: 500 * time.Millisecond, sessions: map[string]*session{}, failures: map[string][]time.Time{}}
+	var key [32]byte
+	rand.Read(key[:])
+	return &auth{cfg: cfg, db: db, who: who, tls: tls, proxied: proxied, delay: 500 * time.Millisecond, deviceKey: key[:],
+		sessions: map[string]*session{}, failures: map[string][]time.Time{}, logins: map[string]*misses{}}
 }
 
 // clientIP is the address login failures are counted by: behind a proxy,
@@ -358,8 +385,16 @@ func (a *auth) csrfToken(r *http.Request) string {
 	return ""
 }
 
-// throttled says whether any of the keys, an address or a login, has
-// failed too often lately; stale failures are forgotten on the way.
+// withDeviceKey derives the device cookies' key from the station's own
+// secret, so the cookies outlive a restart.
+func (a *auth) withDeviceKey(secret []byte) *auth {
+	sum := sha256.Sum256(append([]byte("station device cookie\x00"), secret...))
+	a.deviceKey = sum[:]
+	return a
+}
+
+// throttled says whether any of the keys has failed too often lately;
+// stale failures are forgotten on the way.
 func (a *auth) throttled(keys ...string) bool {
 	a.mu.Lock()
 	defer a.mu.Unlock()
@@ -401,27 +436,133 @@ func (a *auth) clear(keys ...string) {
 	}
 }
 
-// keys are what a sign-in attempt counts against: the address and the login.
-func (a *auth) keys(r *http.Request, login string) []string {
-	return []string{"addr:" + a.clientIP(r), "login:" + strings.ToLower(strings.TrimSpace(login))}
+// backoff is how long a login waits after its nth miss: nothing for the
+// first two, then a second, doubling, up to the lockout.
+func backoff(n int) time.Duration {
+	if n <= backoffAfter {
+		return 0
+	}
+	d := time.Second << uint(n-backoffAfter-1)
+	if d > lockout || d <= 0 {
+		return lockout
+	}
+	return d
+}
+
+// loginWait is how much longer a login must wait before its next try is
+// looked at; misses older than the lockout are forgotten.
+func (a *auth) loginWait(login string) time.Duration {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	m := a.logins[login]
+	if m == nil {
+		return 0
+	}
+	now := time.Now()
+	if now.Sub(m.last) > lockout {
+		delete(a.logins, login)
+		return 0
+	}
+	if until := m.last.Add(backoff(m.n)); now.Before(until) {
+		return until.Sub(now)
+	}
+	return 0
+}
+
+func (a *auth) loginMiss(login string) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	m := a.logins[login]
+	if m == nil {
+		m = &misses{}
+		a.logins[login] = m
+	}
+	m.n++
+	m.last = time.Now()
+}
+
+// gate is what one attempt at a login is measured by: the keys that lock
+// hard after five misses, the address and the device cookie when the
+// browser carries one for this user, and the login itself, whose wait
+// grows with each miss unless the device cookie vouches for the browser.
+type gate struct {
+	hard    []string
+	login   string
+	vouched bool
+}
+
+func (a *auth) gateFor(r *http.Request, login, userID string) gate {
+	g := gate{hard: []string{"addr:" + a.clientIP(r)}, login: strings.ToLower(strings.TrimSpace(login))}
+	if nonce, ok := a.deviceOf(r, userID); ok {
+		g.hard = append(g.hard, "device:"+nonce)
+		g.vouched = true
+	}
+	return g
+}
+
+// blocked says whether the attempt is refused before being looked at.
+func (a *auth) blocked(g gate) bool {
+	return a.throttled(g.hard...) || !g.vouched && a.loginWait(g.login) > 0
+}
+
+func (a *auth) miss(g gate) {
+	a.fail(g.hard...)
+	if !g.vouched {
+		a.loginMiss(g.login)
+	}
+	time.Sleep(a.delay)
+}
+
+func (a *auth) pass(g gate) {
+	a.clear(g.hard...)
+	a.mu.Lock()
+	delete(a.logins, g.login)
+	a.mu.Unlock()
+}
+
+// deviceToken is a device cookie's value for a user: the user, a nonce
+// and a signature over both.
+func (a *auth) deviceToken(userID string) string {
+	nonce := randomID()[:16]
+	return userID + "." + nonce + "." + a.deviceMAC(userID, nonce)
+}
+
+func (a *auth) deviceMAC(userID, nonce string) string {
+	mac := hmac.New(sha256.New, a.deviceKey)
+	mac.Write([]byte(userID + "." + nonce))
+	return hex.EncodeToString(mac.Sum(nil))
+}
+
+// deviceOf is the nonce of the request's device cookie when it is this
+// user's and genuine.
+func (a *auth) deviceOf(r *http.Request, userID string) (string, bool) {
+	c, err := r.Cookie(deviceCookie)
+	if err != nil || userID == "" {
+		return "", false
+	}
+	parts := strings.Split(c.Value, ".")
+	if len(parts) != 3 || parts[0] != userID || !hmac.Equal([]byte(parts[2]), []byte(a.deviceMAC(parts[0], parts[1]))) {
+		return "", false
+	}
+	return parts[1], true
 }
 
 // login checks a login and password and starts a session at the stage the
 // user is at: a code due when they have an authenticator, setting one up
-// when they have none yet. Failures count by address and by login.
+// when they have none yet. Misses count against the address and, for a
+// browser without this user's device cookie, against the login.
 func (a *auth) login(w http.ResponseWriter, r *http.Request, login, password, next string) (stage, bool) {
-	keys := a.keys(r, login)
-	if a.throttled(keys...) {
+	u, hash, err := a.db.Credentials(r.Context(), login)
+	g := a.gateFor(r, login, u.ID)
+	if a.blocked(g) {
 		time.Sleep(2 * a.delay)
 		return 0, false
 	}
-	u, hash, err := a.db.Credentials(r.Context(), login)
 	if err != nil || u.Locked || hash == "" || !checkPassword(hash, password) {
-		a.fail(keys...)
-		time.Sleep(a.delay)
+		a.miss(g)
 		return 0, false
 	}
-	a.clear(keys...)
+	a.pass(g)
 	a.drop(r)
 	st := stageCode
 	if !u.TwoFactor {
@@ -444,7 +585,8 @@ func (a *auth) begin(w http.ResponseWriter, user string, st stage, next string) 
 }
 
 // advance moves a session on to a stage under a fresh id, so the id that
-// saw the password through is not the one that is signed in.
+// saw the password through is not the one that is signed in. A browser
+// that signs all the way in is marked as this user's device.
 func (a *auth) advance(w http.ResponseWriter, r *http.Request, s *session, st stage) {
 	id := randomID()
 	a.mu.Lock()
@@ -459,6 +601,10 @@ func (a *auth) advance(w http.ResponseWriter, r *http.Request, s *session, st st
 	a.sessions[id] = s
 	a.mu.Unlock()
 	a.setCookie(w, id, stageLife(st))
+	if st == stageSignedIn {
+		http.SetCookie(w, &http.Cookie{Name: deviceCookie, Value: a.deviceToken(s.user), Path: "/", HttpOnly: true, Secure: a.tls,
+			SameSite: http.SameSiteLaxMode, MaxAge: int(deviceLife / time.Second)})
+	}
 }
 
 func stageLife(st stage) time.Duration {
@@ -488,8 +634,8 @@ func (a *auth) code(w http.ResponseWriter, r *http.Request, code string) (ok, ba
 		return false, false, 0
 	}
 	ctx := r.Context()
-	keys := a.keys(r, u.Login)
-	if a.throttled(keys...) {
+	g := a.gateFor(r, u.Login, u.ID)
+	if a.blocked(g) {
 		time.Sleep(2 * a.delay)
 		return false, false, 0
 	}
@@ -503,7 +649,7 @@ func (a *auth) code(w http.ResponseWriter, r *http.Request, code string) (ok, ba
 		}
 	}
 	if !ok {
-		a.fail(keys...)
+		a.miss(g)
 		a.mu.Lock()
 		s.tries++
 		over := s.tries >= maxFailures
@@ -511,10 +657,9 @@ func (a *auth) code(w http.ResponseWriter, r *http.Request, code string) (ok, ba
 		if over {
 			a.drop(r)
 		}
-		time.Sleep(a.delay)
 		return false, backup, 0
 	}
-	a.clear(keys...)
+	a.pass(g)
 	a.db.TouchUser(ctx, u.ID, now)
 	a.advance(w, r, s, stageSignedIn)
 	return true, backup, left
@@ -562,16 +707,15 @@ func (a *auth) confirmSetup(w http.ResponseWriter, r *http.Request, code string)
 		return nil, false
 	}
 	ctx := r.Context()
-	keys := a.keys(r, u.Login)
-	if a.throttled(keys...) {
+	g := a.gateFor(r, u.Login, u.ID)
+	if a.blocked(g) {
 		time.Sleep(2 * a.delay)
 		return nil, false
 	}
 	now := time.Now()
 	step, good := totpCheck(s.secret, code, now)
 	if !good {
-		a.fail(keys...)
-		time.Sleep(a.delay)
+		a.miss(g)
 		return nil, false
 	}
 	if err := a.db.SetSecondFactor(ctx, u.ID, s.secret, now); err != nil {
@@ -584,7 +728,7 @@ func (a *auth) confirmSetup(w http.ResponseWriter, r *http.Request, code string)
 		log.Printf("backup codes for %s: %v", u.Login, err)
 		return nil, false
 	}
-	a.clear(keys...)
+	a.pass(g)
 	a.db.TouchUser(ctx, u.ID, now)
 	a.advance(w, r, s, stageSignedIn)
 	return codes, true

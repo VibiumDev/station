@@ -518,7 +518,7 @@ func serve(args []string) int {
 	mgr.InUse = func(holdID string) bool { return rl.Open(holdID) > 0 }
 	s := &server{
 		cfg: cfg, dir: dir, db: db, key: key, mode: mode, publicURL: base,
-		auth:     newAuth(cfg, db, who, strings.HasPrefix(base, "https"), proxied),
+		auth:     newAuth(cfg, db, who, strings.HasPrefix(base, "https"), proxied).withDeviceKey(key[:]),
 		holds:    mgr,
 		tunnel:   ts,
 		relay:    rl,
