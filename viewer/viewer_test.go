@@ -82,7 +82,7 @@ func TestWatchingPageHidesInput(t *testing.T) {
 	}
 	shell, _ := files.ReadFile("shell.js")
 	js := string(shell)
-	for _, want := range []string{"['ptt', 'kbdBtn', 'inputRows']", "watching: watchOnly,", "return !watchOnly && (!station", "'watching only'"} {
+	for _, want := range []string{"['ptt', 'kbdBtn', 'inputRows']", "watching: watchOnly,", "return !watchOnly && (!station", "'watching only'", "'Stop watching'", "if (hold && !observer && !released) {"} {
 		if !strings.Contains(js, want) {
 			t.Errorf("shell.js lacks %q", want)
 		}

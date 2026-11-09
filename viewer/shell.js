@@ -1360,8 +1360,11 @@
     holdStatus.textContent = watching ? 'watching ' + hold.subject : alone ? 'watching' : '';
     holdStatus.title = watching ? 'Watching ' + hold.subject + '’s session' + (watchOnly ? '' : '; press Hold to take the device') : alone ? 'Watching; nobody is driving the device' : '';
     takeBtn.style.display = role === 'watch' && !watchOnly ? 'flex' : 'none';
-    releaseBtn.style.display = hold && !observer && !watchOnly ? 'flex' : 'none';
-    releaseBtn.title = hold && !observer ? 'Release the device (you hold it)' : 'Release the device';
+    // Release ends a hold of one's own; on a watching page the same
+    // button stops watching, which ends a view-only hold or just leaves
+    // someone else's session.
+    releaseBtn.style.display = hold && (!observer || watchOnly) ? 'flex' : 'none';
+    releaseBtn.title = watchOnly ? 'Stop watching' : hold && !observer ? 'Release the device (you hold it)' : 'Release the device';
     emit('hold', {hold: hold, observer: observer, role: role});
   }
   // takeHold asks the station: for the role's scopes with watch set (a
@@ -1455,7 +1458,7 @@
     releaseBtn.onclick = release;
     setInterval(function () { if (hold && !released) takeHold(wanted(), true, true).catch(function () {}); }, 3 * 60 * 1000);
     window.addEventListener('pagehide', function () {
-      if (hold && !observer && !released && !watchOnly) {
+      if (hold && !observer && !released) {  // one's own hold, driving or watching alone
         try { navigator.sendBeacon(api.hold + '/release', new Blob([JSON.stringify({csrf: cfg.csrf})], {type: 'application/json'})); } catch (e) {}
       }
     });
