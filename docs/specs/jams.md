@@ -131,7 +131,11 @@ second prompt while the jam is open continues the same conversation
 with the phone where the agent left it; a prompt after the jam has
 ended starts a new one.
 
-A follow-up that asks for another check or goal ends with a result of
+A settled result, passed, failed or completed, ends the jam at once
+and frees the device, since whoever asked may not be watching; an
+inconclusive check or an errand not completed wants a person, so the
+jam stays open for five minutes for someone to look and follow up. A
+follow-up that asks for another check or goal ends with a result of
 its own, and one that asks nothing of the device, a question or a
 thanks, is answered in words. The jam's result, in its header and on
 the list, is its first prompt's: a later result of the same kind

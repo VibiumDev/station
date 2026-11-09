@@ -261,7 +261,7 @@ ends the jam. While Jams is off, every path here answers 404.
 | `POST /v1/jams` | Starts a jam: `{"prompt": ..., "device": "<rig>/<name>", "model": "<name>", "mode": "check" or "run"}`; the device may be left out when one is online, the model when one agent model is set, and the mode when the model should decide from the prompt. Needs control. Returns the jam, 201 |
 | `GET /v1/jams` | The caller's jams, newest first; every jam for the owner |
 | `GET /v1/jams/{id}` | `{"jam": ..., "events": [...], "recording": "<sha256>"}`: the jam, its transcript, and the host's recording of its hold when there is one |
-| `POST /v1/jams/{id}/turns` | `{"prompt": ...}`: a follow-up on an open jam, taken up once the current prompt has its result, and answered in words when it asks nothing of the device; 409 when the jam has ended or a prompt is already waiting |
+| `POST /v1/jams/{id}/turns` | `{"prompt": ...}`: a follow-up on an open jam, one still running or whose last result was `inconclusive` or `not_completed`, taken up once the current prompt has its result, and answered in words when it asks nothing of the device; 409 when the jam has ended or a prompt is already waiting |
 | `GET /v1/jams/{id}/events` | The transcript as server-sent events, each with `id` (the sequence number), `event` (the kind) and `data` (the event), from the start or after `?after=<seq>` or `Last-Event-ID`; a running jam streams on until its `end`, a finished one replays and closes |
 | `POST /v1/jams/{id}/stop` | Ends the jam, which releases the device |
 
@@ -277,10 +277,13 @@ arguments), `result` (what the tool returned, with `error` when it
 failed), `shot` (a screenshot, at `image`), `verdict` (a result the
 model delivered, with its `took`, `status`, `summary` and `evidence`),
 `usage` (tokens in and out) and `end`, whose text carries the reason
-when the jam failed or was stopped. A jam ends on its own after thirty
-minutes, a hundred actions, or five minutes without a follow-up, and
-then presses the device's Home shortcut when it announces one, so the
-device is left on its home screen.
+when the jam failed or was stopped. A jam ends on its own when a
+result settles the prompt, `passed`, `failed` or `completed`, or after
+thirty minutes, a hundred actions, or five minutes without a follow-up
+on an `inconclusive` or `not_completed` result, which stays open for a
+person to look and follow up. It then presses the device's Home
+shortcut when it announces one, so the device is left on its home
+screen.
 
 ## station-probe
 

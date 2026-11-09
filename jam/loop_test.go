@@ -98,6 +98,9 @@ func textReply(text string) Reply {
 
 const verdict = `{"status":"passed","summary":"The home screen shows.","evidence":[{"type":"observation","summary":"Icons and a clock."}]}`
 
+// review is an inconclusive verdict, which keeps a jam open for a person.
+const review = `{"status":"inconclusive","summary":"A dialog covers the screen.","reason":"insufficient_evidence","evidence":[{"type":"observation","summary":"A dialog."}]}`
+
 func collect() (func(Event), func() []Event) {
 	var mu sync.Mutex
 	var events []Event
@@ -116,8 +119,8 @@ func kinds(events []Event) string {
 func TestLoopCheckThenFollowUp(t *testing.T) {
 	model := &scripted{replies: []Reply{
 		toolReply(call("c1", "browser_tap", `{"x":1,"y":2}`)),
-		toolReply(call("c2", "return_verdict", verdict)),
-		// the follow-up
+		toolReply(call("c2", "return_verdict", review)),
+		// the follow-up, whose completed result settles the jam
 		toolReply(call("c3", "return_result", `{"status":"completed","summary":"Done.","evidence":[{"type":"observation","summary":"Settings opened."}]}`)),
 	}}
 	tools := &fakeTools{}
@@ -140,7 +143,7 @@ func TestLoopCheckThenFollowUp(t *testing.T) {
 	}
 	<-l.Done()
 	res := l.Result()
-	if res.Status != "done" || res.Verdicts != 2 || res.Err != nil || res.Reason != "no follow-up" || res.Last.Took != "run" {
+	if res.Status != "done" || res.Verdicts != 2 || res.Err != nil || res.Reason != "" || res.Last.Took != "run" {
 		t.Errorf("result: %+v", res)
 	}
 	got := kinds(events())
@@ -163,7 +166,7 @@ func TestLoopCheckThenFollowUp(t *testing.T) {
 	if strings.Join(tools.calls, " ") != "browser_start browser_screenshot browser_tap browser_screenshot" {
 		t.Errorf("tool calls: %v", tools.calls)
 	}
-	if v := events()[7].Verdict; v == nil || v.Word() != "PASS" || v.Took != "check" || len(v.Evidence) != 1 {
+	if v := events()[7].Verdict; v == nil || v.Word() != "REVIEW" || v.Took != "check" || len(v.Evidence) != 1 || v.Settled() {
 		t.Errorf("verdict event: %+v", v)
 	}
 	if (Verdict{Status: "inconclusive"}).Word() != "REVIEW" || (Verdict{Status: "not_completed"}).Word() != "NOT COMPLETED" {
@@ -271,10 +274,11 @@ func TestLoopStopAndFailure(t *testing.T) {
 }
 
 func TestLoopFollowUpInWordsAndTidy(t *testing.T) {
-	// A follow-up that asks nothing of the device is answered in words,
-	// with no result forced; the jam ends on its own and presses Home.
+	// After an open result, a follow-up that asks nothing of the device
+	// is answered in words, with no result forced; the jam ends on its
+	// own and presses Home.
 	model := &scripted{replies: []Reply{
-		toolReply(call("c1", "return_verdict", verdict)),
+		toolReply(call("c1", "return_verdict", review)),
 		textReply("Glad it helped. Nothing more to do here."),
 	}}
 	tools := &fakeTools{}
@@ -322,6 +326,24 @@ func TestLoopFollowUpInWordsAndTidy(t *testing.T) {
 	}
 	if strings.Contains(sys, "Swiping up") || strings.Contains(sys, "Lock") {
 		t.Error("instruction keeps the gesture when the device has keys, or tells of the Lock chord")
+	}
+
+	// A settled result ends the jam at once: no wait, Home pressed, and
+	// a follow-up is refused.
+	model = &scripted{replies: []Reply{toolReply(call("c1", "return_verdict", verdict))}}
+	tools = &fakeTools{}
+	emit, events = collect()
+	l = New(model, tools, Options{Prompt: "home?", DeviceKind: "phone", Emit: emit, IdleWait: time.Hour, Shortcuts: []Shortcut{{Label: "Home", Keys: "Meta+h"}}})
+	started := time.Now()
+	res = l.Run(context.Background())
+	if res.Status != "done" || res.Reason != "" || res.Verdicts != 1 || time.Since(started) > 2*time.Second {
+		t.Errorf("settled: %+v after %s", res, time.Since(started))
+	}
+	if got := kinds(events()); !strings.HasSuffix(got, "verdict call result end") {
+		t.Errorf("settled events: %s", got)
+	}
+	if err := l.Turn("and now?"); err != ErrEnded {
+		t.Errorf("turn after a settled result: %v", err)
 	}
 
 	// Stopped by a person: the screen stays as it is, no Home.

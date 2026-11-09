@@ -33,7 +33,7 @@ type Options struct {
 	DeviceKind string        // "phone", "browser"; decides the tools offered
 	MaxActions int           // tool calls in all; 0 means DefaultMaxActions
 	TimeLimit  time.Duration // for the whole jam; 0 means DefaultTimeLimit
-	IdleWait   time.Duration // how long a delivered result waits for a follow-up; 0 means DefaultIdleWait
+	IdleWait   time.Duration // how long an open result waits for a follow-up; 0 means DefaultIdleWait
 	Shortcuts  []Shortcut    // the device's own keys, as its provider announces them
 	Emit       func(Event)   // every step, in order
 }
@@ -96,6 +96,14 @@ func (v Verdict) Word() string {
 		return "REVIEW"
 	}
 	return strings.ToUpper(strings.ReplaceAll(v.Status, "_", " "))
+}
+
+// Settled says whether the result answers the prompt for good: a check
+// that passed or failed, an errand completed. An inconclusive check and
+// an errand not completed want a person, so the jam stays open for
+// their follow-up; a settled one ends the jam at once.
+func (v Verdict) Settled() bool {
+	return v.Status == "passed" || v.Status == "failed" || v.Status == "completed"
 }
 
 // Result is how a jam ended.
@@ -303,6 +311,12 @@ func (l *Loop) run(ctx context.Context) Result {
 		if v != nil {
 			res.Verdicts++
 			res.Last = v
+			// A settled result ends the jam and frees the device, since
+			// whoever asked may not be watching; an open one waits for
+			// a person to look and follow up.
+			if v.Settled() {
+				return res
+			}
 		}
 		// The prompt is answered; a follow-up continues from here.
 		select {
