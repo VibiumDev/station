@@ -100,7 +100,7 @@ func TestUsersTeamsAndAccess(t *testing.T) {
 	if acc, _ := d.Accesses(ctx); len(acc) != 0 {
 		t.Errorf("access outlived its team: %+v", acc)
 	}
-	if _, err := d.CreateToken(ctx, "anns", false, "usr_ann"); err != nil {
+	if _, err := d.CreateToken(ctx, "anns", station.TokenDrive, "usr_ann"); err != nil {
 		t.Fatal(err)
 	}
 	if err := d.RemoveUser(ctx, "usr_ann"); err != nil {

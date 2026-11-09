@@ -24,7 +24,7 @@ func TestJamTokenIsBoundToItsDevice(t *testing.T) {
 	if _, err := db.SeedOwner(ctx, "hash"); err != nil { // tokens without an owner of their own are the owner's
 		t.Fatal(err)
 	}
-	secret, err := db.CreateScopedToken(ctx, "jam:jam_1", false, "rig_a/phone", time.Now().Add(time.Minute), "")
+	secret, err := db.CreateScopedToken(ctx, "jam:jam_1", station.TokenDrive, "rig_a/phone", time.Now().Add(time.Minute), "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -47,7 +47,7 @@ func TestJamTokenIsBoundToItsDevice(t *testing.T) {
 	if err := a.Authorize(ctx, p, station.ActionManage, ""); err == nil {
 		t.Error("a jam's token may not manage")
 	}
-	old, _ := db.CreateScopedToken(ctx, "jam:jam_0", false, "rig_a/phone", time.Now().Add(-time.Second), "")
+	old, _ := db.CreateScopedToken(ctx, "jam:jam_0", station.TokenDrive, "rig_a/phone", time.Now().Add(-time.Second), "")
 	r.Header.Set("Authorization", "Bearer "+old)
 	if _, err := a.Authenticate(r); err == nil {
 		t.Error("an expired token signed in")
@@ -154,8 +154,11 @@ func TestLoginAndLevels(t *testing.T) {
 	if a.level(ctx, p, "rig_a/phone") != station.LevelDrive || a.level(ctx, owner, "rig_z/phone") != station.LevelJam {
 		t.Error("levels")
 	}
-	// A token acts as its user, never manages, and dies with a locked user.
-	secret, _ := db.CreateToken(ctx, "anns", false, ann.ID)
+	// A token acts as its user within its level, and dies with a locked
+	// user: a drive token drives the user's devices and never manages, a
+	// watch token only looks, and an admin token manages only when its
+	// user is an admin.
+	secret, _ := db.CreateToken(ctx, "anns", station.TokenDrive, ann.ID)
 	r := httptest.NewRequest("GET", "/v1/devices", nil)
 	r.Header.Set("Authorization", "Bearer "+secret)
 	tp, err := a.Authenticate(r)
@@ -165,10 +168,31 @@ func TestLoginAndLevels(t *testing.T) {
 	if a.Authorize(ctx, tp, station.ActionControl, "rig_a/phone") != nil || a.Authorize(ctx, tp, station.ActionManage, "") == nil {
 		t.Error("a token should drive its user's devices and never manage")
 	}
-	ownerSecret, _ := db.CreateToken(ctx, "owners", false, "")
+	ownerSecret, _ := db.CreateToken(ctx, "owners", station.TokenDrive, "")
 	r.Header.Set("Authorization", "Bearer "+ownerSecret)
-	if op, err := a.Authenticate(r); err != nil || !op.Admin || a.Authorize(ctx, op, station.ActionManage, "") == nil {
-		t.Errorf("an owner's token sees everything but manages nothing: %+v %v", op, err)
+	if op, err := a.Authenticate(r); err != nil || !op.Admin || op.Token != station.TokenDrive || a.Authorize(ctx, op, station.ActionManage, "") == nil || a.Authorize(ctx, op, station.ActionAdmin, "rig_b/phone") == nil {
+		t.Errorf("an owner's drive token sees everything but manages nothing: %+v %v", op, err)
+	}
+	watchSecret, _ := db.CreateToken(ctx, "anns-eyes", station.TokenWatch, ann.ID)
+	r.Header.Set("Authorization", "Bearer "+watchSecret)
+	if wp, err := a.Authenticate(r); err != nil || !wp.ReadOnly || wp.Token != station.TokenWatch || a.Authorize(ctx, wp, station.ActionView, "rig_a/phone") != nil || a.Authorize(ctx, wp, station.ActionControl, "rig_a/phone") == nil {
+		t.Errorf("a watch token looks and never controls: %+v %v", wp, err)
+	}
+	annAdmin, _ := db.CreateToken(ctx, "anns-admin", station.TokenAdmin, ann.ID)
+	r.Header.Set("Authorization", "Bearer "+annAdmin)
+	if ap, err := a.Authenticate(r); err != nil || ap.Admin || a.Authorize(ctx, ap, station.ActionManage, "") == nil {
+		t.Errorf("a regular user's admin token manages nothing: %+v %v", ap, err)
+	}
+	ownerAdmin, _ := db.CreateToken(ctx, "owners-admin", station.TokenAdmin, "")
+	r.Header.Set("Authorization", "Bearer "+ownerAdmin)
+	if ap, err := a.Authenticate(r); err != nil || !ap.Admin || a.Authorize(ctx, ap, station.ActionManage, "") != nil || a.Authorize(ctx, ap, station.ActionAdmin, "rig_b/phone") != nil {
+		t.Errorf("an admin's admin token manages: %+v %v", ap, err)
+	}
+	if _, err := station.ParseTokenLevel("boss"); err == nil {
+		t.Error("a made-up level parsed")
+	}
+	if l, _ := station.ParseTokenLevel(""); l != station.TokenDrive {
+		t.Error("the default level is drive")
 	}
 	ann.Locked = true
 	db.PutUser(ctx, ann)

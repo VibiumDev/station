@@ -217,7 +217,7 @@ func (a *auth) Authenticate(r *http.Request) (station.Principal, error) {
 			return station.Principal{}, err
 		}
 		p := principalOf(u, "token:"+tok.Name)
-		p.ReadOnly, p.Device = tok.ReadOnly, tok.Device
+		p.Token, p.ReadOnly, p.Device = tok.Level, tok.Level == station.TokenWatch, tok.Device
 		return p, nil
 	}
 	if s := a.sessionOf(r); s != nil {
@@ -316,10 +316,12 @@ func (a *auth) allowed(login string, tags []string) bool {
 
 // Authorize: admins do everything, and a regular user does with a device
 // what their teams' level allows: watch to view it, drive to control it,
-// jam to drive it with an agent. Only people manage, never tokens; a
-// read-only token never controls; a token bound to a device acts on that
-// device alone. A call about no device in particular passes for anyone
-// signed in, and the device's own check comes where the device is known.
+// jam to drive it with an agent. A token acts within its level as well
+// as its user's: a watch token never controls, a drive token never
+// manages, and only an admin's admin token manages; a token bound to a
+// device acts on that device alone. A call about no device in particular
+// passes for anyone signed in, and the device's own check comes where
+// the device is known.
 func (a *auth) Authorize(ctx context.Context, p station.Principal, action station.Action, deviceID string) error {
 	if p.Device != "" && deviceID != "" && deviceID != p.Device {
 		return station.ErrForbidden
@@ -327,7 +329,7 @@ func (a *auth) Authorize(ctx context.Context, p station.Principal, action statio
 	var need station.Level
 	switch action {
 	case station.ActionManage:
-		if p.Admin && person(p) {
+		if p.Admin && (person(p) || p.Token == station.TokenAdmin) {
 			return nil
 		}
 		return station.ErrForbidden
@@ -338,7 +340,7 @@ func (a *auth) Authorize(ctx context.Context, p station.Principal, action statio
 	case station.ActionBidi:
 		need = station.LevelJam
 	case station.ActionAdmin:
-		if p.ReadOnly || !p.Admin {
+		if !p.Admin || !person(p) && p.Token != station.TokenAdmin {
 			return station.ErrForbidden
 		}
 		return nil

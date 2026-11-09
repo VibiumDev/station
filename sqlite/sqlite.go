@@ -276,6 +276,7 @@ func (d *DB) migrate() error {
 		{"api_tokens", "device", "TEXT NOT NULL DEFAULT ''"},
 		{"api_tokens", "expires_at", "INTEGER NOT NULL DEFAULT 0"},
 		{"api_tokens", "user_id", "TEXT NOT NULL DEFAULT ''"},
+		{"api_tokens", "level", "TEXT NOT NULL DEFAULT ''"},
 		{"users", "totp_secret", "TEXT NOT NULL DEFAULT ''"},
 		{"users", "totp_at", "INTEGER NOT NULL DEFAULT 0"},
 		{"users", "totp_step", "INTEGER NOT NULL DEFAULT 0"},
@@ -289,6 +290,10 @@ func (d *DB) migrate() error {
 				return fmt.Errorf("schema: add %s.%s: %w", c.table, c.column, err)
 			}
 		}
+	}
+	// Tokens from before levels were read-only or control: watch or drive.
+	if _, err := d.db.Exec(`UPDATE api_tokens SET level = CASE WHEN read_only = 1 THEN 'watch' ELSE 'drive' END WHERE level = ''`); err != nil {
+		return fmt.Errorf("schema: token levels: %w", err)
 	}
 	return nil
 }

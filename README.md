@@ -105,8 +105,10 @@ Then enroll a rig:
    button that takes it; `?watch=1` only ever watches.
 
 Agents use API tokens from the Settings page or `station token create
-NAME`, sent as `Authorization: Bearer`. A read-only token may watch but
-never take control. See [API.md](API.md), and
+NAME`, sent as `Authorization: Bearer`. A token acts as its user at a
+level of its own: watch only looks, drive holds and drives devices and
+runs jams and agents, and admin manages the station too on an admin's
+token. See [API.md](API.md), and
 [docs/tutorials/agent-through-the-station.md](docs/tutorials/agent-through-the-station.md)
 for pointing Claude Code, Codex, the Vibium CLI or a script at a device
 through the station, which comes down to the address, the token and the
@@ -123,7 +125,7 @@ events do today, and what they leave open.
 | `station` | Run the station |
 | `station passwd [--reset] [login]` | Set a user's password, the owner's by default (argon2id, in the database); `--reset` also forgets their authenticator and backup codes, so the next sign-in sets up a new one |
 | `station enroll` | Print a one-time enrollment code |
-| `station token create NAME [--read-only]`, `token list`, `token revoke NAME` | API tokens |
+| `station token create NAME [--level watch\|drive\|admin]`, `token list`, `token revoke NAME` | API tokens; drive is the default, `--read-only` means watch |
 | `station key` | The station's key as npub, hex and fingerprint |
 | `station version` | The build's version |
 

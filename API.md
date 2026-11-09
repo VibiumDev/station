@@ -111,7 +111,11 @@ The scopes are:
 - `admin`: the device's settings and resets, only where the rig's policy
   allows it
 
-A read-only token gets `view` only.
+A token has a level of its own: `watch` gets `view` only, `drive`
+holds and drives devices and runs jams and agents, within what the
+token's user may do on each device, and `admin` also reaches the
+management endpoints when the token's user is an admin. Drive is the
+default and what most tokens need.
 
 `ice` lists the station's STUN and TURN servers, shaped like the browser's
 `RTCIceServer` and carrying the hold's own TURN credential, which is good

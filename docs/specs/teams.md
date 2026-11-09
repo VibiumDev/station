@@ -67,9 +67,12 @@ sets a password from the machine itself, for the owner when nobody else
 can sign in, and `STATION_PASSWORD` in the environment does the same for
 the owner at start, as on Fly.
 
-API tokens belong to a user and act as that user: they see what the user
-sees and drive what the user may drive, read-only when flagged, and they
-never manage. A token minted for a jam is bound to its device as before.
+API tokens belong to a user and act as that user, within a level of
+their own: `watch` only looks, `drive` holds and drives devices and runs
+jams and agents, as the user's teams allow on each device, and `admin`
+manages the station too, which only means something on an admin's token.
+Drive is the default and what most tokens need. A token minted for a jam
+is bound to its device, at drive, as before.
 
 ## Settings
 

@@ -71,7 +71,8 @@ func openDB(dir string) (*sqlite.DB, error) {
 func runCommand(name string, args []string) int {
 	fs := flag.NewFlagSet("station "+name, flag.ContinueOnError)
 	dirFlag := fs.String("data-dir", "", "where the station keeps its files (default $STATION_DIR or the user config dir)")
-	readOnly := fs.Bool("read-only", false, "token create: the token may only view")
+	readOnly := fs.Bool("read-only", false, "token create: the token may only watch (the same as --level watch)")
+	levelFlag := fs.String("level", "drive", "token create: watch, drive or admin")
 	// Flags may come before or after the words.
 	var words []string
 	for len(args) > 0 {
@@ -137,7 +138,15 @@ func runCommand(name string, args []string) int {
 		ctx := context.Background()
 		switch {
 		case len(words) == 2 && words[0] == "create":
-			secret, err := db.CreateToken(ctx, words[1], *readOnly, "")
+			level, err := station.ParseTokenLevel(*levelFlag)
+			if err != nil {
+				fmt.Fprintln(os.Stderr, err)
+				return 2
+			}
+			if *readOnly {
+				level = station.TokenWatch
+			}
+			secret, err := db.CreateToken(ctx, words[1], level, "")
 			if err != nil {
 				fmt.Fprintln(os.Stderr, err)
 				return 1
@@ -147,15 +156,11 @@ func runCommand(name string, args []string) int {
 		case len(words) == 1 && words[0] == "list":
 			tokens, _ := db.Tokens(ctx)
 			for _, t := range tokens {
-				access := "control"
-				if t.ReadOnly {
-					access = "read-only"
-				}
 				used := "never used"
 				if !t.UsedAt.IsZero() {
 					used = "used " + t.UsedAt.Format(time.DateTime)
 				}
-				fmt.Printf("%-20s %-10s created %s, %s\n", t.Name, access, t.CreatedAt.Format(time.DateOnly), used)
+				fmt.Printf("%-20s %-6s created %s, %s\n", t.Name, t.Level, t.CreatedAt.Format(time.DateOnly), used)
 			}
 			return 0
 		case len(words) == 2 && words[0] == "revoke":

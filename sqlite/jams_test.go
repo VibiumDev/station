@@ -65,22 +65,22 @@ func TestScopedToken(t *testing.T) {
 	}
 	defer d.Close()
 	ctx := context.Background()
-	secret, err := d.CreateScopedToken(ctx, "jam:jam_1", false, "rig_a/phone", time.Now().Add(time.Hour), "")
+	secret, err := d.CreateScopedToken(ctx, "jam:jam_1", station.TokenDrive, "rig_a/phone", time.Now().Add(time.Hour), "")
 	if err != nil {
 		t.Fatal(err)
 	}
 	tok, err := d.LookupToken(ctx, secret)
-	if err != nil || tok.Device != "rig_a/phone" || tok.ExpiresAt.IsZero() || tok.ReadOnly {
+	if err != nil || tok.Device != "rig_a/phone" || tok.ExpiresAt.IsZero() || tok.Level != station.TokenDrive {
 		t.Fatalf("scoped token: %+v, %v", tok, err)
 	}
-	if _, err := d.CreateToken(ctx, "ci", true, ""); err != nil {
+	if _, err := d.CreateToken(ctx, "ci", station.TokenWatch, ""); err != nil {
 		t.Fatal(err)
 	}
 	list, _ := d.Tokens(ctx)
 	if len(list) != 1 || list[0].Name != "ci" {
 		t.Errorf("the jam's token is listed with the owner's: %+v", list)
 	}
-	gone, err := d.CreateScopedToken(ctx, "jam:old", false, "rig_a/phone", time.Now().Add(-time.Second), "")
+	gone, err := d.CreateScopedToken(ctx, "jam:old", station.TokenDrive, "rig_a/phone", time.Now().Add(-time.Second), "")
 	if err != nil {
 		t.Fatal(err)
 	}

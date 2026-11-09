@@ -48,9 +48,9 @@ func (d *DB) AuditEntries(ctx context.Context, limit int) ([]station.AuditEntry,
 // bound to one device and expires with the jam.
 type APIToken struct {
 	Name      string
-	ReadOnly  bool
-	Device    string    // the one device the token may act on, or ""
-	ExpiresAt time.Time // zero for a token that lasts until revoked
+	Level     station.TokenLevel // watch, drive or admin
+	Device    string             // the one device the token may act on, or ""
+	ExpiresAt time.Time          // zero for a token that lasts until revoked
 	CreatedAt time.Time
 	UsedAt    time.Time
 	UserID    string // the user the token acts as; empty means the owner
@@ -67,47 +67,57 @@ func hashSecret(s string) string {
 	return hex.EncodeToString(sum[:])
 }
 
-// CreateToken makes a token for a user and returns its secret; an empty
-// user is the owner's.
-func (d *DB) CreateToken(ctx context.Context, name string, readOnly bool, userID string) (string, error) {
-	return d.CreateScopedToken(ctx, name, readOnly, "", time.Time{}, userID)
+// CreateToken makes a token at a level for a user and returns its
+// secret; an empty user is the owner's.
+func (d *DB) CreateToken(ctx context.Context, name string, level station.TokenLevel, userID string) (string, error) {
+	return d.CreateScopedToken(ctx, name, level, "", time.Time{}, userID)
 }
 
 // CreateScopedToken makes a token bound to one device and expiring at a
 // time, either of which may be left empty, for a user, and returns its
 // secret.
-func (d *DB) CreateScopedToken(ctx context.Context, name string, readOnly bool, device string, expires time.Time, userID string) (string, error) {
+func (d *DB) CreateScopedToken(ctx context.Context, name string, level station.TokenLevel, device string, expires time.Time, userID string) (string, error) {
 	var b [24]byte
 	if _, err := rand.Read(b[:]); err != nil {
 		return "", err
 	}
 	secret := "stk_" + base64.RawURLEncoding.EncodeToString(b[:])
+	if level == "" {
+		level = station.TokenDrive
+	}
 	ro := 0
-	if readOnly {
+	if level == station.TokenWatch {
 		ro = 1
 	}
 	var exp int64
 	if !expires.IsZero() {
 		exp = expires.UnixNano()
 	}
-	_, err := d.db.ExecContext(ctx, `INSERT INTO api_tokens (name, hash, read_only, created_at, device, expires_at, user_id) VALUES (?, ?, ?, ?, ?, ?, ?)`,
-		name, hashSecret(secret), ro, time.Now().UnixNano(), device, exp, userID)
+	_, err := d.db.ExecContext(ctx, `INSERT INTO api_tokens (name, hash, read_only, level, created_at, device, expires_at, user_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+		name, hashSecret(secret), ro, string(level), time.Now().UnixNano(), device, exp, userID)
 	if err != nil && strings.Contains(err.Error(), "UNIQUE") {
 		return "", ErrTokenExists
 	}
 	return secret, err
 }
 
-const tokenCols = `name, read_only, created_at, used_at, device, expires_at, user_id`
+const tokenCols = `name, read_only, level, created_at, used_at, device, expires_at, user_id`
 
 func scanToken(s scanner) (APIToken, error) {
 	var t APIToken
 	var ro int
+	var level string
 	var created, used, expires int64
-	if err := s.Scan(&t.Name, &ro, &created, &used, &t.Device, &expires, &t.UserID); err != nil {
+	if err := s.Scan(&t.Name, &ro, &level, &created, &used, &t.Device, &expires, &t.UserID); err != nil {
 		return t, err
 	}
-	t.ReadOnly = ro == 1
+	t.Level = station.TokenLevel(level)
+	if t.Level == "" { // from before levels: read-only or control
+		t.Level = station.TokenDrive
+		if ro == 1 {
+			t.Level = station.TokenWatch
+		}
+	}
 	t.CreatedAt = time.Unix(0, created)
 	if used != 0 {
 		t.UsedAt = time.Unix(0, used)

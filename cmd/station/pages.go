@@ -392,15 +392,15 @@ var pages = template.Must(template.New("").Funcs(template.FuncMap{"npub": npub, 
 </tr>{{end}}</tbody></table></div>{{else}}<p class="muted">{{if not .Teams}}Make a team, and the devices appear here to share.{{else}}No devices yet.{{end}}</p>{{end}}
 
 <h2 class="h2">API tokens {{template "help" "tokens"}}</h2>
-<p class="helptext" id="help-tokens" hidden>A token lets an agent or a script use this station without the password, sent as <code>Authorization: Bearer &lt;token&gt;</code>. A control token can hold a device and drive it; a read-only token can only watch. The secret is shown once, when the token is made; the station keeps only a hash of it. Revoke stops the token at once.</p>
+<p class="helptext" id="help-tokens" hidden>A token lets an agent or a script use this station without signing in, sent as <code>Authorization: Bearer &lt;token&gt;</code>. It acts as its user, within that user's teams, and within its own level: <b>watch</b> only looks; <b>drive</b> holds and drives devices, starts jams and runs agents, which is what most tokens need; <b>admin</b> also manages the station, users and teams, and only means that on an admin's token. The secret is shown once, when the token is made; the station keeps only a hash of it. Revoke stops the token at once.</p>
 {{if .NewToken}}<div class="card featured">Token <b>{{.NewTokenName}}</b>, shown once:<p class="secret">{{.NewToken}}</p></div>{{end}}
 {{if .Tokens}}<div class="tablewrap"><table><thead><tr><th>Name</th><th>User</th><th>Access</th><th>Created</th><th>Last used</th><th></th></tr></thead><tbody>
-{{range .Tokens}}<tr><td data-l="Name"><b>{{.Name}}</b></td><td data-l="User">{{with index $.TokenUsers .UserID}}{{.}}{{else}}owner{{end}}</td><td data-l="Access">{{if .ReadOnly}}read-only{{else}}control{{end}}</td><td data-l="Created">{{.CreatedAt.Format "Jan 2, 2006"}}</td>
+{{range .Tokens}}<tr><td data-l="Name"><b>{{.Name}}</b></td><td data-l="User">{{with index $.TokenUsers .UserID}}{{.}}{{else}}owner{{end}}</td><td data-l="Access">{{.Level}}</td><td data-l="Created">{{.CreatedAt.Format "Jan 2, 2006"}}</td>
 <td data-l="Last used">{{if .UsedAt.IsZero}}<span class="muted">never</span>{{else}}{{.UsedAt.Format "Jan 2 15:04"}}{{end}}</td>
 <td class="act"><form class="inline" method="post" action="/settings/tokens/revoke"><input type="hidden" name="csrf" value="{{$.CSRF}}"><input type="hidden" name="name" value="{{.Name}}"><button class="small hold" type="button" data-hold title="Hold to revoke">Revoke</button></form></td></tr>{{end}}</tbody></table></div>{{end}}
 <form class="row" method="post" action="/settings/tokens"><input type="hidden" name="csrf" value="{{.CSRF}}">
 <select name="user" aria-label="For which user">{{range .Users}}<option value="{{.ID}}"{{if .Self}} selected{{end}}>{{.Login}}</option>{{end}}</select>
-<input type="text" name="name" placeholder="name" aria-label="Token name" required> <label class="check"><input type="checkbox" name="read_only"> read-only</label>
+<input type="text" name="name" placeholder="name" aria-label="Token name" required> <select name="level" aria-label="Access level"><option value="watch">watch</option><option value="drive" selected>drive</option><option value="admin">admin</option></select>
 <input type="submit" value="Create token"></form>
 
 

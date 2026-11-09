@@ -180,6 +180,10 @@ type Principal struct {
 	Subject  string // "owner", "token:<name>", or a login such as you@example.com
 	ReadOnly bool   // may view, never control
 	Admin    bool   // sees and manages everything; a regular user sees what their teams are given
+	// Token is the token's level when the principal is one, "" for a
+	// person: watch (read only), drive (everything on devices, jams and
+	// agents included), or admin (the station's management too).
+	Token TokenLevel
 	// Device, when set, is the one device the principal may act on: a
 	// token minted for a jam carries the jam's device.
 	Device string
@@ -219,6 +223,31 @@ type Invite struct {
 // OwnerLogin is the login of the first admin, whose password `station
 // passwd` sets.
 const OwnerLogin = "owner"
+
+// TokenLevel is what an API token may do, within what its user may:
+// watch (read only), drive (hold and drive devices, start jams and run
+// agents, as the user's teams allow), or admin (manage the station as
+// well, for an admin's token). Most tokens are drive.
+type TokenLevel string
+
+const (
+	TokenWatch TokenLevel = "watch"
+	TokenDrive TokenLevel = "drive"
+	TokenAdmin TokenLevel = "admin"
+)
+
+// ParseTokenLevel reads a token level's name; "" is drive.
+func ParseTokenLevel(s string) (TokenLevel, error) {
+	switch TokenLevel(s) {
+	case "", TokenDrive:
+		return TokenDrive, nil
+	case TokenWatch, TokenAdmin:
+		return TokenLevel(s), nil
+	case "read-only", "view":
+		return TokenWatch, nil
+	}
+	return "", errors.New("a token's level is watch, drive or admin")
+}
 
 // Team groups users; devices are shared with teams.
 type Team struct {

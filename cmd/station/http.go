@@ -876,12 +876,17 @@ func (s *server) createToken(w http.ResponseWriter, r *http.Request, p station.P
 	if owner == "" {
 		owner = p.User
 	}
-	secret, err := s.db.CreateToken(r.Context(), name, r.FormValue("read_only") == "on", owner)
+	level, err := station.ParseTokenLevel(r.FormValue("level"))
+	if err != nil {
+		s.render(w, "settings", s.settingsData(r, p, map[string]any{"Message": capitalize(err.Error()) + "."}))
+		return
+	}
+	secret, err := s.db.CreateToken(r.Context(), name, level, owner)
 	if err != nil {
 		s.render(w, "settings", s.settingsData(r, p, map[string]any{"Message": err.Error()}))
 		return
 	}
-	s.db.Audit(r.Context(), station.AuditEntry{Subject: p.Subject, Action: "token", Detail: "created " + name})
+	s.db.Audit(r.Context(), station.AuditEntry{Subject: p.Subject, Action: "token", Detail: "created " + name + " (" + string(level) + ")"})
 	s.render(w, "settings", s.settingsData(r, p, map[string]any{"NewToken": secret, "NewTokenName": name}))
 }
 
