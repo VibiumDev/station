@@ -68,6 +68,19 @@ func TestParseRecordsQuery(t *testing.T) {
 	if plain.Per != defaultPer || plain.Page != 1 || plain.Link() != "/records" {
 		t.Errorf("defaults: %+v %s", plain, plain.Link())
 	}
+	// The browser's last view and page size come back from cookies when
+	// the address says nothing, and the address wins when it does.
+	back := httptest.NewRequest(http.MethodGet, "/records", nil)
+	back.AddCookie(&http.Cookie{Name: viewCookie, Value: "list"})
+	back.AddCookie(&http.Cookie{Name: perCookie, Value: "50"})
+	if got := parseRecordsQuery(back); !got.List || got.View != "list" || got.Per != 50 || got.Link() != "/records?n=50&view=list" {
+		t.Errorf("remembered: %+v %s", got, got.Link())
+	}
+	grid := httptest.NewRequest(http.MethodGet, "/records?view=grid", nil)
+	grid.AddCookie(&http.Cookie{Name: viewCookie, Value: "list"})
+	if got := parseRecordsQuery(grid); got.List || got.View != "grid" {
+		t.Errorf("the address should win: %+v", got)
+	}
 }
 
 func TestPaging(t *testing.T) {

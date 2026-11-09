@@ -109,8 +109,17 @@ type recordsQuery struct {
 	Tags         []string // its #tags, as filed
 	Golden       bool
 	List         bool
+	View         string // "list" or "grid" when chosen or remembered; "" means the default, grid
 	Per, Page    int
 }
+
+// The browser's last choices on the Records page, kept in cookies so the
+// plain Records link brings the page back as it was: the view, and how
+// many records a page shows.
+const (
+	viewCookie = "station-records-view"
+	perCookie  = "station-records-per"
+)
 
 // perPage is the choice of records per page; defaultPer is the first
 // page's.
@@ -123,7 +132,17 @@ const defaultPer = 25
 // view=list the list.
 func parseRecordsQuery(r *http.Request) recordsQuery {
 	q := recordsQuery{Device: r.FormValue("device"), Hold: r.FormValue("hold"), Raw: strings.TrimSpace(r.FormValue("q")),
-		Golden: r.FormValue("golden") == "1", List: r.FormValue("view") == "list", Per: defaultPer, Page: 1}
+		Golden: r.FormValue("golden") == "1", Per: defaultPer, Page: 1}
+	view := r.FormValue("view")
+	if view == "" {
+		if c, err := r.Cookie(viewCookie); err == nil {
+			view = c.Value
+		}
+	}
+	if view == "list" || view == "grid" {
+		q.View = view
+	}
+	q.List = view == "list"
 	var words []string
 	for _, w := range strings.Fields(q.Raw) {
 		if strings.HasPrefix(w, "#") && len(w) > 1 {
@@ -135,9 +154,15 @@ func parseRecordsQuery(r *http.Request) recordsQuery {
 		words = append(words, w)
 	}
 	q.Text = strings.Join(words, " ")
-	if n, err := strconv.Atoi(r.FormValue("n")); err == nil {
-		for _, per := range perPage {
-			if n == per {
+	per := r.FormValue("n")
+	if per == "" {
+		if c, err := r.Cookie(perCookie); err == nil {
+			per = c.Value
+		}
+	}
+	if n, err := strconv.Atoi(per); err == nil {
+		for _, p := range perPage {
+			if n == p {
 				q.Per = n
 			}
 		}
@@ -163,8 +188,8 @@ func (q recordsQuery) values(changes ...string) url.Values {
 	set("device", q.Device)
 	set("hold", q.Hold)
 	set("q", q.Raw)
-	if q.List {
-		v.Set("view", "list")
+	if q.View != "" {
+		v.Set("view", q.View)
 	}
 	if q.Golden {
 		v.Set("golden", "1")
@@ -496,7 +521,7 @@ func (s *server) recordsData(r *http.Request, p station.Principal, extra map[str
 		"DeviceLabel": labels[q.Device], "Count": count, "Total": humanSize(size),
 		"MaxFile": humanSize(s.records.MaxFile), "MaxTotal": humanSize(s.records.MaxTotal), "MaxAge": humanAge(s.records.MaxAge),
 		"Q": q, "Query": q.Raw, "GoldenOnly": q.Golden, "Filtered": q.Raw != "" || q.Golden,
-		"GridURL": q.Link("view", ""), "ListURL": q.Link("view", "list"), "GoldenURL": q.Link("golden", golden), "ClearURL": q.Link("q", "", "golden", ""), "AllURL": q.Link("device", "", "hold", ""),
+		"GridURL": q.Link("view", "grid"), "ListURL": q.Link("view", "list"), "GoldenURL": q.Link("golden", golden), "ClearURL": q.Link("q", "", "golden", ""), "AllURL": q.Link("device", "", "hold", ""),
 		"Keep": q.back(true), "Back": q.back(false), "Chips": chips, "Pers": pers,
 		"Found": found, "From": from + 1, "To": to, "PageNo": pageNo, "Pages": pages,
 	}
@@ -552,12 +577,29 @@ func playURL(b station.Blob) string {
 }
 
 func (s *server) recordsPage(w http.ResponseWriter, r *http.Request, p station.Principal) {
+	// A choice made here is remembered for the next plain visit.
+	if v := r.FormValue("view"); v == "list" || v == "grid" {
+		s.remember(w, viewCookie, v)
+	}
+	if n := r.FormValue("n"); n != "" && parseRecordsQuery(r).Per == atoi(n) {
+		s.remember(w, perCookie, n)
+	}
 	data, err := s.recordsData(r, p, nil)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 	s.render(w, "records", data)
+}
+
+// remember keeps a Records page choice in a cookie for a year.
+func (s *server) remember(w http.ResponseWriter, name, value string) {
+	http.SetCookie(w, &http.Cookie{Name: name, Value: value, Path: "/records", HttpOnly: true, Secure: s.auth.tls, SameSite: http.SameSiteLaxMode, MaxAge: 365 * 24 * 3600})
+}
+
+func atoi(s string) int {
+	n, _ := strconv.Atoi(s)
+	return n
 }
 
 // backToRecords returns to the Records page the form came from, with
