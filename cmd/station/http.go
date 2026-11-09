@@ -179,6 +179,26 @@ func (s *server) handler() http.Handler {
 	mux.Handle("POST /settings/models/default", s.page(station.ActionManage, s.defaultModel))
 	mux.Handle("POST /settings/models/key", s.page(station.ActionManage, s.modelKey))
 	mux.Handle("POST /settings/jams", s.page(station.ActionManage, s.setJams))
+	mux.Handle("POST /settings/users", s.page(station.ActionManage, s.addUserForm))
+	mux.Handle("POST /settings/users/role", s.page(station.ActionManage, s.userRoleForm))
+	mux.Handle("POST /settings/users/disable", s.page(station.ActionManage, s.userDisableForm))
+	mux.Handle("POST /settings/users/password", s.page(station.ActionManage, s.userPasswordForm))
+	mux.Handle("POST /settings/users/remove", s.page(station.ActionManage, s.userRemoveForm))
+	mux.Handle("POST /settings/teams", s.page(station.ActionManage, s.addTeamForm))
+	mux.Handle("POST /settings/teams/remove", s.page(station.ActionManage, s.teamRemoveForm))
+	mux.Handle("POST /settings/teams/members", s.page(station.ActionManage, s.memberForm))
+	mux.Handle("POST /settings/access", s.page(station.ActionManage, s.accessForm))
+	mux.Handle("GET /v1/users", s.api(station.ActionManage, s.listUsers))
+	mux.Handle("POST /v1/users", s.api(station.ActionManage, s.createUser))
+	mux.Handle("PUT /v1/users/{id}", s.api(station.ActionManage, s.updateUser))
+	mux.Handle("DELETE /v1/users/{id}", s.api(station.ActionManage, s.deleteUser))
+	mux.Handle("GET /v1/teams", s.api(station.ActionManage, s.listTeams))
+	mux.Handle("POST /v1/teams", s.api(station.ActionManage, s.createTeam))
+	mux.Handle("DELETE /v1/teams/{id}", s.api(station.ActionManage, s.deleteTeam))
+	mux.Handle("PUT /v1/teams/{id}/members/{user}", s.api(station.ActionManage, s.putMember))
+	mux.Handle("DELETE /v1/teams/{id}/members/{user}", s.api(station.ActionManage, s.putMember))
+	mux.Handle("GET /v1/access", s.api(station.ActionManage, s.listAccess))
+	mux.Handle("PUT /v1/access", s.api(station.ActionManage, s.putAccess))
 	// The API.
 	mux.Handle("GET /v1/devices", s.api(station.ActionView, s.listDevices))
 	// Jams: a prompt on the station, answered by the station's own loop.
@@ -901,6 +921,7 @@ func (s *server) settingsData(r *http.Request, p station.Principal, extra map[st
 	data["RecordsDir"], data["RecordsMaxFile"], data["RecordsMaxTotal"], data["RecordsMaxAge"] =
 		s.recordsDir, humanSize(s.records.MaxFile), humanSize(s.records.MaxTotal), humanAge(s.records.MaxAge)
 	s.modelsData(data)
+	s.teamsData(ctx, p, data)
 	for k, v := range extra {
 		data[k] = v
 	}
@@ -925,7 +946,11 @@ func (s *server) createToken(w http.ResponseWriter, r *http.Request, p station.P
 		s.render(w, "settings", s.settingsData(r, p, map[string]any{"Message": "A token needs a name."}))
 		return
 	}
-	secret, err := s.db.CreateToken(r.Context(), name, r.FormValue("read_only") == "on", p.User)
+	owner := r.FormValue("user")
+	if owner == "" {
+		owner = p.User
+	}
+	secret, err := s.db.CreateToken(r.Context(), name, r.FormValue("read_only") == "on", owner)
 	if err != nil {
 		s.render(w, "settings", s.settingsData(r, p, map[string]any{"Message": err.Error()}))
 		return

@@ -1,8 +1,9 @@
 # Vibium Station: standing rules for coding agents
 
 Vibium Station brokers access to remote devices. It is a set of Go packages
-plus `cmd/station`, a single-player binary anyone can self-host: one owner,
-their own rigs, a password, ideally a tailnet. Roadie (`VibiumDev/roadie`,
+plus `cmd/station`, a binary anyone can self-host: one operator, their
+own rigs, ideally a tailnet, with local users in teams, admins and
+regular users (`docs/specs/teams.md`). Roadie (`VibiumDev/roadie`,
 at `../roadie`) is the first device provider: each Pi with a phone enrolls
 as a rig. Headless and desktop browsers come later, so the model is
 device-neutral from the start.
@@ -25,9 +26,9 @@ device-neutral from the start.
 ## Open source boundaries
 
 - Everything here must make sense for one person running their own Pis. No
-  vendor accounts, email services, billing, multi-tenant users or
-  provider-only code. Multi-customer concerns belong to services that embed
-  these packages.
+  vendor accounts, email services, billing or provider-only code. Local
+  users and teams are in (`docs/specs/teams.md`); multi-customer concerns
+  belong to services that embed these packages.
 - Embeddable: hosted services embed the packages through five small, stable
   interfaces: `Authenticator`, `Authorizer`, `DeviceStore`, `HoldStore`,
   `AuditSink`. Handlers must mount under any path prefix.
@@ -61,8 +62,8 @@ device-neutral from the start.
 
 ## Security rules
 
-- One owner with a password: argon2id hash in the config file
-  (`station passwd`), rate-limited login with lockout, cookies `HttpOnly`
+- Users with passwords: argon2id hashes in the database (`station passwd
+  [login]`; the owner is the first admin), rate-limited login with lockout, cookies `HttpOnly`
   `Secure` `SameSite=Lax`, CSRF tokens on state-changing requests, a strict
   Content Security Policy.
 - Named API tokens stored hashed, optionally read-only. Tokens travel only

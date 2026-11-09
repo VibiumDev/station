@@ -7,8 +7,10 @@ and agents reach the devices through the station's pages and API. The
 station signs every session as a hold grant that the rig checks itself, so
 the rig stays the final gate.
 
-`station` is the single-player binary, which serves one owner and their
-own rigs, lets that owner sign in with a password or a tailnet identity,
+`station` is the self-hosted binary, which serves one operator and their
+own rigs, lets people sign in with a login and a password or a tailnet
+identity, and keeps admins apart from regular users, who see only the
+devices their teams were given ([docs/specs/teams.md](docs/specs/teams.md)),
 and keeps its store in one SQLite file. The packages it is built from
 take an authenticator, an authorizer and stores as interfaces, so a
 hosted service can embed them instead of forking.
@@ -41,7 +43,7 @@ Go 1.27 or newer.
 
 ```bash
 go build ./cmd/station
-./station passwd                      # the owner's password
+./station passwd                      # the owner's password (login: owner)
 ./station                             # LAN mode: https://<your ip>:8443, a self-signed certificate
 ./station --tailnet --allow you@example.com   # tailnet mode: https://station.<tailnet>.ts.net, sign in by identity
 ./station --public station.example.com  # public mode: its own Let's Encrypt certificate on :443, TURN on :3478
@@ -117,7 +119,7 @@ events do today, and what they leave open.
 | Command | What it does |
 |---|---|
 | `station` | Run the station |
-| `station passwd` | Set the owner's password (argon2id, in `config.json`) |
+| `station passwd [login]` | Set a user's password, the owner's by default (argon2id, in the database) |
 | `station enroll` | Print a one-time enrollment code |
 | `station token create NAME [--read-only]`, `token list`, `token revoke NAME` | API tokens |
 | `station key` | The station's key as npub, hex and fingerprint |
@@ -173,7 +175,7 @@ variable in the environment are one more agent model on Settings, named
 | `blob` | Files by their SHA-256 on disk, hashed as they are written |
 | `records` | The Record Store: Blossom's upload, fetch, list and delete, the authorizations the station signs on an agent's behalf, the file event per blob, and retention |
 | `viewer` | The shell: the one viewer page a station and a Roadie both serve, plus the embedded Record Player under `player/` (built from the [record-player](https://github.com/VibiumDev/record-player) repository by `scripts/update-player.sh`) (Roadie's toolbar, settings panel and on-screen keyboard, the MJPEG reader, sound and microphone, input in picture space, WebRTC), told its endpoints by a config and extended by a rig's own extras module |
-| `cmd/station` | The single-player binary |
+| `cmd/station` | The station binary |
 | `cmd/station-probe` | A headless check of any station: token, hold, WebRTC through TURN only, a tap and the screenshot it changes |
 
 ## Security in short

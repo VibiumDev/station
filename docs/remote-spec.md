@@ -46,7 +46,7 @@ The Pi 5 has no hardware H.264 encoder, so Pi hosts are Pi 4s; a Pi 5 would fall
 Non-goals for now:
 
 - Multiple devices per Pi, and several people controlling one device at once (one controller plus one read-only observer is supported).
-- Multiple user accounts in `station`. Teams that need them can embed the packages.
+- Vendor accounts, billing and email in `station`. Local users and teams came later, in `docs/specs/teams.md`.
 - iOS-specific tooling beyond HID input and video.
 - A media server (SFU). Peer-to-peer plus TURN covers a controller plus one observer per device.
 

@@ -276,6 +276,12 @@ iframe.player.full { position: fixed; inset: 0; width: 100%; height: 100%; borde
 /* The grid may take the whole window, however wide, behind a gutter
    that grows with it. */
 .wrap.wide { max-width: none; padding-left: clamp(24px, 4vw, 80px); padding-right: clamp(24px, 4vw, 80px); }
+/* The Teams section: members as chips with a way out, a short password
+   field in a row, and the access grid's selects. */
+.member { display: inline-flex; align-items: center; gap: 4px; margin: 0 8px 4px 0; }
+.member form button.link { font-size: 16px; line-height: 1; padding: 0 2px; }
+input.short { width: 150px; min-height: 32px; padding: 4px 8px; font-size: 13px; }
+table.access select { min-height: 32px; padding: 4px 24px 4px 8px; font-size: 13px; }
 /* A destructive button is held: a bar fills across it for a moment,
    behind its label, and the action goes only when it is full. */
 button.hold { position: relative; overflow: hidden; isolation: isolate; }

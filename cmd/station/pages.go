@@ -305,14 +305,48 @@ var pages = template.Must(template.New("").Funcs(template.FuncMap{"npub": npub, 
 <td data-l="Devices">{{range .Devices}}{{.Title}} <span class="muted">({{.Kind}}{{if .Platform}}, {{platform .Platform}}{{if .OSVersion}} {{.OSVersion}}{{end}}{{end}})</span> {{end}}</td><td data-l="Enrolled">{{.EnrolledAt.Format "Jan 2, 2006"}}</td>
 <td class="act"><form class="inline" method="post" action="/settings/rigs/remove"><input type="hidden" name="csrf" value="{{$.CSRF}}"><input type="hidden" name="rig" value="{{.ID}}"><button class="small hold" type="button" data-hold title="Hold to remove">Remove</button></form></td></tr>{{end}}</tbody></table></div>{{end}}
 
+<h2 class="h2" id="teams">Users {{template "help" "users"}}</h2>
+<p class="helptext" id="help-users" hidden>Who can sign in. An admin sees every device, jam and record and manages the station here; a regular user sees the devices their teams were given, and the jams and records made on them, and nothing until then. A new user gets a first password here; <code>station passwd login</code> sets one from the machine. Disabling a user ends their sign-ins and tokens and keeps their history; removing them deletes their tokens too. You cannot take your own admin rights or sign-in away.</p>
+{{if .Users}}<div class="tablewrap"><table><thead><tr><th>Login</th><th>Name</th><th>Role</th><th>Teams</th><th>Last sign-in</th><th></th></tr></thead><tbody>
+{{range .Users}}<tr>
+<td data-l="Login"><b>{{.Login}}</b>{{if .Disabled}} <span class="muted">disabled</span>{{end}}{{if .Self}} <span class="muted">you</span>{{end}}</td>
+<td data-l="Name">{{.Name}}</td>
+<td data-l="Role">{{if .Admin}}admin{{else}}regular{{end}}</td>
+<td data-l="Teams">{{if .Admin}}<span class="muted">all</span>{{else if .TeamNames}}{{range $i, $t := .TeamNames}}{{if $i}}, {{end}}{{$t}}{{end}}{{else}}<span class="muted">none</span>{{end}}</td>
+<td data-l="Last sign-in">{{if .LastLogin.IsZero}}<span class="muted">never</span>{{else}}{{.LastLogin.Local.Format "Jan 2 15:04"}}{{end}}</td>
+<td class="act">{{if not .Self}}<form class="inline" method="post" action="/settings/users/role"><input type="hidden" name="csrf" value="{{$.CSRF}}"><input type="hidden" name="user" value="{{.ID}}"><input type="hidden" name="admin" value="{{if .Admin}}0{{else}}1{{end}}"><button class="small" type="submit">{{if .Admin}}Make regular{{else}}Make admin{{end}}</button></form> <form class="inline" method="post" action="/settings/users/disable"><input type="hidden" name="csrf" value="{{$.CSRF}}"><input type="hidden" name="user" value="{{.ID}}"><input type="hidden" name="disabled" value="{{if .Disabled}}0{{else}}1{{end}}"><button class="small" type="submit">{{if .Disabled}}Enable{{else}}Disable{{end}}</button></form> {{end}}<form class="inline" method="post" action="/settings/users/password"><input type="hidden" name="csrf" value="{{$.CSRF}}"><input type="hidden" name="user" value="{{.ID}}"><input class="short" type="password" name="password" placeholder="new password" aria-label="New password for {{.Login}}" autocomplete="new-password"><button class="small" type="submit">Set</button></form>{{if not .Self}} <form class="inline" method="post" action="/settings/users/remove"><input type="hidden" name="csrf" value="{{$.CSRF}}"><input type="hidden" name="user" value="{{.ID}}"><button class="small hold" type="button" data-hold title="Hold to remove">Remove</button></form>{{end}}</td>
+</tr>{{end}}</tbody></table></div>{{end}}
+<form class="card modelform" method="post" action="/settings/users"><input type="hidden" name="csrf" value="{{.CSRF}}">
+<div class="row"><input type="text" name="login" placeholder="login, such as ann@example.com" aria-label="Login" autocomplete="off" autocapitalize="none" spellcheck="false" required> <input type="text" name="name" placeholder="name" aria-label="Name" autocomplete="off"></div>
+<div class="row"><input type="password" name="password" placeholder="first password, 8 characters or more" aria-label="First password" autocomplete="new-password" required> <label class="check"><input type="checkbox" name="admin"> admin</label> <input type="submit" value="Add user"></div></form>
+
+<h2 class="h2">Teams {{template "help" "teams"}}</h2>
+<p class="helptext" id="help-teams" hidden>A team is a group of users; devices are shared with teams, under Device access. A user may be in several teams, and admins are in every team without being listed.</p>
+{{if .Teams}}<div class="tablewrap"><table><thead><tr><th>Team</th><th>Members</th><th></th></tr></thead><tbody>
+{{range .Teams}}<tr>
+<td data-l="Team"><b>{{.Name}}</b><span class="sub">{{.ID}}</span></td>
+<td data-l="Members">{{range .Members}}<span class="member">{{.Login}} <form class="inline" method="post" action="/settings/teams/members"><input type="hidden" name="csrf" value="{{$.CSRF}}"><input type="hidden" name="team" value="{{$.ID}}"><input type="hidden" name="user" value="{{.ID}}"><input type="hidden" name="in" value="0"><button class="link" type="submit" title="Take {{.Login}} out of the team" aria-label="Take {{.Login}} out of the team">×</button></form></span> {{end}}{{if not .Members}}<span class="muted">nobody yet</span>{{end}}{{if .Joinable}} <form class="inline" method="post" action="/settings/teams/members"><input type="hidden" name="csrf" value="{{$.CSRF}}"><input type="hidden" name="team" value="{{.ID}}"><select name="user" aria-label="Add a member to {{.Name}}">{{range .Joinable}}<option value="{{.ID}}">{{.Login}}</option>{{end}}</select> <button class="small" type="submit">Add</button></form>{{end}}</td>
+<td class="act"><form class="inline" method="post" action="/settings/teams/remove"><input type="hidden" name="csrf" value="{{$.CSRF}}"><input type="hidden" name="team" value="{{.ID}}"><button class="small hold" type="button" data-hold title="Hold to remove">Remove</button></form></td>
+</tr>{{end}}</tbody></table></div>{{end}}
+<form class="row" method="post" action="/settings/teams"><input type="hidden" name="csrf" value="{{.CSRF}}">
+<input type="text" name="name" placeholder="team name" aria-label="Team name" required> <input type="submit" value="Add team"></form>
+
+<h2 class="h2">Device access {{template "help" "access"}}</h2>
+<p class="helptext" id="help-access" hidden>What each team may do with each device. Watch opens the watching page and shows the device's jams and records; drive takes the device from the viewer too; jam starts jams and drives it with agents over the API as well. Nothing is shared until it is set here, and a change saves at once.</p>
+{{if and .Teams .AccessRows}}<div class="tablewrap"><table class="access"><thead><tr><th>Device</th>{{range .Teams}}<th>{{.Name}}</th>{{end}}</tr></thead><tbody>
+{{range .AccessRows}}{{$row := .}}<tr><td data-l="Device"><b>{{.Device.Title}}</b><span class="sub">{{.Device.ID}}</span></td>
+{{range .Cells}}<td data-l="{{.Team.Name}}"><form class="inline" method="post" action="/settings/access"><input type="hidden" name="csrf" value="{{$.CSRF}}"><input type="hidden" name="device" value="{{$row.Device.ID}}"><input type="hidden" name="team" value="{{.Team.ID}}"><select name="level" data-submit aria-label="{{.Team.Name}} on {{$row.Device.Title}}">{{$cell := .}}{{range $.Levels}}<option value="{{.}}"{{if eq . $cell.Level}} selected{{end}}>{{if .}}{{.}}{{else}}none{{end}}</option>{{end}}</select></form></td>{{end}}
+</tr>{{end}}</tbody></table></div>{{else}}<p class="muted">{{if not .Teams}}Make a team, and the devices appear here to share.{{else}}No devices yet.{{end}}</p>{{end}}
+
 <h2 class="h2">API tokens {{template "help" "tokens"}}</h2>
 <p class="helptext" id="help-tokens" hidden>A token lets an agent or a script use this station without the password, sent as <code>Authorization: Bearer &lt;token&gt;</code>. A control token can hold a device and drive it; a read-only token can only watch. The secret is shown once, when the token is made; the station keeps only a hash of it. Revoke stops the token at once.</p>
 {{if .NewToken}}<div class="card featured">Token <b>{{.NewTokenName}}</b>, shown once:<p class="secret">{{.NewToken}}</p></div>{{end}}
-{{if .Tokens}}<div class="tablewrap"><table><thead><tr><th>Name</th><th>Access</th><th>Created</th><th>Last used</th><th></th></tr></thead><tbody>
-{{range .Tokens}}<tr><td data-l="Name"><b>{{.Name}}</b></td><td data-l="Access">{{if .ReadOnly}}read-only{{else}}control{{end}}</td><td data-l="Created">{{.CreatedAt.Format "Jan 2, 2006"}}</td>
+{{if .Tokens}}<div class="tablewrap"><table><thead><tr><th>Name</th><th>User</th><th>Access</th><th>Created</th><th>Last used</th><th></th></tr></thead><tbody>
+{{range .Tokens}}<tr><td data-l="Name"><b>{{.Name}}</b></td><td data-l="User">{{with index $.TokenUsers .UserID}}{{.}}{{else}}owner{{end}}</td><td data-l="Access">{{if .ReadOnly}}read-only{{else}}control{{end}}</td><td data-l="Created">{{.CreatedAt.Format "Jan 2, 2006"}}</td>
 <td data-l="Last used">{{if .UsedAt.IsZero}}<span class="muted">never</span>{{else}}{{.UsedAt.Format "Jan 2 15:04"}}{{end}}</td>
 <td class="act"><form class="inline" method="post" action="/settings/tokens/revoke"><input type="hidden" name="csrf" value="{{$.CSRF}}"><input type="hidden" name="name" value="{{.Name}}"><button class="small hold" type="button" data-hold title="Hold to revoke">Revoke</button></form></td></tr>{{end}}</tbody></table></div>{{end}}
 <form class="row" method="post" action="/settings/tokens"><input type="hidden" name="csrf" value="{{.CSRF}}">
+<select name="user" aria-label="For which user">{{range .Users}}<option value="{{.ID}}"{{if .Self}} selected{{end}}>{{.Login}}</option>{{end}}</select>
 <input type="text" name="name" placeholder="name" aria-label="Token name" required> <label class="check"><input type="checkbox" name="read_only"> read-only</label>
 <input type="submit" value="Create token"></form>
 

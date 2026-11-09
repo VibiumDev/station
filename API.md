@@ -64,8 +64,8 @@ device gets 409 until the first's grant lapses.
 The viewer pages use `"watch": true` for everything but the Hold
 button: the driving page opened on a free device takes the device,
 opened on a held device it watches, and only the button takes a held
-device (from an agent at once; a person's hold is recalled the same
-way, since there is one owner). The watching page never asks for
+device (from an agent at once; a person at `drive` on the device
+recalls another person the same way, and admins alone recall admins). The watching page never asks for
 control: on a held device it is a seat watching the holder, and on a
 free device it holds the device view only, a hold that shows the
 picture and that anyone asking for control, a person or an agent,
@@ -324,6 +324,36 @@ including a relay-only run whose media did not go through TURN.
 `-insecure` accepts a LAN station's self-signed certificate; on a LAN,
 relay-only fails by design, since TURN refuses private peers.
 
+## Users and teams
+
+People sign in with a login and a password, or by a tailnet identity.
+Admins see and manage everything; a regular user sees the devices a
+team of theirs was given, at that team's level, and the jams and
+records made on them, plus their own. The levels are `watch` (the
+watching page, the device's jams and records), `drive` (the viewer with
+input; includes watch) and `jam` (jams and agents over the API; includes
+drive). Nothing is shared until an admin sets a level. Tokens act as the
+user who owns them and never manage.
+
+| Method and path | What it does |
+|---|---|
+| `GET /v1/users` | Every user: `id`, `login`, `name`, `admin`, `disabled`, `created`, `last_login`, `teams` |
+| `POST /v1/users` | `{"login", "name", "admin", "password"}`: a new user, 201 |
+| `PUT /v1/users/{id}` | Any of `name`, `admin`, `disabled`, `password`; an admin cannot take their own rights or sign-in away |
+| `DELETE /v1/users/{id}` | Remove a user and their tokens |
+| `GET /v1/teams` | Every team with its `members` (user ids) |
+| `POST /v1/teams` | `{"name"}`: a new team, 201 |
+| `DELETE /v1/teams/{id}` | Remove a team; its memberships and access go with it |
+| `PUT /v1/teams/{id}/members/{user}` | Put a user in the team |
+| `DELETE /v1/teams/{id}/members/{user}` | Take them out |
+| `GET /v1/access` | Every team's level on every device: `device`, `team`, `level` |
+| `PUT /v1/access` | `{"device", "team", "level"}`: set a level; `""` or `none` takes it away |
+
+All of these need an admin signed in; a token, even an admin's, gets 403.
+`GET /v1/devices` carries each device's `level` for the caller, and
+`GET /v1/devices`, `GET /v1/jams` and `GET /v1/records` answer with what
+the caller may see.
+
 ## Pages
 
 | Page | What the owner does |
@@ -339,7 +369,8 @@ relay-only fails by design, since TURN refuses private peers.
 | `/records/{sha256}/thumb.jpg` | A recording's last frame, from its unpacked copy, or a screenshot itself; the same readers as the file |
 | `/records/{sha256}/files/{path}` | One file out of a recording's unpacked copy, such as `trace.trace` or `resources/<frame>`; the same readers as the file |
 | `/records/{sha256}/play` | A recording in the embedded [Record Player](https://github.com/VibiumDev/record-player), framed under the station's own bar with the golden star, the record's tags to edit, Download and a full-page link; the player is served by the station at `/viewer/player/app/?record=<sha256>.zip` and fetches the file with the browser's own session. In the frame it runs with `chrome=hidden`, without its own logo, title and theme switch, and paints with the station's colors and theme, which it reads from the framing page; `?full` is the same frame filling the window, without the bar |
-| `/settings` | The AI models and the Jams switch, enrollment codes, rigs, API tokens, the password, the network, the Record Store's room and limits; Remove and Revoke are held for a moment rather than clicked |
+| `/account` | Who you are signed in as, your role and teams, and a form for a new password |
+| `/settings` | The AI models and the Jams switch, enrollment codes, rigs, API tokens, Users, Teams and Device access (who signs in and what each team may do with each device), the password, the network, the Record Store's room and limits; Remove and Revoke are held for a moment rather than clicked |
 
 The viewer's files are at `/viewer/shell.js`, `/viewer/shell.css`,
 `/viewer/webrtc.js` and the audio worklets; a Roadie serves the same
