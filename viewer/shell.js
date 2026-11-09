@@ -1356,8 +1356,9 @@
     if (!station) return;
     var watching = hold && observer && role === 'watch';
     if (recNote) recNote.style.display = cfg.recorded && hold && !released ? 'inline-block' : 'none';
-    holdStatus.textContent = watching ? 'watching ' + hold.subject : '';
-    holdStatus.title = watching ? 'Watching ' + hold.subject + '’s session' + (watchOnly ? '' : '; press Hold to take the device') : '';
+    var alone = watchOnly && hold && !observer;  // a watcher holding a free device, view only
+    holdStatus.textContent = watching ? 'watching ' + hold.subject : alone ? 'watching' : '';
+    holdStatus.title = watching ? 'Watching ' + hold.subject + '’s session' + (watchOnly ? '' : '; press Hold to take the device') : alone ? 'Watching; nobody is driving the device' : '';
     takeBtn.style.display = role === 'watch' && !watchOnly ? 'flex' : 'none';
     releaseBtn.style.display = hold && !observer && !watchOnly ? 'flex' : 'none';
     releaseBtn.title = hold && !observer ? 'Release the device (you hold it)' : 'Release the device';

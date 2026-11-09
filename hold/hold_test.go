@@ -324,17 +324,20 @@ func TestWatch(t *testing.T) {
 	ctx := context.Background()
 	// A watch request on a free device: with control among the scopes it
 	// takes the device, as a page opening on a free device does; view
-	// only, it holds nothing and learns the device is free.
-	if _, err := f.m.Take(ctx, Request{DeviceID: "rig_1/phone", Subject: "guest", Watch: true}); !errors.Is(err, ErrFree) {
-		t.Fatalf("watching a free device: %v, want ErrFree", err)
-	}
-	if _, err := f.db.Current(ctx, "rig_1/phone"); !errors.Is(err, station.ErrNoHold) {
-		t.Fatalf("a watcher took a hold: %v", err)
+	// only, it holds the device view only, so the picture shows, and
+	// anyone asking for control takes it over at once.
+	look, err := f.m.Take(ctx, Request{DeviceID: "rig_1/phone", Subject: "guest", Watch: true})
+	if err != nil || look.Observer || Controls(look.Hold.Scopes) || look.Hold.Subject != "guest" {
+		t.Fatalf("watching a free device: %+v %v", look, err)
 	}
 	drive, err := f.m.Take(ctx, Request{DeviceID: "rig_1/phone", Subject: "owner", Scopes: []station.Scope{station.ScopeInput}, Recall: true, Watch: true})
-	if err != nil || drive.Observer || !drive.Grant.HasScope(station.ScopeInput) {
-		t.Fatalf("driving a free device: %+v %v", drive, err)
+	if err != nil || drive.Observer || !drive.Grant.HasScope(station.ScopeInput) || drive.Hold.ID == look.Hold.ID || drive.Hold.Seq != look.Hold.Seq+1 {
+		t.Fatalf("driving a watched device: %+v %v", drive, err)
 	}
+	if len(f.revoked) != 1 || f.revoked[0] != look.Hold.ID || f.m.Waiting("rig_1/phone") != 0 {
+		t.Errorf("the watcher's hold should end and nobody wait: revoked %v, waiting %d", f.revoked, f.m.Waiting("rig_1/phone"))
+	}
+	taken := len(f.revoked)
 	// The same request from someone else while the owner holds it: a
 	// seat watching, not a recall and not a place in line, even with
 	// Recall set.
@@ -345,7 +348,7 @@ func TestWatch(t *testing.T) {
 	if !watch.Observer || watch.Hold.ID != drive.Hold.ID || watch.Grant.HasScope(station.ScopeInput) || watch.Grant.Subject != "owner" {
 		t.Errorf("watch: %+v", watch)
 	}
-	if len(f.revoked) != 0 || f.m.Waiting("rig_1/phone") != 0 {
+	if len(f.revoked) != taken || f.m.Waiting("rig_1/phone") != 0 {
 		t.Errorf("watching changed the hold: revoked %v, waiting %d", f.revoked, f.m.Waiting("rig_1/phone"))
 	}
 	// The holder's own watch request is a refresh on their hold.
@@ -355,7 +358,27 @@ func TestWatch(t *testing.T) {
 	}
 	// Without Watch, the guest's request recalls as before.
 	take, err := f.m.Take(ctx, Request{DeviceID: "rig_1/phone", Subject: "guest", Scopes: []station.Scope{station.ScopeInput}, Recall: true})
-	if err != nil || take.Observer || take.Hold.ID == drive.Hold.ID || len(f.revoked) != 1 {
+	if err != nil || take.Observer || take.Hold.ID == drive.Hold.ID || len(f.revoked) != taken+1 {
 		t.Errorf("recall after watching: %+v %v, revoked %v", take, err, f.revoked)
+	}
+}
+
+// A watcher never stands in an agent's way: an agent with no recall takes
+// a device a watcher holds at once, without a place in line, and the
+// watcher asking again lands as the agent's observer.
+func TestWatcherGivesWay(t *testing.T) {
+	f := setup(t)
+	ctx := context.Background()
+	look, err := f.m.Take(ctx, Request{DeviceID: "rig_1/phone", Subject: "guest", Watch: true})
+	if err != nil || Controls(look.Hold.Scopes) {
+		t.Fatalf("watching: %+v %v", look, err)
+	}
+	agent, err := f.m.Take(ctx, Request{DeviceID: "rig_1/phone", Subject: "token:ci", Scopes: []station.Scope{station.ScopeInput}})
+	if err != nil || agent.Observer || agent.Hold.Subject != "token:ci" {
+		t.Fatalf("an agent should take a watched device at once: %+v %v", agent, err)
+	}
+	again, err := f.m.Take(ctx, Request{DeviceID: "rig_1/phone", Subject: "guest", Watch: true})
+	if err != nil || !again.Observer || again.Hold.ID != agent.Hold.ID {
+		t.Fatalf("the watcher should observe the agent: %+v %v", again, err)
 	}
 }

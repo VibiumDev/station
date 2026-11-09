@@ -61,15 +61,17 @@ device sitting free at that time goes to it on the next tick.
 One observer at a time: a second view-only subject asking for a held
 device gets 409 until the first's grant lapses.
 
-The viewer page uses `"watch": true` for everything but its Hold button,
-so one link serves the driver and the watcher: opening it on a free
-device takes the device, opening it on a held device watches, and only
-the button takes a held device (from an agent at once; a person's hold
-is recalled the same way, since there is one owner). A page that
-watches a device nobody holds holds nothing itself, which is what lets
-an agent take the device while someone follows along; the page looks
-again every five seconds and shows the next holder's picture.
-`?watch=1` opens the page as a watcher that never asks for control.
+The viewer pages use `"watch": true` for everything but the Hold
+button: the driving page opened on a free device takes the device,
+opened on a held device it watches, and only the button takes a held
+device (from an agent at once; a person's hold is recalled the same
+way, since there is one owner). The watching page never asks for
+control: on a held device it is a seat watching the holder, and on a
+free device it holds the device view only, a hold that shows the
+picture and that anyone asking for control, a person or an agent,
+takes over at once with no recall and no place in line, after which the
+watcher follows the new holder. The Devices page shows such a device as
+available and watched.
 
 A relayed request (`stream`, `screenshot`, `health`, `audio`, `hid`,
 `mic`, `bidi`, `extras.js`, `api/...`) rides on a hold, which is the

@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/VibiumDev/station"
+	"github.com/VibiumDev/station/hold"
 	"github.com/VibiumDev/station/jam"
 )
 
@@ -150,7 +151,7 @@ func (m *jams) start(ctx context.Context, p station.Principal, prompt, deviceID,
 	}
 	// A jam does not wait in line: a held device is said so up front,
 	// before Vibium is started for nothing.
-	if h, err := m.s.db.Current(ctx, dev.ID); err == nil {
+	if h, err := m.s.db.Current(ctx, dev.ID); err == nil && hold.Controls(h.Scopes) {
 		if id := jamOfSubject(h.Subject); id != "" {
 			return station.Jam{}, errors.New("jam " + id + " still holds " + dev.ID + "; stop it first, or wait for it to end")
 		}

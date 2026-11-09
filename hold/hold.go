@@ -67,9 +67,11 @@ type Request struct {
 	// person recalls; an agent without it waits in line.
 	Recall bool
 	// Watch asks for a seat watching whoever holds the device instead of
-	// taking it or waiting in line, whatever scopes were asked for; a
-	// free device is taken when the scopes include control, and is
-	// ErrFree when they do not, so a watcher never holds a device alone.
+	// taking it or waiting in line, whatever scopes were asked for. A
+	// free device is taken when the scopes include control, and held
+	// view only when they do not: a hold that shows the picture and that
+	// anyone asking for control takes over at once, so a watcher never
+	// stands in the way.
 	Watch bool
 }
 
@@ -85,8 +87,9 @@ type Result struct {
 // ErrNotHolder says the subject does not hold the hold.
 var ErrNotHolder = errors.New("not the holder of this hold")
 
-// ErrFree says nobody holds the device a Watch request asked to watch.
-var ErrFree = errors.New("nobody holds the device")
+// Controls says whether scopes include control of the device; a hold
+// without it only watches, and gives way to one that has it.
+func Controls(scopes []station.Scope) bool { return controls(scopes) }
 
 func (m *Manager) now() time.Time {
 	if m.Now != nil {
@@ -158,9 +161,6 @@ func (m *Manager) Take(ctx context.Context, req Request) (Result, error) {
 	cur, err := m.Holds.Current(ctx, dev.ID)
 	switch {
 	case errors.Is(err, station.ErrNoHold):
-		if req.Watch && !controls(scopes) {
-			return Result{}, ErrFree
-		}
 		// Free: a new hold, unless someone else's turn in line has come.
 		m.mu.Lock()
 		m.init()
@@ -187,6 +187,13 @@ func (m *Manager) Take(ctx context.Context, req Request) (Result, error) {
 	case cur.Subject == req.Subject:
 		// The holder wants more than the hold has: a new hold.
 		if err := m.end(ctx, cur, "replaced by its holder", false); err != nil {
+			return Result{}, err
+		}
+	case controls(scopes) && !controls(cur.Scopes):
+		// A watcher holds it, view only: control takes the device at
+		// once, no recall and no line, and the watcher's page lands
+		// back as an observer of the new holder.
+		if err := m.end(ctx, cur, "taken from a watcher by "+req.Subject, false); err != nil {
 			return Result{}, err
 		}
 	case controls(scopes) && !req.Watch && !req.Recall:

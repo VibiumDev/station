@@ -410,13 +410,14 @@ type rigView struct {
 }
 
 type holdView struct {
-	JamID   string    `json:"jam,omitempty"` // when a jam's token holds the device
-	ID      string    `json:"id"`
-	Seq     uint64    `json:"seq"`
-	Subject string    `json:"subject"`
-	Scopes  []string  `json:"scopes"`
-	Since   time.Time `json:"since"`
-	Expires time.Time `json:"expires"`
+	JamID    string    `json:"jam,omitempty"`      // when a jam's token holds the device
+	Watching bool      `json:"watching,omitempty"` // the hold only watches, and gives way to anyone asking for control
+	ID       string    `json:"id"`
+	Seq      uint64    `json:"seq"`
+	Subject  string    `json:"subject"`
+	Scopes   []string  `json:"scopes"`
+	Since    time.Time `json:"since"`
+	Expires  time.Time `json:"expires"`
 }
 
 func (s *server) devices(ctx context.Context) ([]deviceView, error) {
@@ -432,7 +433,7 @@ func (s *server) devices(ctx context.Context) ([]deviceView, error) {
 			v := deviceView{ID: d.ID, Name: d.Name(), Kind: d.Kind, Caps: d.Caps, Shortcuts: d.Shortcuts, Input: d.Input, Extras: d.Extras,
 				Label: d.Label, Platform: d.Platform, Model: d.Model, OSVersion: d.OSVersion, Title: d.Title(), Rig: rigView{ID: rg.ID, Name: rg.Name, Npub: npub(rg.PubKey)}, Online: online, Recorded: recorded}
 			if l, err := s.db.Current(ctx, d.ID); err == nil {
-				v.Hold = &holdView{ID: l.ID, Seq: l.Seq, Subject: l.Subject, Scopes: station.ScopeStrings(l.Scopes), Since: l.CreatedAt, Expires: l.ExpiresAt, JamID: jamOfSubject(l.Subject)}
+				v.Hold = &holdView{ID: l.ID, Seq: l.Seq, Subject: l.Subject, Scopes: station.ScopeStrings(l.Scopes), Since: l.CreatedAt, Expires: l.ExpiresAt, JamID: jamOfSubject(l.Subject), Watching: !hold.Controls(l.Scopes)}
 			}
 			v.Waiting = s.holds.Waiting(d.ID)
 			out = append(out, v)
@@ -504,8 +505,9 @@ func (s *server) holdResponse(id string, res hold.Result) map[string]any {
 // A person recalls a device someone else holds; an agent gets a place in
 // line (202 with its position), and ?wait=SECONDS waits there for the
 // hold, up to 30 s a call. With "watch": true a held device is watched
-// instead, whoever asks, and a free one is taken only when the scopes
-// include control; view only, it is 409 with "free": true.
+// instead, whoever asks, and a free one is taken when the scopes
+// include control, or held view only when they do not, a hold anyone
+// asking for control takes over at once.
 func (s *server) takeHold(w http.ResponseWriter, r *http.Request, p station.Principal) {
 	var body struct {
 		Scopes []string `json:"scopes"`
@@ -532,11 +534,6 @@ func (s *server) takeHold(w http.ResponseWriter, r *http.Request, p station.Prin
 		return
 	case errors.Is(err, hold.ErrWatched):
 		apiError(w, http.StatusConflict, "someone is already watching this device")
-		return
-	case errors.Is(err, hold.ErrFree):
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusConflict)
-		json.NewEncoder(w).Encode(map[string]any{"error": "nobody holds the device", "free": true})
 		return
 	case errors.As(err, &queued):
 		wait, _ := strconv.Atoi(r.URL.Query().Get("wait"))
