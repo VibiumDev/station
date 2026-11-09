@@ -160,6 +160,12 @@ func (r *Rig) announce(e *StationEntry, st nostr.PubKey) ([]nostr.Event, error) 
 		if d.Extras != "" {
 			tags = append(tags, nostr.Tag{"extras", d.Extras})
 		}
+		// What the device is, for whoever reads the event on its own.
+		for _, t := range [][2]string{{"label", d.Label}, {"platform", d.Platform}, {"model", d.Model}, {"os", d.OSVersion}} {
+			if t[1] != "" {
+				tags = append(tags, nostr.Tag{t[0], t[1]})
+			}
+		}
 		dev := nostr.Event{Kind: token.KindDeviceAnnounce, CreatedAt: ev.CreatedAt, Tags: tags}
 		if err := dev.Sign(r.Key); err != nil {
 			return nil, err

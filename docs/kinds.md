@@ -18,7 +18,7 @@ treat each one correctly if the store ever backs one.
 | 17700 | replaceable | Rig announcement: name, devices | Rig | Newest per rig |
 | 27700 | ephemeral | Tunnel hello: the signed challenge | Rig | Never |
 | 24242 | ephemeral | Blossom authorization (BUD-01): upload, get, list or delete | Station, on an agent's behalf, or Rig | Never |
-| 37700 | addressable, `d` = device id | Device announcement: kind, capabilities, device key | Rig | Newest per device |
+| 37700 | addressable, `d` = device id | Device announcement: kind, capabilities, device key, and `label`, `platform`, `model` and `os` tags when the rig knows them | Rig | Newest per device |
 
 Every event names its parties in `p` tags: the station, the rig and, when
 the device has a key, the device. Station's own tags are single words.
