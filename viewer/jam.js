@@ -73,6 +73,7 @@
       var total = (parseInt(g.dataset.total, 10) || 10) * 1000;
       var left = g.querySelector('.left'), bar = g.querySelector('.bar span');
       g.hidden = false;
+      g.scrollIntoView({block: 'center', behavior: 'smooth'});
       clearInterval(timer);
       function tick() {
         var ms = until - Date.now();

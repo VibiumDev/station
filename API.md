@@ -264,7 +264,7 @@ ends the jam. While Jams is off, every path here answers 404.
 | `POST /v1/jams/{id}/turns` | `{"prompt": ...}`: a follow-up on an open jam, one still running or whose last result was `inconclusive` or `not_completed`, taken up once the current prompt has its result, and answered in words when it asks nothing of the device; 409 when the jam has ended or a prompt is already waiting |
 | `GET /v1/jams/{id}/events` | The transcript as server-sent events, each with `id` (the sequence number), `event` (the kind) and `data` (the event), from the start or after `?after=<seq>` or `Last-Event-ID`; a running jam streams on until its `end`, a finished one replays and closes |
 | `POST /v1/jams/{id}/stop` | Ends the jam, which releases the device |
-| `POST /v1/jams/{id}/keep` | Keeps a jam open through the ten seconds after a settled result, for a follow-up; `kept` says whether it was in that moment |
+| `POST /v1/jams/{id}/keep` | Keeps a jam open through the fifteen seconds after a settled result, for a follow-up; `kept` says whether it was in that moment |
 
 A jam is `running` until it ends `done` (it delivered at least one
 result), `stopped` or `failed`, with `took` saying whether the model
@@ -283,8 +283,8 @@ unless a follow-up or `keep` arrives first; sent to watchers, not kept
 in the transcript), `kept` (someone kept it open) and `end`, whose
 text carries the reason when the jam failed or was stopped. A jam ends
 on its own when a result settles the prompt, `passed`, `failed` or
-`completed`: at once when nobody follows its events, and ten seconds
-later when someone does, who can send a follow-up or `keep` in that
+`completed`: at once when nobody follows its events, and fifteen
+seconds later when someone does, who can send a follow-up or `keep` in that
 time. It also ends after thirty minutes, a hundred actions, or five
 minutes without a follow-up on an `inconclusive` or `not_completed`
 result, or a kept one, which stay open for a person to look and follow

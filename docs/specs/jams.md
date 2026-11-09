@@ -134,8 +134,8 @@ ended starts a new one.
 A settled result, passed, failed or completed, ends the jam and frees
 the device, since whoever asked may not be watching. Someone who is,
 with the jam's page open, may disagree with the result, so for them
-the jam ends ten seconds later, under a bar that runs down on the
-page, and a follow-up or Keep it open in that time holds the jam open
+the jam ends fifteen seconds later, under a bar that runs down on
+the page, and a follow-up or Keep it open in that time holds the jam open
 as an open result would. An inconclusive check or an errand not
 completed wants a person, so the jam stays open for five minutes for
 someone to look and follow up. A

@@ -58,7 +58,7 @@ func (lj *liveJam) watched() bool {
 const (
 	jamTimeLimit  = 30 * time.Minute
 	jamMaxActions = 100
-	jamGrace      = 10 * time.Second
+	jamGrace      = 15 * time.Second
 	jamMaxPrompt  = 4000
 )
 

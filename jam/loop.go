@@ -54,7 +54,7 @@ const (
 	DefaultMaxActions = 100
 	DefaultTimeLimit  = 30 * time.Minute
 	DefaultIdleWait   = 5 * time.Minute
-	DefaultGrace      = 10 * time.Second
+	DefaultGrace      = 15 * time.Second
 	KeptScreenshots   = 2 // older ones are detached from the conversation
 	MaxText           = 16000
 	callTimeout       = 90 * time.Second
