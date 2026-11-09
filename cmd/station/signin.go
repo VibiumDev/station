@@ -18,8 +18,12 @@ import (
 // way in is nobody yet, so each checks the session and the CSRF token
 // itself.
 
+// safeNext is where to go after signing in: a path on this station, or
+// the front page. Anything a browser could read as another host is
+// refused: a scheme, a protocol-relative "//", a backslash (which
+// browsers turn into a slash), and line breaks.
 func safeNext(next string) string {
-	if next == "" || !strings.HasPrefix(next, "/") || strings.HasPrefix(next, "//") {
+	if next == "" || !strings.HasPrefix(next, "/") || strings.HasPrefix(next, "//") || strings.ContainsAny(next, "\\\r\n\x00") {
 		return "/"
 	}
 	return next

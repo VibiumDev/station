@@ -549,7 +549,7 @@ func (s *Store) mayRead(ctx context.Context, b station.Blob, p *station.Principa
 	if b.Public {
 		return true
 	}
-	if p != nil {
+	if p != nil && (p.Device == "" || p.Device == b.DeviceID) {
 		if p.Admin || p.Subject == b.Uploader {
 			return true
 		}

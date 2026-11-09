@@ -268,6 +268,41 @@ func (s *server) handler() http.Handler {
 
 func deviceID(r *http.Request) string { return r.PathValue("rig") + "/" + r.PathValue("name") }
 
+// mayRecall says whether a principal takes a held device at once rather
+// than waiting in line: a person does, as people recall agents and each
+// other, but an admin's hold is recalled by admins alone, and a token
+// never recalls.
+func (s *server) mayRecall(ctx context.Context, p station.Principal, deviceID string) bool {
+	if !person(p) {
+		return false
+	}
+	if p.Manages() {
+		return true
+	}
+	cur, err := s.db.Current(ctx, deviceID)
+	if err != nil {
+		return true // nobody to recall from
+	}
+	return !s.subjectIsAdmin(ctx, cur.Subject)
+}
+
+// subjectIsAdmin says whether a hold's subject is an admin: a login of
+// one, or a token acting as one.
+func (s *server) subjectIsAdmin(ctx context.Context, subject string) bool {
+	if name, ok := strings.CutPrefix(subject, "token:"); ok {
+		tokens, _ := s.db.Tokens(ctx)
+		for _, t := range tokens {
+			if t.Name == name {
+				u, err := s.auth.tokenUser(ctx, t)
+				return err == nil && u.Admin
+			}
+		}
+		return false
+	}
+	u, err := s.db.UserByLogin(ctx, subject)
+	return err == nil && u.Admin
+}
+
 // routeDevice is the device a route names, "" for one about no device
 // in particular: every device route is authorized against its device
 // before its handler runs, whatever the handler checks besides.
@@ -595,7 +630,7 @@ func (s *server) takeHold(w http.ResponseWriter, r *http.Request, p station.Prin
 		apiError(w, http.StatusForbidden, "this token may only view")
 		return
 	}
-	res, err := s.holds.Take(r.Context(), hold.Request{DeviceID: id, Subject: p.Subject, Scopes: scopes, Recall: person(p), Watch: body.Watch})
+	res, err := s.holds.Take(r.Context(), hold.Request{DeviceID: id, Subject: p.Subject, Scopes: scopes, Recall: s.mayRecall(r.Context(), p, id), Watch: body.Watch})
 	var queued *hold.Queued
 	switch {
 	case errors.Is(err, station.ErrNotFound):

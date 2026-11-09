@@ -505,3 +505,16 @@ func TestNewBackupCodes(t *testing.T) {
 		t.Error("the new password is not kept")
 	}
 }
+
+// Where to go after signing in is a path here, never another host.
+func TestSafeNext(t *testing.T) {
+	for _, c := range []struct{ in, want string }{
+		{"", "/"}, {"/", "/"}, {"/jams", "/jams"}, {"/records?q=a&page=2", "/records?q=a&page=2"},
+		{"//evil.example", "/"}, {"/\\evil.example", "/"}, {"https://evil.example/", "/"}, {"evil.example", "/"},
+		{"/jams\r\nSet-Cookie: x=y", "/"}, {"/\x00", "/"}, {"\\\\evil.example", "/"},
+	} {
+		if got := safeNext(c.in); got != c.want {
+			t.Errorf("safeNext(%q) = %q, want %q", c.in, got, c.want)
+		}
+	}
+}

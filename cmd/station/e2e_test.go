@@ -619,3 +619,58 @@ func TestCookieFlagsAndOrigin(t *testing.T) {
 		t.Errorf("cross-origin WebSocket: %d", w.Code)
 	}
 }
+
+// Nothing the station keeps about a sign-in leaves it: the users API and
+// the Account page carry no hash, secret or code, and a locked user's
+// session, token and identity all stop at once.
+func TestNoSecretsLeakAndLockBites(t *testing.T) {
+	f := newFullStation(t)
+	by := map[string]caller{}
+	for _, c := range f.callers() {
+		by[c.name] = c
+	}
+	drive := f.users["drive"]
+	secret := newTOTPSecret()
+	f.db.SetSecondFactor(f.ctx, drive.ID, secret, time.Now())
+	codes, _ := f.s.auth.newBackupCodes(f.ctx, drive.ID)
+	hash, _ := f.db.PasswordHash(f.ctx, drive.ID)
+	w := f.do(by["admin"], "GET", "/v1/users", "", true)
+	body := w.Body.String()
+	for _, leak := range []string{secret, hash, codes[0], hashCode(codes[0]), "password_hash", "totp", "\"secret\""} {
+		if strings.Contains(body, leak) {
+			t.Errorf("/v1/users carries %q", leak)
+		}
+	}
+	w = f.do(by["drive user"], "GET", "/account", "", true)
+	for _, leak := range []string{secret, hash, codes[0]} {
+		if strings.Contains(w.Body.String(), leak) {
+			t.Errorf("/account carries %q", leak)
+		}
+	}
+	w = f.do(by["admin"], "GET", "/settings", "", true)
+	for _, leak := range []string{secret, hash, codes[0]} {
+		if strings.Contains(w.Body.String(), leak) {
+			t.Errorf("/settings carries %q", leak)
+		}
+	}
+	// Lock the drive user: their session, their tokens and the pages all stop.
+	if err := f.s.setLocked(f.ctx, f.admin, drive.ID, true); err != nil {
+		t.Fatal(err)
+	}
+	for _, who := range []string{"drive user", "drive user's drive token", "drive user's watch token", "drive user's admin token"} {
+		if w := f.do(by[who], "GET", "/v1/devices", "", true); w.Code != http.StatusUnauthorized {
+			t.Errorf("%s after the lock: %d", who, w.Code)
+		}
+	}
+	if w := f.do(by["drive user"], "GET", "/devices", "", true); !strings.HasPrefix(w.Header().Get("Location"), "/login") {
+		t.Errorf("a locked user's page: %d %s", w.Code, w.Header().Get("Location"))
+	}
+	// A removed user's session and tokens are gone too.
+	jam := f.users["jam"]
+	if err := f.s.removeUser(f.ctx, f.admin, jam.ID); err != nil {
+		t.Fatal(err)
+	}
+	if w := f.do(by["jam user"], "GET", "/v1/devices", "", true); w.Code != http.StatusUnauthorized {
+		t.Errorf("a removed user's session: %d", w.Code)
+	}
+}

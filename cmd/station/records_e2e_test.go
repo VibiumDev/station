@@ -1,0 +1,169 @@
+package main
+
+import (
+	"bytes"
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
+	"strconv"
+	"testing"
+	"time"
+
+	"github.com/VibiumDev/station"
+	"github.com/VibiumDev/station/records"
+)
+
+// uploadAs stores a file as a principal would through the real routes,
+// and returns its hash.
+func (f *fullStation) uploadAs(p station.Principal, body []byte, name, hold string) string {
+	f.t.Helper()
+	sum := sha256.Sum256(body)
+	sha := hex.EncodeToString(sum[:])
+	ev, err := f.s.records.UploadAuth(f.ctx, p, records.UploadRequest{SHA256: sha, Size: int64(len(body)), Type: "application/zip", Name: name, HoldID: hold})
+	if err != nil {
+		f.t.Fatalf("upload auth for %s: %v", name, err)
+	}
+	r := httptest.NewRequest("PUT", "/upload", bytes.NewReader(body))
+	r.ContentLength = int64(len(body))
+	r.Header.Set("Authorization", records.Header(ev))
+	r.Header.Set("Content-Type", "application/zip")
+	w := httptest.NewRecorder()
+	f.h.ServeHTTP(w, r)
+	if w.Code != 200 {
+		f.t.Fatalf("upload %s: %d %s", name, w.Code, w.Body)
+	}
+	return sha
+}
+
+// Phase 2: who reads which record, through every route that hands a
+// record out, and who may change one.
+func TestRecordsPublicAndPrivate(t *testing.T) {
+	f := newFullStation(t)
+	callers := f.callers()
+	now := time.Now()
+	// Four records: the admin's private one on A (the harness's), the
+	// admin's on B, one with no device from an admin who held nothing,
+	// and a public one on A.
+	if _, err := f.db.Create(f.ctx, station.Hold{ID: "hld_b", DeviceID: devB, RigID: "rig_b", Subject: "owner", Scopes: []station.Scope{station.ScopeView, station.ScopeInput},
+		CreatedAt: now.Add(-time.Hour), ActiveAt: now.Add(-time.Hour), ExpiresAt: now.Add(-30 * time.Minute)}); err != nil {
+		t.Fatal(err)
+	}
+	root, _ := f.db.UserByLogin(f.ctx, "root@example.com")
+	privA := f.sha
+	privB := f.uploadAs(f.admin, []byte("PK on device B"), "b.zip", "hld_b")
+	noDev := f.uploadAs(station.Principal{Subject: "root@example.com", Admin: true, User: root.ID}, []byte("PK from nowhere"), "nowhere.zip", "")
+	public := f.uploadAs(f.admin, []byte("PK for everyone"), "public.zip", "hld_a")
+	if err := f.db.SetBlobPublic(f.ctx, public, true); err != nil {
+		t.Fatal(err)
+	}
+	if b, _ := f.db.Blob(f.ctx, noDev); b.DeviceID != "" {
+		t.Fatalf("the device-less record has device %q", b.DeviceID)
+	}
+	adminUnbound := func(c caller) bool { return c.signed && c.admin && c.bound == "" }
+	blobs := []struct {
+		name, sha string
+		may       rule
+	}{
+		{"private on A", privA, ruleReadA},
+		{"private on B", privB, adminUnbound},
+		{"no device", noDev, adminUnbound},
+		{"public", public, rulePublic},
+	}
+	for _, b := range blobs {
+		for _, c := range callers {
+			want := b.may(c)
+			// Blossom GET and HEAD, the Play page, a file inside, and a download authorization.
+			for _, probe := range []struct{ method, path string }{
+				{"GET", "/" + b.sha}, {"HEAD", "/" + b.sha},
+				{"GET", "/records/" + b.sha + "/play"},
+				{"GET", "/records/" + b.sha + "/files/x.txt"},
+				{"POST", "/v1/records/" + b.sha + "/download-auth"},
+			} {
+				w := f.do(c, probe.method, probe.path, "", true)
+				got := !denied(w)
+				if probe.path != "/"+b.sha && !c.signed && b.sha == public {
+					continue // the pages and the API want a sign-in even for a public record; the link is the Blossom route
+				}
+				if got != want {
+					t.Errorf("%s: %s %s as %s: %d (want allowed=%v)", b.name, probe.method, probe.path, c.name, w.Code, want)
+				}
+			}
+		}
+	}
+	// The list shows each caller what they may read, and the public
+	// record to everyone signed in.
+	for _, c := range callers {
+		if !c.signed {
+			continue
+		}
+		w := f.do(c, "GET", "/v1/records", "", true)
+		if w.Code != 200 {
+			t.Errorf("list as %s: %d", c.name, w.Code)
+			continue
+		}
+		var list []struct {
+			SHA256 string `json:"sha256"`
+		}
+		json.Unmarshal(w.Body.Bytes(), &list)
+		have := map[string]bool{}
+		for _, d := range list {
+			have[d.SHA256] = true
+		}
+		for _, b := range blobs {
+			if have[b.sha] != b.may(c) {
+				t.Errorf("list as %s: %s listed=%v, readable=%v", c.name, b.name, have[b.sha], b.may(c))
+			}
+		}
+	}
+	// Private again, and the link is dark.
+	admin := callers[8]
+	if admin.name != "admin" {
+		t.Fatalf("caller 8 is %s", admin.name)
+	}
+	if w := f.do(admin, "POST", "/records/public", "sha256="+public+"&public=0", true); w.Code != http.StatusSeeOther {
+		t.Fatalf("making private: %d %s", w.Code, w.Body)
+	}
+	if w := f.do(callers[0], "GET", "/"+public, "", true); w.Code != http.StatusUnauthorized {
+		t.Errorf("a private record by its link, as nobody: %d", w.Code)
+	}
+	// A regular user's own record: theirs to publish and delete; a
+	// watcher of the device reads it and changes nothing; an admin's
+	// drive token reads it and changes nothing; an admin in person may.
+	if _, err := f.db.Create(f.ctx, station.Hold{ID: "hld_d", DeviceID: devA, RigID: "rig_a", Subject: "drive@example.com", Scopes: []station.Scope{station.ScopeView, station.ScopeInput},
+		CreatedAt: now.Add(-time.Hour), ActiveAt: now.Add(-time.Hour), ExpiresAt: now.Add(-30 * time.Minute)}); err != nil {
+		t.Fatal(err)
+	}
+	drive := principalOf(f.users["drive"], "")
+	mine := f.uploadAs(drive, []byte("PK the driver's own"), "mine.zip", "hld_d")
+	by := map[string]caller{}
+	for _, c := range callers {
+		by[c.name] = c
+	}
+	for _, c := range []struct {
+		who    string
+		read   bool
+		change bool
+	}{
+		{"watch user", true, false}, {"drive user", true, true}, {"jam user", true, false}, {"no team", false, false},
+		{"admin's drive token", true, false}, {"admin's watch token", true, false}, {"admin's admin token", true, true}, {"admin", true, true},
+		{"drive user's drive token", true, false}, // the token's subject is not the uploader's
+	} {
+		w := f.do(by[c.who], "GET", "/"+mine, "", true)
+		if (w.Code == 200) != c.read {
+			t.Errorf("%s reads the driver's record: %d (want %v)", c.who, w.Code, c.read)
+		}
+		w = f.do(by[c.who], "POST", "/records/golden", "sha256="+mine+"&make=golden", true)
+		if (w.Code == http.StatusSeeOther) != c.change {
+			t.Errorf("%s changes the driver's record: %d (want %v)", c.who, w.Code, c.change)
+		}
+	}
+	if w := f.do(by["drive user"], "POST", "/records/delete", "sha256="+mine, true); w.Code != http.StatusSeeOther {
+		t.Errorf("the driver deleting their own: %d", w.Code)
+	}
+	if _, err := f.db.Blob(f.ctx, mine); err == nil {
+		t.Error("the driver's record is still there")
+	}
+	_ = strconv.Itoa
+}

@@ -127,9 +127,9 @@ what they do not understand.
 
 ## Phase 8: keeping it that way
 
-CI runs `go test -race` for `cmd/station`, `records`, `hold` and
-`sqlite`, and the matrix test's completeness check means a new route
-cannot land without saying who may call it. The plan's "found" list
+CI runs the station's tests under `-race`, and the matrix test's
+completeness check means a new route cannot land without saying who
+may call it. The plan's "found" list
 below records every hole the suite turned up and the commit that closed
 it, so the history is readable later.
 
@@ -173,3 +173,17 @@ Phase 1, the matrix, on its first runs:
 - An identity sign-in (no password) could start replacing an
   authenticator it does not have; both authenticator changes now ask
   for a password first.
+
+Phases 2 to 5, on their first runs:
+
+- A regular user at drive could recall an admin's hold, since every
+  person recalled: the hold endpoint now asks `mayRecall`, which lets
+  a person recall another regular user or an agent and an admin recall
+  anyone, and leaves a regular user in line behind an admin's hold.
+- A jam's device-bound token, acting as its admin starter, could read
+  records of other devices and device-less ones; a bound token now
+  reads its own device's records alone.
+- `safeNext` let `/\evil.example` through, which a browser reads as
+  `//evil.example`; it refuses backslashes, line breaks and NULs now.
+- Nothing else: the record store's rules, the lists, the enrollment
+  handler and the throttles answered as the specs say.
