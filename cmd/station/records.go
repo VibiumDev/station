@@ -565,9 +565,11 @@ func backToRecords(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, to, http.StatusSeeOther)
 }
 
-// recordGolden is POST /records/golden: sha256 and golden=1|0.
+// recordGolden is POST /records/golden: sha256 and make=golden|plain.
+// The field is not called golden, since that name is the page's filter
+// and the form returns to the page with its filters as they were.
 func (s *server) recordGolden(w http.ResponseWriter, r *http.Request, p station.Principal) {
-	if err := s.records.SetGolden(r.Context(), p, r.FormValue("sha256"), r.FormValue("golden") == "1"); err != nil {
+	if err := s.records.SetGolden(r.Context(), p, r.FormValue("sha256"), r.FormValue("make") == "golden"); err != nil {
 		recordsError(w, err)
 		return
 	}

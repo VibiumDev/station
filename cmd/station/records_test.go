@@ -19,6 +19,7 @@ func TestBackToRecordsKeepsView(t *testing.T) {
 		{"device=rig_a%2Fphone&view=list", "/records?device=rig_a%2Fphone&view=list"},
 		{"view=list&hold=h1", "/records?hold=h1&view=list"},
 		{"view=list&q=%23flaky+checkout&n=50&page=3&golden=1", "/records?golden=1&n=50&page=3&q=%23flaky+checkout&view=list"},
+		{"view=list&sha256=abc&make=golden", "/records?view=list"},
 		{"return=%2Frecords%2Fabc%2Fplay&view=list", "/records/abc/play"},
 		{"return=https%3A%2F%2Felsewhere.example%2F&view=list", "/records?view=list"},
 		{"return=%2Frecords%2F%2Felsewhere.example", "/records"},
@@ -106,13 +107,13 @@ func TestRecordsTemplatesRender(t *testing.T) {
 			data[k] = v
 		}
 		data["Grid"] = grid
-		data["Records"] = []recordView{rec(true, true), rec(false, false)}
+		data["Records"] = []recordView{rec(true, true), rec(false, true), rec(false, false)}
 		var out strings.Builder
 		if err := pages.ExecuteTemplate(&out, "records", data); err != nil {
 			t.Fatalf("records grid=%v: %v", grid, err)
 		}
 		html := out.String()
-		for _, want := range []string{`name="golden"`, `class="tag on"`, `Page 1 of 2`, `Older ›`, `data-submit`, `#flaky<span class="n">2</span>`} {
+		for _, want := range []string{`name="make" value="golden"`, `name="make" value="plain"`, `class="tag on"`, `Page 1 of 2`, `Older ›`, `data-submit`, `#flaky<span class="n">2</span>`} {
 			if !strings.Contains(html, want) {
 				t.Errorf("records grid=%v lacks %q", grid, want)
 			}
