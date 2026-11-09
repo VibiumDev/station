@@ -53,6 +53,35 @@
         q.setAttribute('aria-expanded', open ? 'true' : 'false');
       });
     });
+    // A destructive button is held, not clicked: a bar fills across it
+    // over a moment and the form goes only when it is full; letting go,
+    // or sliding off, cancels. Space or Enter held down does the same
+    // from the keyboard.
+    Array.prototype.forEach.call(document.querySelectorAll('button[data-hold]'), function (btn) {
+      var fill = document.createElement('span');
+      fill.className = 'fill';
+      btn.insertBefore(fill, btn.firstChild);
+      var raf = null, start = 0, HOLD = 1500;
+      function stop() { if (raf) cancelAnimationFrame(raf); raf = null; start = 0; fill.style.width = '0'; }
+      function step() {
+        var pct = Math.min(0.2 + (Date.now() - start) / HOLD * 0.8, 1);
+        fill.style.width = (pct * 100) + '%';
+        if (pct < 1) { raf = requestAnimationFrame(step); return; }
+        raf = null;
+        btn.disabled = true;
+        btn.classList.add('fired');
+        if (btn.form) { if (btn.form.requestSubmit) btn.form.requestSubmit(); else btn.form.submit(); }
+      }
+      function begin(e) { if (btn.disabled || start) return; e.preventDefault(); start = Date.now(); raf = requestAnimationFrame(step); }
+      btn.addEventListener('pointerdown', begin);
+      ['pointerup', 'pointerleave', 'pointercancel'].forEach(function (ev) { btn.addEventListener(ev, function () { if (!btn.disabled) stop(); }); });
+      btn.addEventListener('keydown', function (e) {
+        if (e.key !== ' ' && e.key !== 'Enter') return;
+        if (!e.repeat) begin(e); else e.preventDefault();
+      });
+      btn.addEventListener('keyup', function (e) { if ((e.key === ' ' || e.key === 'Enter') && !btn.disabled) stop(); });
+      btn.addEventListener('click', function (e) { e.preventDefault(); });  // a click alone does nothing
+    });
     // A select that files its form as soon as it changes, such as how
     // many records a page shows.
     Array.prototype.forEach.call(document.querySelectorAll('select[data-submit]'), function (sel) {

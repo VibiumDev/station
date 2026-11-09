@@ -134,6 +134,9 @@ func TestRecordsTemplatesRender(t *testing.T) {
 		if !grid && !strings.Contains(html, `class="minithumb"`) {
 			t.Error("the list has no tiny thumbnail")
 		}
+		if !grid && !strings.Contains(html, `class="small icon hold" type="button" data-hold title="Hold to delete"`) {
+			t.Error("the list's Delete should be held, not clicked")
+		}
 		if !strings.Contains(html, `<b><a href="/records/`+strings.Repeat("ab", 32)+`/play">record</a></b>`) {
 			t.Errorf("grid=%v: the record's name should open it", grid)
 		}
