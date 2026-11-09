@@ -25,7 +25,9 @@ The owner is the first admin: the password set with `station passwd`
 belongs to a user whose login is `owner`. In tailnet mode, identities on
 `--allow` are admins too, as the operator's bootstrap trust, and an
 identity that an admin has added as a user signs in as that user,
-regular or admin as the record says, without appearing in `--allow`.
+regular or admin as the record says, without appearing in `--allow`. A
+user with no name takes the display name their tailnet profile gives;
+a name an admin set stays.
 
 ## Teams and what a team may do
 

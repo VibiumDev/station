@@ -131,7 +131,7 @@ func TestSettingsTeamsRender(t *testing.T) {
 	}
 	html := out.String()
 	for _, want := range []string{
-		`<b>owner</b> <span class="muted">you</span>`, `<b>ann@example.com</b>`, "Make admin", "Hold to remove", ">Lock<", "Reset sign-in", "setup link until",
+		`<b>owner</b></td>`, `admin <span class="muted">(you)</span>`, `<b>ann@example.com</b>`, "Make admin", "Hold to remove", ">Lock<", "Reset sign-in", "setup link until",
 		`<option value="` + bob.ID + `">bob@example.com</option>`, // bob can still join QA
 		`<span class="member">ann@example.com`, "No devices yet.",
 	} {

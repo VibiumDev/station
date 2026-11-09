@@ -38,20 +38,20 @@ func tailnet(ctx context.Context, dir, hostname, controlURL string) (net.Listene
 		srv.Close()
 		return nil, "", nil, nil, err
 	}
-	who := func(ctx context.Context, remoteAddr string) (string, []string, error) {
+	who := func(ctx context.Context, remoteAddr string) (string, string, []string, error) {
 		resp, err := lc.WhoIs(ctx, remoteAddr)
 		if err != nil {
-			return "", nil, err
+			return "", "", nil, err
 		}
-		login := ""
+		login, name := "", ""
 		if resp.UserProfile != nil {
-			login = resp.UserProfile.LoginName
+			login, name = resp.UserProfile.LoginName, resp.UserProfile.DisplayName
 		}
 		var tags []string
 		if resp.Node != nil {
 			tags = resp.Node.Tags
 		}
-		return login, tags, nil
+		return login, name, tags, nil
 	}
 	name := strings.TrimSuffix(status.Self.DNSName, ".")
 	return ln, "https://" + name, who, func() { srv.Close() }, nil

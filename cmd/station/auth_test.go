@@ -191,14 +191,17 @@ func TestTailnetIdentitiesAreUsers(t *testing.T) {
 	defer db.Close()
 	ctx := context.Background()
 	db.PutUser(ctx, station.User{ID: "usr_bob", Login: "bob@example.com"})
-	who := func(ctx context.Context, remoteAddr string) (string, []string, error) {
+	db.PutUser(ctx, station.User{ID: "usr_cat", Login: "cat@example.com", Name: "Catherine"})
+	who := func(ctx context.Context, remoteAddr string) (string, string, []string, error) {
 		switch remoteAddr {
 		case "100.64.0.1:1":
-			return "root@example.com", nil, nil
+			return "root@example.com", "Root", nil, nil
 		case "100.64.0.2:1":
-			return "bob@example.com", nil, nil
+			return "bob@example.com", "Bob Example", nil, nil
+		case "100.64.0.4:1":
+			return "cat@example.com", "Cat", nil, nil
 		}
-		return "stranger@example.com", nil, nil
+		return "stranger@example.com", "Stranger", nil, nil
 	}
 	a := newAuth(&Config{Allow: []string{"root@example.com"}}, db, who, false, false)
 	req := func(addr string) station.Principal {
@@ -210,11 +213,23 @@ func TestTailnetIdentitiesAreUsers(t *testing.T) {
 	if p := req("100.64.0.1:1"); !p.Admin || p.User == "" {
 		t.Errorf("allowed identity: %+v", p)
 	}
-	if u, err := db.UserByLogin(ctx, "root@example.com"); err != nil || !u.Admin {
-		t.Errorf("the allowed identity should be a user: %+v %v", u, err)
+	if u, err := db.UserByLogin(ctx, "root@example.com"); err != nil || !u.Admin || u.Name != "Root" {
+		t.Errorf("the allowed identity should be a user named by the tailnet: %+v %v", u, err)
 	}
 	if p := req("100.64.0.2:1"); p.Admin || p.User != "usr_bob" {
 		t.Errorf("known identity: %+v", p)
+	}
+	if u, _ := db.User(ctx, "usr_bob"); u.Name != "Bob Example" {
+		t.Errorf("a user with no name should take the tailnet's: %q", u.Name)
+	}
+	if p := req("100.64.0.4:1"); p.User != "usr_cat" {
+		t.Errorf("cat: %+v", p)
+	}
+	if u, _ := db.User(ctx, "usr_cat"); u.Name != "Catherine" {
+		t.Errorf("a name an admin set should stay: %q", u.Name)
+	}
+	if _, err := db.UserByLogin(ctx, "stranger@example.com"); err == nil {
+		t.Error("a stranger became a user")
 	}
 	if p := req("100.64.0.3:1"); p.User != "" {
 		t.Errorf("a stranger signed in: %+v", p)

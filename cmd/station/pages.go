@@ -362,9 +362,9 @@ var pages = template.Must(template.New("").Funcs(template.FuncMap{"npub": npub, 
 {{if .SetupURL}}<div class="card featured">Setup link for <b>{{.SetupLogin}}</b>, shown once and good for 24 hours. Pass it on by a channel you trust:<p class="secret">{{.SetupURL}}</p></div>{{end}}
 {{if .Users}}<div class="tablewrap"><table><thead><tr><th>Login</th><th>Name</th><th>Role</th><th>Teams</th><th>Sign-in</th><th>Last sign-in</th><th></th></tr></thead><tbody>
 {{range .Users}}<tr>
-<td data-l="Login"><b>{{.Login}}</b>{{if .Locked}} <span class="muted">locked</span>{{end}}{{if .Self}} <span class="muted">you</span>{{end}}</td>
-<td data-l="Name">{{.Name}}</td>
-<td data-l="Role">{{if .Admin}}admin{{else}}regular{{end}}</td>
+<td data-l="Login"><b>{{.Login}}</b></td>
+<td data-l="Name">{{if .Name}}{{.Name}}{{else}}<span class="muted">—</span>{{end}}</td>
+<td data-l="Role">{{if .Admin}}admin{{else}}regular{{end}}{{if .Self}} <span class="muted">(you)</span>{{end}}</td>
 <td data-l="Teams">{{if .Admin}}<span class="muted">all</span>{{else if .TeamNames}}{{range $i, $t := .TeamNames}}{{if $i}}, {{end}}{{$t}}{{end}}{{else}}<span class="muted">none</span>{{end}}</td>
 <td data-l="Sign-in">{{.SignIn}}</td>
 <td data-l="Last sign-in">{{if .LastLogin.IsZero}}<span class="muted">never</span>{{else}}{{.LastLogin.Local.Format "Jan 2 15:04"}}{{end}}</td>

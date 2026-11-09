@@ -56,8 +56,9 @@ var (
 	errSetupDue = fmt.Errorf("%w: an authenticator must be set up", station.ErrUnauthenticated)
 )
 
-// identity is what tailnet mode asks: who is behind an address.
-type identity func(ctx context.Context, remoteAddr string) (login string, tags []string, err error)
+// identity is what tailnet mode asks: who is behind an address, with
+// the name their tailnet profile gives them.
+type identity func(ctx context.Context, remoteAddr string) (login, name string, tags []string, err error)
 
 // auth is the station's Authenticator and Authorizer: users signing in
 // with a login, a password and a code from their authenticator, API
@@ -170,26 +171,34 @@ func (a *auth) tokenUser(ctx context.Context, tok sqlite.APIToken) (station.User
 
 // identityUser is the user behind a tailnet identity: one on --allow is an
 // admin, made a user the first time they are seen; otherwise a user an
-// admin added with that login, regular or admin as the record says.
-func (a *auth) identityUser(ctx context.Context, login string, tags []string) (station.User, bool) {
+// admin added with that login, regular or admin as the record says. A
+// user with no name yet takes the one their tailnet profile gives.
+func (a *auth) identityUser(ctx context.Context, login, name string, tags []string) (station.User, bool) {
 	if login == "" {
 		return station.User{}, false
 	}
+	name = strings.TrimSpace(name)
 	u, err := a.db.UserByLogin(ctx, login)
 	if a.allowed(login, tags) {
 		if err != nil {
-			u = station.User{ID: station.NewID("usr"), Login: strings.ToLower(login), Admin: true}
+			u = station.User{ID: station.NewID("usr"), Login: strings.ToLower(login), Name: name, Admin: true}
 			if err := a.db.PutUser(ctx, u); err != nil {
 				log.Printf("identity: making a user for %s: %v", login, err)
 				return station.User{}, false
 			}
-		} else if !u.Admin && !u.Locked {
-			u.Admin = true // --allow is the operator's word
-			a.db.PutUser(ctx, u)
+			return u, true
 		}
-		return u, !u.Locked
+		if !u.Admin && !u.Locked {
+			u.Admin = true // --allow is the operator's word
+		}
+	} else if err != nil {
+		return u, false
 	}
-	return u, err == nil && !u.Locked
+	if u.Name == "" && name != "" && !u.Locked {
+		u.Name = name
+	}
+	a.db.PutUser(ctx, u)
+	return u, !u.Locked
 }
 
 // Authenticate finds the principal: a bearer token, the session cookie, or
@@ -225,10 +234,10 @@ func (a *auth) Authenticate(r *http.Request) (station.Principal, error) {
 		}
 	}
 	if a.who != nil {
-		login, tags, err := a.who(ctx, r.RemoteAddr)
+		login, name, tags, err := a.who(ctx, r.RemoteAddr)
 		if err != nil {
 			log.Printf("identity: %s: %v", r.RemoteAddr, err)
-		} else if u, ok := a.identityUser(ctx, login, tags); ok {
+		} else if u, ok := a.identityUser(ctx, login, name, tags); ok {
 			return principalOf(u, ""), nil
 		} else if login != "" {
 			log.Printf("identity: %s is %s %v, not in --allow and not a user", r.RemoteAddr, login, tags)

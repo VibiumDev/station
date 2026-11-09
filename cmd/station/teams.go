@@ -29,6 +29,8 @@ type userView struct {
 // or no password at all.
 func signInWords(u station.User, invite time.Time) string {
 	switch {
+	case u.Locked:
+		return "locked"
 	case !invite.IsZero():
 		return "setup link until " + invite.Local().Format("Jan 2 15:04")
 	case u.TwoFactor:
