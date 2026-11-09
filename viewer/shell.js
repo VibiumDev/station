@@ -1431,15 +1431,16 @@
   }
   // Release ends the hold and goes back to the host's front page, the
   // device list; without one, the page stays and watches.
-  function release() {
+  function release(to) {
     released = true;
     releaseEverythingHeld();
     stopPicture();
     var ended = hold && !observer ? request('DELETE', api.hold).catch(function () {}) : Promise.resolve();
     var home = $('homeLink');
-    if (!home) { nobody(); return; }
-    showOverlay('Released.');
-    var go = function () { location.href = home.getAttribute('href'); };
+    var dest = to || (home && home.getAttribute('href'));
+    if (!dest) { nobody(); return; }
+    showOverlay(watchOnly ? 'Stopped watching.' : 'Released.');
+    var go = function () { location.href = dest; };
     ended.then(go);
     setTimeout(go, 3000);  // whatever the network says
   }
@@ -1455,7 +1456,16 @@
       }
     };
     takeBtn.onclick = function () { takeHold(['view', 'input']).catch(function () {}); };
-    releaseBtn.onclick = release;
+    releaseBtn.onclick = function () { release(); };
+    // Leaving by the Home button, or for the watching page, ends a hold
+    // of one's own first and goes once the station has it, so the next
+    // page shows the device as it then is.
+    ['homeLink', 'watchLink'].forEach(function (id) {
+      var a = $(id);
+      if (a) a.addEventListener('click', function (e) {
+        if (hold && !observer && !released) { e.preventDefault(); release(a.getAttribute('href')); }
+      });
+    });
     setInterval(function () { if (hold && !released) takeHold(wanted(), true, true).catch(function () {}); }, 3 * 60 * 1000);
     window.addEventListener('pagehide', function () {
       if (hold && !observer && !released) {  // one's own hold, driving or watching alone
