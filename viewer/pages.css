@@ -284,7 +284,11 @@ iframe.player.full { position: fixed; inset: 0; width: 100%; height: 100%; borde
 .card.rec .meta b { font-size: 15px; overflow-wrap: anywhere; }
 .card.rec .meta .act { margin-top: 6px; }
 .btn.icon, button.icon { display: inline-flex; align-items: center; justify-content: center; padding: 6px 9px; vertical-align: middle; }
-.btn.icon svg, button.icon svg { display: block; }
+.btn.icon svg, button.icon svg { display: block; width: 16px; height: 16px; }
+/* The jams list: the prompt leads and opens the jam, wrapping within
+   a readable measure while the short columns stay on one line. */
+.jams td.prompt a { display: block; max-width: 44ch; }
+@media (min-width: 641px) { .jams td:not(.prompt) { white-space: nowrap; } }
 /* A card narrower than its text drops details rather than wrapping
    them: first the second line and the step count, then the name. */
 .card.rec { container-type: inline-size; }

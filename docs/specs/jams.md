@@ -314,9 +314,11 @@ hero, with a device picker beside it when more than one device is
 online and a model picker when more than one agent model is set, and
 two or three example prompts under it for the device's kind and the
 tools it has, which a demo can click and a first-time visitor can learn
-from. The Jams page, at `/jams`, is the list of past jams, with when,
-who, the device, the model, the prompt, and the result where there is
-one. The list of devices moves to `/devices`, and the docs that point
+from. The Jams page, at `/jams`, is the list of past jams, with the
+prompt first, which opens the jam, then when, who, the device, the
+model, and the result where there is one. Buttons on the pages are
+icons with a tooltip where the picture is plain: play, stop, open,
+records, download, delete. The list of devices moves to `/devices`, and the docs that point
 at it follow. The sidebar reads New jam, Jams, Devices, Records,
 Settings, and the brand keeps linking to `/`. One jam lives at `/jams/{id}`, with the transcript,
 the prompt box for the next turn while the jam is open, the watching

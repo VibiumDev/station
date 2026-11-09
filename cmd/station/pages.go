@@ -82,7 +82,7 @@ var pages = template.Must(template.New("").Funcs(template.FuncMap{"npub": npub, 
 {{define "index"}}{{template "head" (dict "Title" "Devices" "Name" .Name "Named" .Named)}}{{template "header" .}}
 <main class="wrap"><p class="lead">Open a device to drive it, or to watch when someone else has it. {{template "help" "devices"}}</p>
 <div class="helptext" id="help-devices" hidden>
-<p>Every device on every host enrolled here. Open takes a device nobody holds, and you drive it: the picture, touch, keys and sound. A device someone else holds opens watching, and Hold in the viewer takes it from them; an agent's run ends when you do. Release in the viewer gives the device back and returns here. A hold also ends after 5 idle minutes, or after 8 hours.</p>
+<p>Every device on every host enrolled here. Open, the arrow leaving a box, takes a device nobody holds, and you drive it: the picture, touch, keys and sound. A device someone else holds opens watching, and Hold in the viewer takes it from them; an agent's run ends when you do. Release in the viewer gives the device back and returns here. A hold also ends after 5 idle minutes, or after 8 hours.</p>
 <p><b>Device.</b> The device's label, or its name when the host gave it no label, with its kind and platform under it. The name is the last part of the device's address, rig/name, which holds and the API use; Roadie's <code>--label</code> sets the label and <code>--platform</code> the platform.</p>
 <p><b>Host.</b> The machine the device is wired to or runs on, a Roadie rig today: the name it enrolled with, and the id the station gave it. <i>Records sessions</i> means the host records every hold on the device, yours as much as an agent's: each input, and a frame of the screen after each burst of input, go into a recording that is uploaded to the Record Store when the hold ends, where the Records page lists it. That is the host's own setting (Roadie's <code>--record</code>), which the host announces when it connects; the viewer shows REC while such a session is live.</p>
 <p><b>Status.</b> Online while the host's tunnel to the station is up, offline otherwise. Under it, available when nobody holds the device, or who holds it and how many agents are waiting their turn.</p>
@@ -93,7 +93,7 @@ var pages = template.Must(template.New("").Funcs(template.FuncMap{"npub": npub, 
 <td data-l="Device">{{if .ID}}<b>{{if .Label}}{{.Label}}{{else}}{{.Name}}{{end}}</b><span class="sub">{{.Kind}}{{if .Platform}} · {{platform .Platform}}{{end}}{{if .Label}} · {{.Name}}{{end}}</span>{{else}}<span class="muted">no devices announced</span>{{end}}</td>
 <td data-l="Host"><b>{{.Rig.Name}}</b><span class="sub">{{.Rig.ID}}{{if .Recorded}} · <span class="rec" title="This host records every session on the device: each input, and a frame of the screen after each burst of input, kept in the Record Store when the session ends.">records sessions</span>{{end}}</span></td>
 <td data-l="Status">{{if .Online}}<span class="dot on"></span>online{{else}}<span class="dot"></span><span class="muted">offline</span>{{end}}<span class="sub">{{if .Hold}}held by {{if .Hold.JamID}}<a href="/jams/{{.Hold.JamID}}">jam {{.Hold.JamID}}</a>{{else}}{{.Hold.Subject}}{{end}}{{else}}available{{end}}{{if .Waiting}} · {{.Waiting}} waiting{{end}}</span></td>
-<td class="act">{{if .ID}}<a class="btn small" href="/devices/{{.ID}}/view">Open</a> <a class="btn small" href="/records?device={{.ID}}">Records</a>{{end}}</td>
+<td class="act">{{if .ID}}<a class="btn small icon" href="/devices/{{.ID}}/view" title="Open" aria-label="Open {{.Name}}">{{template "icon-open"}}</a> <a class="btn small icon" href="/records?device={{.ID}}" title="Records" aria-label="Records of {{.Name}}">{{template "icon-records"}}</a>{{end}}</td>
 </tr>{{end}}</tbody></table></div>{{end}}
 </main>{{template "foot" .}}{{end}}
 
@@ -150,9 +150,9 @@ var pages = template.Must(template.New("").Funcs(template.FuncMap{"npub": npub, 
 {{define "jams"}}{{template "head" (dict "Title" "Jams" "Name" .Name "Named" .Named)}}{{template "header" .}}
 <main class="wrap jams">
 <h2 class="h2">Jams {{template "help" "jams"}}</h2>
-<p class="helptext" id="help-jams" hidden>Every jam session on this station, newest first: who asked, on which device and with which model, the prompt, and the result. Open one for its transcript and the recording. A new one starts from the <a href="/">front page</a>.</p>
-{{if .Jams}}<div class="tablewrap"><table><thead><tr><th>When</th><th>Who</th><th>Device</th><th>Model</th><th>Prompt</th><th>Result</th></tr></thead><tbody>
-{{range .Jams}}<tr><td data-l="When"><a href="/jams/{{.ID}}">{{.When}}</a></td><td data-l="Who">{{.Subject}}</td><td data-l="Device">{{.Label}}</td><td data-l="Model">{{.Model}}</td><td data-l="Prompt">{{.Prompt}}</td>
+<p class="helptext" id="help-jams" hidden>Every jam session on this station, newest first: the prompt, when and who asked, on which device and with which model, and the result. The prompt opens the session, with its transcript and the recording. A new one starts from the <a href="/">front page</a>.</p>
+{{if .Jams}}<div class="tablewrap"><table><thead><tr><th>Prompt</th><th>When</th><th>Who</th><th>Device</th><th>Model</th><th>Result</th></tr></thead><tbody>
+{{range .Jams}}<tr><td data-l="Prompt" class="prompt"><a href="/jams/{{.ID}}">{{.Prompt}}</a></td><td data-l="When">{{.When}}</td><td data-l="Who">{{.Subject}}</td><td data-l="Device">{{.Label}}</td><td data-l="Model">{{.Model}}</td>
 <td data-l="Result">{{if .Open}}<span class="dot on"></span>running{{else if .Word}}<b class="verdict {{.Result}}">{{.Word}}</b>{{else}}<span class="muted">{{.Status}}</span>{{end}}</td></tr>{{end}}
 </tbody></table></div>{{else}}<p class="muted">No jams yet. <a href="/">Start one.</a></p>{{end}}
 </main>{{template "foot" .}}{{end}}
@@ -160,8 +160,8 @@ var pages = template.Must(template.New("").Funcs(template.FuncMap{"npub": npub, 
 {{define "jam"}}{{template "head" (dict "Title" "Jam" "Name" .Name "Named" .Named)}}{{template "header" .}}
 <main class="wrap jam{{if .Watch}} watching{{end}}">
 <p class="lead"><a href="/jams">Jams</a> › <b>{{.Jam.ID}}</b> <span class="muted">{{.When}} · {{.Jam.Subject}} · {{.DeviceLabel}} · {{.Jam.Model}}{{if .Took}} · {{.Took}}{{end}}{{if .Word}} · {{end}}</span>{{if .Word}}<b class="verdict {{.Jam.Result}}">{{.Word}}</b>{{end}}
-{{if .Open}} <form class="inline" method="post" action="/jams/{{.Jam.ID}}/stop"><input type="hidden" name="csrf" value="{{.CSRF}}"><button class="small" type="submit">Stop</button></form>{{end}}
-{{if .Play}} <a class="btn small" href="{{.Play}}">Play the recording</a>{{end}} <a class="btn small" href="/devices/{{.Jam.DeviceID}}/view">Open the device</a></p>
+{{if .Open}} <form class="inline" method="post" action="/jams/{{.Jam.ID}}/stop"><input type="hidden" name="csrf" value="{{.CSRF}}"><button class="small icon" type="submit" title="Stop the jam" aria-label="Stop the jam">{{template "icon-stop"}}</button></form>{{end}}
+{{if .Play}} <a class="btn small icon" href="{{.Play}}" title="Play the recording" aria-label="Play the recording">{{template "icon-play"}}</a>{{end}} <a class="btn small icon" href="/devices/{{.Jam.DeviceID}}/view" title="Open the device" aria-label="Open the device">{{template "icon-open"}}</a></p>
 {{if .Message}}<div class="msg error" role="alert">{{.Message}}</div>{{end}}
 <div class="jamgrid">
 <div class="transcript" id="transcript" data-jam="{{.Jam.ID}}" data-after="{{.Last}}"{{if .Open}} data-open="1"{{end}}>
@@ -195,6 +195,8 @@ var pages = template.Must(template.New("").Funcs(template.FuncMap{"npub": npub, 
 <iframe class="player full" src="{{.Player}}" title="{{.Title}} in the Record Player" allowfullscreen></iframe>
 </body></html>{{end}}
 
+{{define "icon-open"}}<svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M14 4h6v6M20 4l-9 9M19 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1h5" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>{{end}}
+{{define "icon-stop"}}<svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><rect x="6" y="6" width="12" height="12" rx="1.5" fill="currentColor"/></svg>{{end}}
 {{define "icon-play"}}<svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M7 4.5v15l12-7.5z" fill="currentColor"/></svg>{{end}}
 {{define "icon-delete"}}<svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M4 7h16M9 7V4.5h6V7M7 7l1 13h8l1-13M10 11v6M14 11v6" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>{{end}}
 {{define "icon-download"}}<svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M12 3v11m0 0-4.5-4.5M12 14l4.5-4.5M4 19.5h16" stroke="currentColor" stroke-width="2.2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>{{end}}

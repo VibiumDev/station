@@ -308,7 +308,7 @@ relay-only fails by design, since TURN refuses private peers.
 |---|---|
 | `/login` | Sign in with the password; in tailnet mode an allowed identity needs none |
 | `/` | The prompt box once an agent model is set and Jams is on, with a device picker when more than one device is online and a model picker when more than one agent model is set, and example prompts for the device's kind; sends to `/devices` otherwise |
-| `/jams` | The jams so far, newest first: when, who, the device, the model, the prompt, and the result |
+| `/jams` | The jams so far, newest first: the prompt, which opens the jam, when, who, the device, the model, and the result |
 | `/jams/{id}` | One jam: its transcript as it happens, the viewer watching the device beside it while it runs, a box for a follow-up prompt, Stop, and Play for the host's recording of its hold when it ends |
 | `/devices` | The devices: rig, kind, online, who controls it, Open, Records |
 | `/devices/{rig}/{name}/view` | The viewer: Roadie's shell with the WebRTC picture, sound, touch and keyboard, the mic, the settings panel, the on-screen keyboard, stats, the device's own buttons and panels from its extras, and Hold and Release. One link for driving and watching: a free device is taken, a held one is watched, and Hold takes it; Release ends the hold and returns to the device list. `?watch=1` watches only; on a touchscreen two fingers moving together turn the wheel and a pinch becomes Apple Maps' one-finger zoom on a device whose pointer stands in for touch (see Roadie's `/view`); `?minimal=1`, `?input=`, `?transport=`, `?ice=relay`, `?toolbar=`, `?align=`, `?zoom=` (a percentage, or `fit` for the room the picture has, the default on a phone or tablet) and `?stats=1` as on a Roadie |
