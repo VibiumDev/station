@@ -335,6 +335,7 @@ func (s *server) setRecordTags(w http.ResponseWriter, r *http.Request, p station
 type recordView struct {
 	station.Blob
 	Title   string // the name without its extension, or the hash's start
+	Kind    string // the file's kind in a word: zip, jpg, txt, else the media type
 	URL     string
 	Play    string
 	When    string
@@ -378,6 +379,15 @@ func recordTitle(b station.Blob) string {
 		return b.Name[:i]
 	}
 	return b.Name
+}
+
+// recordKind is the file's kind in a word, from the extension its media
+// type takes, or the type itself when none is known.
+func recordKind(b station.Blob) string {
+	if ext := strings.TrimPrefix(blob.Extension(b.Type), "."); ext != "" {
+		return ext
+	}
+	return b.Type
 }
 
 // recordingMeta words a recording's steps and length.
@@ -464,7 +474,7 @@ func (s *server) recordsData(r *http.Request, p station.Principal, extra map[str
 	q.Page = pageNo
 	views := make([]recordView, 0, to-from)
 	for _, b := range bs[from:to] {
-		v := recordView{Blob: b, Title: recordTitle(b), URL: s.records.URL(b), Play: playURL(b), When: b.CreatedAt.Local().Format("Jan 2 15:04"), Size: humanSize(b.Size),
+		v := recordView{Blob: b, Title: recordTitle(b), Kind: recordKind(b), URL: s.records.URL(b), Play: playURL(b), When: b.CreatedAt.Local().Format("Jan 2 15:04"), Size: humanSize(b.Size),
 			Device: b.DeviceID, Label: labels[b.DeviceID], CanEdit: p.Admin || p.Subject == b.Uploader, CanPlay: viewer.HasPlayer() && (b.Type == "application/zip"),
 			HasThumb: b.Type == "application/zip" || strings.HasPrefix(b.Type, "image/"), Meta: recordingMeta(b)}
 		for _, t := range b.Tags {
