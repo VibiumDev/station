@@ -105,7 +105,8 @@ func TestTunnel(t *testing.T) {
 		t.Fatal("rig not listed online")
 	}
 
-	// The announcement reached the device store and the event store.
+	// The announcement reached the device store and the event store;
+	// the two land a moment apart, so both are waited for.
 	deadline := time.Now().Add(5 * time.Second)
 	for {
 		dev, err := h.db.Device(ctx, "rig_1/phone")
@@ -117,8 +118,15 @@ func TestTunnel(t *testing.T) {
 		}
 		time.Sleep(50 * time.Millisecond)
 	}
-	if n, _ := h.db.CountEvents(nostr.Filter{Kinds: []nostr.Kind{token.KindRigAnnounce, token.KindDeviceAnnounce}}); n != 2 {
-		t.Errorf("stored announcements: %d", n)
+	for {
+		n, _ := h.db.CountEvents(nostr.Filter{Kinds: []nostr.Kind{token.KindRigAnnounce, token.KindDeviceAnnounce}})
+		if n == 2 {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("stored announcements: %d", n)
+		}
+		time.Sleep(50 * time.Millisecond)
 	}
 
 	// HTTP over the tunnel, twice, with a body.
