@@ -250,11 +250,11 @@ func TestHolds(t *testing.T) {
 func TestTokensAndCodes(t *testing.T) {
 	d := open(t)
 	ctx := context.Background()
-	secret, err := d.CreateToken(ctx, "ci", true)
+	secret, err := d.CreateToken(ctx, "ci", true, "")
 	if err != nil || secret == "" {
 		t.Fatal(err)
 	}
-	if _, err := d.CreateToken(ctx, "ci", false); !errors.Is(err, ErrTokenExists) {
+	if _, err := d.CreateToken(ctx, "ci", false, ""); !errors.Is(err, ErrTokenExists) {
 		t.Errorf("duplicate name: %v", err)
 	}
 	tok, err := d.LookupToken(ctx, secret)

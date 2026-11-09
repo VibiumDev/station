@@ -852,7 +852,7 @@ func (s *server) createToken(w http.ResponseWriter, r *http.Request, p station.P
 		s.render(w, "settings", s.settingsData(r, p, map[string]any{"Message": "A token needs a name."}))
 		return
 	}
-	secret, err := s.db.CreateToken(r.Context(), name, r.FormValue("read_only") == "on")
+	secret, err := s.db.CreateToken(r.Context(), name, r.FormValue("read_only") == "on", p.User)
 	if err != nil {
 		s.render(w, "settings", s.settingsData(r, p, map[string]any{"Message": err.Error()}))
 		return

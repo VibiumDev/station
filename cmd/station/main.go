@@ -136,7 +136,7 @@ func runCommand(name string, args []string) int {
 		ctx := context.Background()
 		switch {
 		case len(words) == 2 && words[0] == "create":
-			secret, err := db.CreateToken(ctx, words[1], *readOnly)
+			secret, err := db.CreateToken(ctx, words[1], *readOnly, "")
 			if err != nil {
 				fmt.Fprintln(os.Stderr, err)
 				return 1

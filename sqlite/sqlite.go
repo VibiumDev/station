@@ -170,6 +170,32 @@ CREATE TABLE IF NOT EXISTS jam_events (
 	data   TEXT NOT NULL,
 	PRIMARY KEY (jam_id, seq)
 );
+CREATE TABLE IF NOT EXISTS users (
+	id            TEXT PRIMARY KEY,
+	login         TEXT NOT NULL UNIQUE,
+	name          TEXT NOT NULL DEFAULT '',
+	password_hash TEXT NOT NULL DEFAULT '',
+	admin         INTEGER NOT NULL DEFAULT 0,
+	disabled      INTEGER NOT NULL DEFAULT 0,
+	created_at    INTEGER NOT NULL,
+	last_login    INTEGER NOT NULL DEFAULT 0
+);
+CREATE TABLE IF NOT EXISTS teams (
+	id         TEXT PRIMARY KEY,
+	name       TEXT NOT NULL UNIQUE,
+	created_at INTEGER NOT NULL
+);
+CREATE TABLE IF NOT EXISTS team_members (
+	team_id TEXT NOT NULL REFERENCES teams(id) ON DELETE CASCADE,
+	user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+	PRIMARY KEY (team_id, user_id)
+);
+CREATE TABLE IF NOT EXISTS device_access (
+	device_id TEXT NOT NULL,
+	team_id   TEXT NOT NULL REFERENCES teams(id) ON DELETE CASCADE,
+	level     TEXT NOT NULL,
+	PRIMARY KEY (device_id, team_id)
+);
 CREATE TABLE IF NOT EXISTS audit (
 	id        INTEGER PRIMARY KEY AUTOINCREMENT,
 	at        INTEGER NOT NULL,
@@ -228,6 +254,7 @@ func (d *DB) migrate() error {
 		{"blobs", "golden", "INTEGER NOT NULL DEFAULT 0"},
 		{"api_tokens", "device", "TEXT NOT NULL DEFAULT ''"},
 		{"api_tokens", "expires_at", "INTEGER NOT NULL DEFAULT 0"},
+		{"api_tokens", "user_id", "TEXT NOT NULL DEFAULT ''"},
 	} {
 		has, err := d.hasColumn(c.table, c.column)
 		if err != nil {

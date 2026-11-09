@@ -173,7 +173,7 @@ func (m *jams) start(ctx context.Context, p station.Principal, prompt, deviceID,
 	if err := m.s.db.CreateJam(ctx, j); err != nil {
 		return station.Jam{}, err
 	}
-	secret, err := m.s.db.CreateScopedToken(ctx, "jam:"+j.ID, false, dev.ID, j.CreatedAt.Add(jamTimeLimit+time.Minute))
+	secret, err := m.s.db.CreateScopedToken(ctx, "jam:"+j.ID, false, dev.ID, j.CreatedAt.Add(jamTimeLimit+time.Minute), p.User)
 	if err != nil {
 		return station.Jam{}, err
 	}

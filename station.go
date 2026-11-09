@@ -179,10 +179,108 @@ type Rig struct {
 type Principal struct {
 	Subject  string // "owner", "token:<name>", or a login such as you@example.com
 	ReadOnly bool   // may view, never control
-	Admin    bool   // may enroll and remove rigs, make codes and tokens
+	Admin    bool   // sees and manages everything; a regular user sees what their teams are given
 	// Device, when set, is the one device the principal may act on: a
 	// token minted for a jam carries the jam's device.
 	Device string
+	// User is the id of the user behind the principal, a person signed
+	// in or the owner of a token, and Teams the ids of the teams they
+	// are in, which decide what a regular user may see and do.
+	User  string
+	Teams []string
+}
+
+// User is someone who signs in: an admin, who sees and manages
+// everything, or a regular user, who sees what their teams are given.
+type User struct {
+	ID        string    `json:"id"`
+	Login     string    `json:"login"` // lowercased; an email address as a rule
+	Name      string    `json:"name,omitempty"`
+	Admin     bool      `json:"admin"`
+	Disabled  bool      `json:"disabled,omitempty"`
+	CreatedAt time.Time `json:"created"`
+	LastLogin time.Time `json:"last_login,omitempty"`
+	Teams     []string  `json:"teams,omitempty"` // team ids
+}
+
+// OwnerLogin is the login of the first admin, whose password `station
+// passwd` sets.
+const OwnerLogin = "owner"
+
+// Team groups users; devices are shared with teams.
+type Team struct {
+	ID        string    `json:"id"`
+	Name      string    `json:"name"`
+	Members   []string  `json:"members,omitempty"` // user ids
+	CreatedAt time.Time `json:"created"`
+}
+
+// Level is what a team may do with a device: watch it, drive it, or
+// also start jams and agents on it. Each level includes the ones
+// before; the empty level is no access.
+type Level string
+
+const (
+	LevelNone  Level = ""
+	LevelWatch Level = "watch"
+	LevelDrive Level = "drive"
+	LevelJam   Level = "jam"
+)
+
+// Rank orders the levels, none lowest.
+func (l Level) Rank() int {
+	switch l {
+	case LevelWatch:
+		return 1
+	case LevelDrive:
+		return 2
+	case LevelJam:
+		return 3
+	}
+	return 0
+}
+
+// AtLeast says whether l includes what want allows.
+func (l Level) AtLeast(want Level) bool { return l.Rank() >= want.Rank() }
+
+// ParseLevel reads a level's name; "" and "none" are no access.
+func ParseLevel(s string) (Level, error) {
+	switch Level(s) {
+	case LevelNone, "none":
+		return LevelNone, nil
+	case LevelWatch, LevelDrive, LevelJam:
+		return Level(s), nil
+	}
+	return LevelNone, errors.New("a level is watch, drive, jam or none")
+}
+
+// Access is one team's level on one device.
+type Access struct {
+	DeviceID string `json:"device"`
+	TeamID   string `json:"team"`
+	Level    Level  `json:"level"`
+}
+
+// UserStore keeps users, teams, and what teams may do with devices.
+type UserStore interface {
+	Users(ctx context.Context) ([]User, error)
+	User(ctx context.Context, id string) (User, error)
+	UserByLogin(ctx context.Context, login string) (User, error)
+	// PutUser creates a user, or updates everything but the password.
+	PutUser(ctx context.Context, u User) error
+	RemoveUser(ctx context.Context, id string) error
+	SetPassword(ctx context.Context, id, hash string) error
+	PasswordHash(ctx context.Context, id string) (string, error)
+	TouchUser(ctx context.Context, id string, at time.Time) error
+	Teams(ctx context.Context) ([]Team, error)
+	PutTeam(ctx context.Context, t Team) error
+	RemoveTeam(ctx context.Context, id string) error
+	SetMember(ctx context.Context, teamID, userID string, in bool) error
+	Accesses(ctx context.Context) ([]Access, error)
+	// SetAccess sets a team's level on a device; LevelNone takes it away.
+	SetAccess(ctx context.Context, a Access) error
+	// LevelFor is the highest level any of the teams has on the device.
+	LevelFor(ctx context.Context, teams []string, deviceID string) (Level, error)
 }
 
 // Hold is control of one device by one subject, numbered per device so

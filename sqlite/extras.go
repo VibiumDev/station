@@ -53,6 +53,7 @@ type APIToken struct {
 	ExpiresAt time.Time // zero for a token that lasts until revoked
 	CreatedAt time.Time
 	UsedAt    time.Time
+	UserID    string // the user the token acts as; empty means the owner
 }
 
 // Expired says whether the token has run out at t.
@@ -66,14 +67,16 @@ func hashSecret(s string) string {
 	return hex.EncodeToString(sum[:])
 }
 
-// CreateToken makes a token and returns its secret.
-func (d *DB) CreateToken(ctx context.Context, name string, readOnly bool) (string, error) {
-	return d.CreateScopedToken(ctx, name, readOnly, "", time.Time{})
+// CreateToken makes a token for a user and returns its secret; an empty
+// user is the owner's.
+func (d *DB) CreateToken(ctx context.Context, name string, readOnly bool, userID string) (string, error) {
+	return d.CreateScopedToken(ctx, name, readOnly, "", time.Time{}, userID)
 }
 
 // CreateScopedToken makes a token bound to one device and expiring at a
-// time, either of which may be left empty, and returns its secret.
-func (d *DB) CreateScopedToken(ctx context.Context, name string, readOnly bool, device string, expires time.Time) (string, error) {
+// time, either of which may be left empty, for a user, and returns its
+// secret.
+func (d *DB) CreateScopedToken(ctx context.Context, name string, readOnly bool, device string, expires time.Time, userID string) (string, error) {
 	var b [24]byte
 	if _, err := rand.Read(b[:]); err != nil {
 		return "", err
@@ -87,21 +90,21 @@ func (d *DB) CreateScopedToken(ctx context.Context, name string, readOnly bool, 
 	if !expires.IsZero() {
 		exp = expires.UnixNano()
 	}
-	_, err := d.db.ExecContext(ctx, `INSERT INTO api_tokens (name, hash, read_only, created_at, device, expires_at) VALUES (?, ?, ?, ?, ?, ?)`,
-		name, hashSecret(secret), ro, time.Now().UnixNano(), device, exp)
+	_, err := d.db.ExecContext(ctx, `INSERT INTO api_tokens (name, hash, read_only, created_at, device, expires_at, user_id) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+		name, hashSecret(secret), ro, time.Now().UnixNano(), device, exp, userID)
 	if err != nil && strings.Contains(err.Error(), "UNIQUE") {
 		return "", ErrTokenExists
 	}
 	return secret, err
 }
 
-const tokenCols = `name, read_only, created_at, used_at, device, expires_at`
+const tokenCols = `name, read_only, created_at, used_at, device, expires_at, user_id`
 
 func scanToken(s scanner) (APIToken, error) {
 	var t APIToken
 	var ro int
 	var created, used, expires int64
-	if err := s.Scan(&t.Name, &ro, &created, &used, &t.Device, &expires); err != nil {
+	if err := s.Scan(&t.Name, &ro, &created, &used, &t.Device, &expires, &t.UserID); err != nil {
 		return t, err
 	}
 	t.ReadOnly = ro == 1

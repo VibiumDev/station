@@ -19,7 +19,7 @@ func TestJamTokenIsBoundToItsDevice(t *testing.T) {
 	}
 	defer db.Close()
 	ctx := context.Background()
-	secret, err := db.CreateScopedToken(ctx, "jam:jam_1", false, "rig_a/phone", time.Now().Add(time.Minute))
+	secret, err := db.CreateScopedToken(ctx, "jam:jam_1", false, "rig_a/phone", time.Now().Add(time.Minute), "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -42,7 +42,7 @@ func TestJamTokenIsBoundToItsDevice(t *testing.T) {
 	if err := a.Authorize(ctx, p, station.ActionManage, ""); err == nil {
 		t.Error("a jam's token may not manage")
 	}
-	old, _ := db.CreateScopedToken(ctx, "jam:jam_0", false, "rig_a/phone", time.Now().Add(-time.Second))
+	old, _ := db.CreateScopedToken(ctx, "jam:jam_0", false, "rig_a/phone", time.Now().Add(-time.Second), "")
 	r.Header.Set("Authorization", "Bearer "+old)
 	if _, err := a.Authenticate(r); err == nil {
 		t.Error("an expired token signed in")
