@@ -84,6 +84,9 @@ func (m *jams) on() bool {
 	if m == nil {
 		return false
 	}
+	if m == nil {
+		return false
+	}
 	m.s.nameMu.RLock()
 	off := m.s.cfg.JamsOff
 	m.s.nameMu.RUnlock()

@@ -2,7 +2,9 @@ package main
 
 import (
 	"context"
+	"errors"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -75,11 +77,33 @@ func TestLoginAndLevels(t *testing.T) {
 	db.SetMember(ctx, "team_qa", ann.ID, true)
 	db.SetAccess(ctx, station.Access{DeviceID: "rig_a/phone", TeamID: "team_qa", Level: station.LevelDrive})
 	a := newAuth(&Config{}, db, nil, false, false)
+	a.delay = 0
+	// Both have authenticators, so a sign-in is the password and a code.
+	ownerUser, _ := db.UserByLogin(ctx, station.OwnerLogin)
+	secrets := map[string]string{"owner": newTOTPSecret(), "ann@example.com": newTOTPSecret()}
+	db.SetSecondFactor(ctx, ownerUser.ID, secrets["owner"], time.Now())
+	db.SetSecondFactor(ctx, ann.ID, secrets["ann@example.com"], time.Now())
 
 	signIn := func(login, password string) (station.Principal, bool) {
 		w := httptest.NewRecorder()
 		r := httptest.NewRequest("POST", "/login", nil)
-		if !a.login(w, r, login, password) {
+		st, ok := a.login(w, r, login, password, "/")
+		if !ok {
+			return station.Principal{}, false
+		}
+		if st != stageCode {
+			t.Fatalf("%s: stage %v, want the code step", login, st)
+		}
+		r = httptest.NewRequest("POST", "/login/code", nil)
+		for _, c := range w.Result().Cookies() {
+			r.AddCookie(c)
+		}
+		if _, err := a.Authenticate(r); !errors.Is(err, errCodeDue) {
+			t.Fatalf("%s before the code: %v", login, err)
+		}
+		code, _ := totpCode(secrets[strings.ToLower(login)], totpStep(time.Now()))
+		w = httptest.NewRecorder()
+		if ok, _, _ := a.code(w, r, code); !ok {
 			return station.Principal{}, false
 		}
 		next := httptest.NewRequest("GET", "/", nil)
@@ -130,7 +154,7 @@ func TestLoginAndLevels(t *testing.T) {
 	if a.level(ctx, p, "rig_a/phone") != station.LevelDrive || a.level(ctx, owner, "rig_z/phone") != station.LevelJam {
 		t.Error("levels")
 	}
-	// A token acts as its user, never manages, and dies with a disabled user.
+	// A token acts as its user, never manages, and dies with a locked user.
 	secret, _ := db.CreateToken(ctx, "anns", false, ann.ID)
 	r := httptest.NewRequest("GET", "/v1/devices", nil)
 	r.Header.Set("Authorization", "Bearer "+secret)
@@ -146,14 +170,14 @@ func TestLoginAndLevels(t *testing.T) {
 	if op, err := a.Authenticate(r); err != nil || !op.Admin || a.Authorize(ctx, op, station.ActionManage, "") == nil {
 		t.Errorf("an owner's token sees everything but manages nothing: %+v %v", op, err)
 	}
-	ann.Disabled = true
+	ann.Locked = true
 	db.PutUser(ctx, ann)
 	r.Header.Set("Authorization", "Bearer "+secret)
 	if _, err := a.Authenticate(r); err == nil {
-		t.Error("a disabled user's token signed in")
+		t.Error("a locked user's token signed in")
 	}
 	if _, ok := signIn("ann@example.com", "ann-secret"); ok {
-		t.Error("a disabled user signed in")
+		t.Error("a locked user signed in")
 	}
 }
 

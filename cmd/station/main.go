@@ -51,7 +51,8 @@ func main() {
 
 func usage() {
 	fmt.Println(`usage: station [flags]                 run the station (station -h for the flags)
-       station passwd [login]          set a user's password, the owner's by default
+       station passwd [--reset] [login]  set a user's password, the owner's by default;
+                                       --reset also forgets their authenticator and backup codes
        station enroll                  make a one-time enrollment code for a rig
        station token create NAME [--read-only]
        station token list | revoke NAME
@@ -187,8 +188,14 @@ func ensureOwner(ctx context.Context, db *sqlite.DB, cfg *Config) (station.User,
 }
 
 // passwd asks for a password twice and stores its hash for a user: the
-// owner, or the login given.
+// owner, or the login given. With --reset the user's authenticator and
+// backup codes are forgotten too, so their next sign-in sets up a new
+// one: the way back in for an owner who lost both phone and codes.
 func passwd(dir string, words []string) int {
+	reset := false
+	if len(words) > 0 && words[0] == "--reset" {
+		reset, words = true, words[1:]
+	}
 	cfg, err := loadConfig(dir)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
@@ -234,8 +241,8 @@ func passwd(dir string, words []string) int {
 		fmt.Fprintln(os.Stderr, err)
 		return 1
 	}
-	if len(pw) < 8 {
-		fmt.Fprintln(os.Stderr, "a password needs at least 8 characters")
+	if err := checkPasswordRules(pw, user.Login); err != nil {
+		fmt.Fprintln(os.Stderr, err)
 		return 1
 	}
 	again, _ := read("Again: ")
@@ -251,6 +258,16 @@ func passwd(dir string, words []string) int {
 	if err := db.SetPassword(ctx, user.ID, hash); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		return 1
+	}
+	if reset {
+		if err := db.SetSecondFactor(ctx, user.ID, "", time.Time{}); err == nil {
+			err = db.SetBackupCodes(ctx, user.ID, nil)
+		} else {
+			fmt.Fprintln(os.Stderr, err)
+			return 1
+		}
+		fmt.Printf("Password set for %s; their authenticator and backup codes are forgotten, and their next sign-in sets up a new one.\n", user.Login)
+		return 0
 	}
 	fmt.Printf("Password set for %s.\n", user.Login)
 	return 0
@@ -326,6 +343,9 @@ func serve(args []string) int {
 		if len(pw) < 8 {
 			fmt.Fprintln(os.Stderr, "STATION_PASSWORD needs at least 8 characters")
 			return 1
+		}
+		if err := checkPasswordRules(pw, station.OwnerLogin); err != nil {
+			fmt.Fprintf(os.Stderr, "STATION_PASSWORD: %v; set a stronger one\n", err)
 		}
 		owner, err := ensureOwner(context.Background(), db, cfg)
 		if err != nil {

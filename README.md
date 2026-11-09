@@ -8,9 +8,11 @@ station signs every session as a hold grant that the rig checks itself, so
 the rig stays the final gate.
 
 `station` is the self-hosted binary, which serves one operator and their
-own rigs, lets people sign in with a login and a password or a tailnet
-identity, and keeps admins apart from regular users, who see only the
-devices their teams were given ([docs/specs/teams.md](docs/specs/teams.md)),
+own rigs, lets people sign in with a login, a password and a code from
+an authenticator app, or by a tailnet identity, and keeps admins apart
+from regular users, who see only the devices their teams were given
+([docs/specs/teams.md](docs/specs/teams.md),
+[docs/specs/second-factor.md](docs/specs/second-factor.md)),
 and keeps its store in one SQLite file. The packages it is built from
 take an authenticator, an authorizer and stores as interfaces, so a
 hosted service can embed them instead of forking.
@@ -43,7 +45,7 @@ Go 1.27 or newer.
 
 ```bash
 go build ./cmd/station
-./station passwd                      # the owner's password (login: owner)
+./station passwd                      # the owner's password (login: owner); an authenticator app is set up at the first sign-in
 ./station                             # LAN mode: https://<your ip>:8443, a self-signed certificate
 ./station --tailnet --allow you@example.com   # tailnet mode: https://station.<tailnet>.ts.net, sign in by identity
 ./station --public station.example.com  # public mode: its own Let's Encrypt certificate on :443, TURN on :3478
@@ -119,7 +121,7 @@ events do today, and what they leave open.
 | Command | What it does |
 |---|---|
 | `station` | Run the station |
-| `station passwd [login]` | Set a user's password, the owner's by default (argon2id, in the database) |
+| `station passwd [--reset] [login]` | Set a user's password, the owner's by default (argon2id, in the database); `--reset` also forgets their authenticator and backup codes, so the next sign-in sets up a new one |
 | `station enroll` | Print a one-time enrollment code |
 | `station token create NAME [--read-only]`, `token list`, `token revoke NAME` | API tokens |
 | `station key` | The station's key as npub, hex and fingerprint |
@@ -152,7 +154,11 @@ events do today, and what they leave open.
 | `--turn-mtu` | 1600 | TURN's inbound MTU |
 
 `STATION_PASSWORD` in the environment sets the owner's password when the
-station starts, for hosts whose secrets are environment variables.
+station starts, for hosts whose secrets are environment variables; the
+owner sets up an authenticator at their first sign-in, like everyone.
+Other users never get a password from anyone: an admin adds them on
+Settings and passes on the setup link, where they choose their own and
+add an authenticator.
 `STATION_VIBIUM` names the Vibium binary the same way `--vibium` does,
 and `VIBIUM_AI_PROVIDER`, `VIBIUM_AI_MODEL` and the provider's key
 variable in the environment are one more agent model on Settings, named

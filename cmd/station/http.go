@@ -9,7 +9,6 @@ import (
 	"log"
 	"net/http"
 	"net/url"
-	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -140,7 +139,14 @@ func (s *server) handler() http.Handler {
 	mux.HandleFunc("GET /apple-touch-icon.png", serveIcon)
 	mux.HandleFunc("GET /login", s.loginPage)
 	mux.HandleFunc("POST /login", s.loginPost)
+	mux.HandleFunc("GET /login/code", s.codePage)
+	mux.HandleFunc("POST /login/code", s.codePost)
 	mux.HandleFunc("POST /logout", s.logout)
+	mux.HandleFunc("GET /setup/{token}", s.setupLinkPage)
+	mux.HandleFunc("POST /setup/{token}", s.setupLinkPost)
+	mux.HandleFunc("GET /account/setup", s.accountSetupPage)
+	mux.HandleFunc("POST /account/setup", s.accountSetupPost)
+	mux.HandleFunc("POST /account/setup/cancel", s.accountSetupCancel)
 	// Pages.
 	mux.Handle("GET /{$}", s.page(station.ActionView, s.homePage))
 	mux.Handle("GET /devices", s.page(station.ActionView, s.indexPage))
@@ -167,9 +173,10 @@ func (s *server) handler() http.Handler {
 	mux.Handle("POST /records/tags", s.page(station.ActionView, s.recordTags))
 	mux.Handle("GET /account", s.page(station.ActionView, s.accountPage))
 	mux.Handle("POST /account/password", s.page(station.ActionView, s.changePassword))
+	mux.Handle("POST /account/codes", s.page(station.ActionView, s.accountCodes))
+	mux.Handle("POST /account/authenticator", s.page(station.ActionView, s.accountAuthenticator))
 	mux.Handle("GET /settings", s.page(station.ActionManage, s.settingsPage))
 	mux.Handle("POST /settings/name", s.page(station.ActionManage, s.setName))
-	mux.Handle("POST /settings/password", s.page(station.ActionManage, s.setPassword))
 	mux.Handle("POST /settings/tokens", s.page(station.ActionManage, s.createToken))
 	mux.Handle("POST /settings/tokens/revoke", s.page(station.ActionManage, s.revokeToken))
 	mux.Handle("POST /settings/codes", s.page(station.ActionManage, s.createCode))
@@ -181,8 +188,8 @@ func (s *server) handler() http.Handler {
 	mux.Handle("POST /settings/jams", s.page(station.ActionManage, s.setJams))
 	mux.Handle("POST /settings/users", s.page(station.ActionManage, s.addUserForm))
 	mux.Handle("POST /settings/users/role", s.page(station.ActionManage, s.userRoleForm))
-	mux.Handle("POST /settings/users/disable", s.page(station.ActionManage, s.userDisableForm))
-	mux.Handle("POST /settings/users/password", s.page(station.ActionManage, s.userPasswordForm))
+	mux.Handle("POST /settings/users/lock", s.page(station.ActionManage, s.userLockForm))
+	mux.Handle("POST /settings/users/reset", s.page(station.ActionManage, s.userResetForm))
 	mux.Handle("POST /settings/users/remove", s.page(station.ActionManage, s.userRemoveForm))
 	mux.Handle("POST /settings/teams", s.page(station.ActionManage, s.addTeamForm))
 	mux.Handle("POST /settings/teams/remove", s.page(station.ActionManage, s.teamRemoveForm))
@@ -191,6 +198,7 @@ func (s *server) handler() http.Handler {
 	mux.Handle("GET /v1/users", s.api(station.ActionManage, s.listUsers))
 	mux.Handle("POST /v1/users", s.api(station.ActionManage, s.createUser))
 	mux.Handle("PUT /v1/users/{id}", s.api(station.ActionManage, s.updateUser))
+	mux.Handle("POST /v1/users/{id}/reset", s.api(station.ActionManage, s.resetUser))
 	mux.Handle("DELETE /v1/users/{id}", s.api(station.ActionManage, s.deleteUser))
 	mux.Handle("GET /v1/teams", s.api(station.ActionManage, s.listTeams))
 	mux.Handle("POST /v1/teams", s.api(station.ActionManage, s.createTeam))
@@ -282,11 +290,18 @@ func secure(next http.Handler) http.Handler {
 type handlerWithPrincipal func(w http.ResponseWriter, r *http.Request, p station.Principal)
 
 // page gates a browser page: signed in, allowed, and with a CSRF token on
-// anything but GET.
+// anything but GET. A sign-in on its way is sent to the step it is at.
 func (s *server) page(action station.Action, next handlerWithPrincipal) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		p, err := s.auth.Authenticate(r)
-		if err != nil {
+		switch {
+		case errors.Is(err, errCodeDue):
+			http.Redirect(w, r, "/login/code", http.StatusSeeOther)
+			return
+		case errors.Is(err, errSetupDue):
+			http.Redirect(w, r, "/account/setup", http.StatusSeeOther)
+			return
+		case err != nil:
 			http.Redirect(w, r, "/login?next="+url.QueryEscape(r.URL.RequestURI()), http.StatusSeeOther)
 			return
 		}
@@ -366,87 +381,6 @@ func (s *server) csrfOKAPI(r *http.Request) bool {
 		return body.CSRF != "" && body.CSRF == s.auth.csrfToken(r)
 	}
 	return s.auth.csrfOK(r)
-}
-
-// --- Login ---
-
-func (s *server) loginPage(w http.ResponseWriter, r *http.Request) {
-	if _, err := s.auth.Authenticate(r); err == nil {
-		http.Redirect(w, r, "/", http.StatusSeeOther)
-		return
-	}
-	s.render(w, "login", map[string]any{"Next": safeNext(r.FormValue("next")), "NoUsers": !s.auth.hasUsers(r.Context())})
-}
-
-func safeNext(next string) string {
-	if next == "" || !strings.HasPrefix(next, "/") || strings.HasPrefix(next, "//") {
-		return "/"
-	}
-	return next
-}
-
-func (s *server) loginPost(w http.ResponseWriter, r *http.Request) {
-	login := strings.TrimSpace(r.FormValue("login"))
-	if !s.auth.login(w, r, login, r.FormValue("password")) {
-		w.WriteHeader(http.StatusUnauthorized)
-		s.render(w, "login", map[string]any{"Next": safeNext(r.FormValue("next")), "Login": login, "Error": "That login and password do not match.", "NoUsers": !s.auth.hasUsers(r.Context())})
-		return
-	}
-	http.Redirect(w, r, safeNext(r.FormValue("next")), http.StatusSeeOther)
-}
-
-// accountPage is GET /account: who you are signed in as, your teams, and
-// a form for a new password. Everyone has one; Settings is for admins.
-func (s *server) accountPage(w http.ResponseWriter, r *http.Request, p station.Principal) {
-	s.render(w, "account", s.accountData(r, p, nil))
-}
-
-func (s *server) accountData(r *http.Request, p station.Principal, extra map[string]any) map[string]any {
-	ctx := r.Context()
-	u, _ := s.db.User(ctx, p.User)
-	var teams []string
-	if all, err := s.db.Teams(ctx); err == nil {
-		for _, t := range all {
-			if slices.Contains(u.Teams, t.ID) {
-				teams = append(teams, t.Name)
-			}
-		}
-	}
-	data := map[string]any{"Page": "account", "Principal": p, "CSRF": s.auth.csrfToken(r), "User": u, "TeamNames": teams, "Token": !person(p)}
-	for k, v := range extra {
-		data[k] = v
-	}
-	return data
-}
-
-// changePassword is POST /account/password: a new password for whoever
-// is signed in.
-func (s *server) changePassword(w http.ResponseWriter, r *http.Request, p station.Principal) {
-	msg, err := s.setUserPassword(r.Context(), p.User, r.FormValue("password"), r.FormValue("again"))
-	if err == nil {
-		s.db.Audit(r.Context(), station.AuditEntry{Subject: p.Subject, Action: "password", Detail: "changed their own"})
-	}
-	s.render(w, "account", s.accountData(r, p, map[string]any{"Message": msg}))
-}
-
-// setUserPassword checks a new password and stores its hash for a user.
-func (s *server) setUserPassword(ctx context.Context, userID, pw, again string) (string, error) {
-	switch {
-	case userID == "":
-		return "Only a signed-in person has a password.", station.ErrForbidden
-	case len(pw) < 8:
-		return "A password needs at least 8 characters.", station.ErrForbidden
-	case pw != again:
-		return "The two passwords differ.", station.ErrForbidden
-	}
-	h, err := hashPassword(pw)
-	if err == nil {
-		err = s.db.SetPassword(ctx, userID, h)
-	}
-	if err != nil {
-		return "Could not save the password: " + err.Error(), err
-	}
-	return "Password changed.", nil
 }
 
 func (s *server) logout(w http.ResponseWriter, r *http.Request) {
@@ -930,14 +864,6 @@ func (s *server) settingsData(r *http.Request, p station.Principal, extra map[st
 
 func (s *server) settingsPage(w http.ResponseWriter, r *http.Request, p station.Principal) {
 	s.render(w, "settings", s.settingsData(r, p, nil))
-}
-
-func (s *server) setPassword(w http.ResponseWriter, r *http.Request, p station.Principal) {
-	msg, err := s.setUserPassword(r.Context(), p.User, r.FormValue("password"), r.FormValue("again"))
-	if err == nil {
-		s.db.Audit(r.Context(), station.AuditEntry{Subject: p.Subject, Action: "password", Detail: "changed their own"})
-	}
-	s.render(w, "settings", s.settingsData(r, p, map[string]any{"Message": msg}))
 }
 
 func (s *server) createToken(w http.ResponseWriter, r *http.Request, p station.Principal) {

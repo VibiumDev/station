@@ -20,7 +20,23 @@ import (
 type userView struct {
 	station.User
 	TeamNames []string
-	Self      bool // the admin looking at the page, who cannot lock themselves out
+	Self      bool   // the admin looking at the page, who cannot lock themselves out
+	SignIn    string // how they sign in, in words
+}
+
+// signInWords says how a user signs in: a setup link still open, a
+// password with an authenticator, one without until their next sign-in,
+// or no password at all.
+func signInWords(u station.User, invite time.Time) string {
+	switch {
+	case !invite.IsZero():
+		return "setup link until " + invite.Local().Format("Jan 2 15:04")
+	case u.TwoFactor:
+		return "password and authenticator"
+	case u.HasPassword:
+		return "password; authenticator at next sign-in"
+	}
+	return "no password"
 }
 
 // teamView is a team with its members' logins, and the users who could
@@ -47,6 +63,7 @@ func (s *server) teamsData(ctx context.Context, p station.Principal, data map[st
 	users, _ := s.db.Users(ctx)
 	teams, _ := s.db.Teams(ctx)
 	accesses, _ := s.db.Accesses(ctx)
+	invites, _ := s.db.OpenInvites(ctx, time.Now())
 	devs, _ := s.devices(ctx)
 	teamName := map[string]string{}
 	for _, t := range teams {
@@ -60,7 +77,7 @@ func (s *server) teamsData(ctx context.Context, p station.Principal, data map[st
 	}
 	var uviews []userView
 	for _, u := range users {
-		v := userView{User: u, Self: u.ID == p.User}
+		v := userView{User: u, Self: u.ID == p.User, SignIn: signInWords(u, invites[u.ID])}
 		for _, t := range u.Teams {
 			v.TeamNames = append(v.TeamNames, teamName[t])
 		}
@@ -107,31 +124,24 @@ func (s *server) teamsData(ctx context.Context, p station.Principal, data map[st
 
 var errLockout = errors.New("you cannot take your own admin rights or sign-in away")
 
-func (s *server) addUser(ctx context.Context, p station.Principal, login, name, password string, admin bool) (station.User, error) {
+// addUser makes a user and their setup link, where they choose a
+// password and add an authenticator; nobody chooses one for them.
+func (s *server) addUser(ctx context.Context, p station.Principal, login, name string, admin bool) (station.User, string, error) {
 	login = strings.ToLower(strings.TrimSpace(login))
-	switch {
-	case login == "" || len(login) > 120 || strings.ContainsAny(login, " \t\n/\\"):
-		return station.User{}, errors.New("a login is a word such as an email address, up to 120 characters")
-	case len(password) < 8:
-		return station.User{}, errors.New("a password needs at least 8 characters")
-	}
-	hash, err := hashPassword(password)
-	if err != nil {
-		return station.User{}, err
+	if login == "" || len(login) > 120 || strings.ContainsAny(login, " \t\n/\\") {
+		return station.User{}, "", errors.New("a login is a word such as an email address, up to 120 characters")
 	}
 	u := station.User{ID: station.NewID("usr"), Login: login, Name: strings.TrimSpace(name), Admin: admin}
 	if err := s.db.PutUser(ctx, u); err != nil {
-		return station.User{}, err
-	}
-	if err := s.db.SetPassword(ctx, u.ID, hash); err != nil {
-		return station.User{}, err
+		return station.User{}, "", err
 	}
 	role := "regular"
 	if admin {
 		role = "admin"
 	}
 	s.db.Audit(ctx, station.AuditEntry{Subject: p.Subject, Action: "user", Detail: "added " + login + " (" + role + ")"})
-	return u, nil
+	link, err := s.makeInvite(ctx, p, u)
+	return u, link, err
 }
 
 func (s *server) setRole(ctx context.Context, p station.Principal, userID string, admin bool) error {
@@ -154,43 +164,41 @@ func (s *server) setRole(ctx context.Context, p station.Principal, userID string
 	return nil
 }
 
-func (s *server) setDisabled(ctx context.Context, p station.Principal, userID string, disabled bool) error {
-	if userID == p.User && disabled {
+// setLocked locks a user out, ending their sessions, or lets them back.
+func (s *server) setLocked(ctx context.Context, p station.Principal, userID string, locked bool) error {
+	if userID == p.User && locked {
 		return errLockout
 	}
 	u, err := s.db.User(ctx, userID)
 	if err != nil {
 		return err
 	}
-	u.Disabled = disabled
+	u.Locked = locked
 	if err := s.db.PutUser(ctx, u); err != nil {
 		return err
 	}
-	what := "enabled"
-	if disabled {
-		what = "disabled"
+	what := "unlocked"
+	if locked {
+		what = "locked"
+		s.auth.dropUser(userID)
 	}
 	s.db.Audit(ctx, station.AuditEntry{Subject: p.Subject, Action: "user", Detail: what + " " + u.Login})
 	return nil
 }
 
-func (s *server) adminSetPassword(ctx context.Context, p station.Principal, userID, password string) error {
-	if len(password) < 8 {
-		return errors.New("a password needs at least 8 characters")
-	}
+// resetSignIn forgets a user's password, authenticator and backup codes,
+// ends their sessions, and makes them a new setup link.
+func (s *server) resetSignIn(ctx context.Context, p station.Principal, userID string) (string, error) {
 	u, err := s.db.User(ctx, userID)
 	if err != nil {
-		return err
+		return "", err
 	}
-	hash, err := hashPassword(password)
-	if err != nil {
-		return err
+	if err := s.db.ResetSignIn(ctx, u.ID); err != nil {
+		return "", err
 	}
-	if err := s.db.SetPassword(ctx, u.ID, hash); err != nil {
-		return err
-	}
-	s.db.Audit(ctx, station.AuditEntry{Subject: p.Subject, Action: "password", Detail: "set " + u.Login + "'s"})
-	return nil
+	s.auth.dropUser(u.ID)
+	s.db.Audit(ctx, station.AuditEntry{Subject: p.Subject, Action: "user", Detail: "reset " + u.Login + "'s sign-in"})
+	return s.makeInvite(ctx, p, u)
 }
 
 func (s *server) removeUser(ctx context.Context, p station.Principal, userID string) error {
@@ -272,20 +280,30 @@ func (s *server) teamsForm(w http.ResponseWriter, r *http.Request, p station.Pri
 }
 
 func (s *server) addUserForm(w http.ResponseWriter, r *http.Request, p station.Principal) {
-	_, err := s.addUser(r.Context(), p, r.FormValue("login"), r.FormValue("name"), r.FormValue("password"), r.FormValue("admin") == "on")
-	s.teamsForm(w, r, p, err)
+	u, link, err := s.addUser(r.Context(), p, r.FormValue("login"), r.FormValue("name"), r.FormValue("admin") == "on")
+	if err != nil {
+		s.teamsForm(w, r, p, err)
+		return
+	}
+	s.render(w, "settings", s.settingsData(r, p, map[string]any{"SetupURL": link, "SetupLogin": u.Login}))
 }
 
 func (s *server) userRoleForm(w http.ResponseWriter, r *http.Request, p station.Principal) {
 	s.teamsForm(w, r, p, s.setRole(r.Context(), p, r.FormValue("user"), r.FormValue("admin") == "1"))
 }
 
-func (s *server) userDisableForm(w http.ResponseWriter, r *http.Request, p station.Principal) {
-	s.teamsForm(w, r, p, s.setDisabled(r.Context(), p, r.FormValue("user"), r.FormValue("disabled") == "1"))
+func (s *server) userLockForm(w http.ResponseWriter, r *http.Request, p station.Principal) {
+	s.teamsForm(w, r, p, s.setLocked(r.Context(), p, r.FormValue("user"), r.FormValue("locked") == "1"))
 }
 
-func (s *server) userPasswordForm(w http.ResponseWriter, r *http.Request, p station.Principal) {
-	s.teamsForm(w, r, p, s.adminSetPassword(r.Context(), p, r.FormValue("user"), r.FormValue("password")))
+func (s *server) userResetForm(w http.ResponseWriter, r *http.Request, p station.Principal) {
+	link, err := s.resetSignIn(r.Context(), p, r.FormValue("user"))
+	if err != nil {
+		s.teamsForm(w, r, p, err)
+		return
+	}
+	u, _ := s.db.User(r.Context(), r.FormValue("user"))
+	s.render(w, "settings", s.settingsData(r, p, map[string]any{"SetupURL": link, "SetupLogin": u.Login}))
 }
 
 func (s *server) userRemoveForm(w http.ResponseWriter, r *http.Request, p station.Principal) {
@@ -338,33 +356,47 @@ func (s *server) listUsers(w http.ResponseWriter, r *http.Request, _ station.Pri
 	apiJSON(w, users)
 }
 
+// invitedUser is a user with the setup link just made for them.
+type invitedUser struct {
+	station.User
+	SetupURL string `json:"setup_url"`
+}
+
 func (s *server) createUser(w http.ResponseWriter, r *http.Request, p station.Principal) {
 	var body struct {
-		Login, Name, Password string
-		Admin                 bool
+		Login, Name string
+		Admin       bool
 	}
 	if err := decodeBody(r, &body); err != nil {
-		apiError(w, http.StatusBadRequest, "a JSON body with login and password is needed")
+		apiError(w, http.StatusBadRequest, "a JSON body with login is needed")
 		return
 	}
-	u, err := s.addUser(r.Context(), p, body.Login, body.Name, body.Password, body.Admin)
+	u, link, err := s.addUser(r.Context(), p, body.Login, body.Name, body.Admin)
 	if err != nil {
 		teamsError(w, err)
 		return
 	}
 	w.WriteHeader(http.StatusCreated)
-	apiJSON(w, u)
+	apiJSON(w, invitedUser{User: u, SetupURL: link})
+}
+
+func (s *server) resetUser(w http.ResponseWriter, r *http.Request, p station.Principal) {
+	link, err := s.resetSignIn(r.Context(), p, r.PathValue("id"))
+	if err != nil {
+		teamsError(w, err)
+		return
+	}
+	apiJSON(w, map[string]string{"setup_url": link})
 }
 
 func (s *server) updateUser(w http.ResponseWriter, r *http.Request, p station.Principal) {
 	var body struct {
-		Name     *string
-		Admin    *bool
-		Disabled *bool
-		Password *string
+		Name   *string
+		Admin  *bool
+		Locked *bool
 	}
 	if err := decodeBody(r, &body); err != nil {
-		apiError(w, http.StatusBadRequest, "a JSON body with name, admin, disabled or password")
+		apiError(w, http.StatusBadRequest, "a JSON body with name, admin or locked")
 		return
 	}
 	ctx, id := r.Context(), r.PathValue("id")
@@ -386,14 +418,8 @@ func (s *server) updateUser(w http.ResponseWriter, r *http.Request, p station.Pr
 			return
 		}
 	}
-	if body.Disabled != nil {
-		if err = s.setDisabled(ctx, p, id, *body.Disabled); err != nil {
-			teamsError(w, err)
-			return
-		}
-	}
-	if body.Password != nil {
-		if err = s.adminSetPassword(ctx, p, id, *body.Password); err != nil {
+	if body.Locked != nil {
+		if err = s.setLocked(ctx, p, id, *body.Locked); err != nil {
 			teamsError(w, err)
 			return
 		}

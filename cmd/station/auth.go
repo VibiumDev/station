@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/hex"
+	"fmt"
 	"log"
 	"net"
 	"net/http"
@@ -18,18 +19,41 @@ import (
 const (
 	sessionCookie = "station_session"
 	sessionLife   = 30 * 24 * time.Hour
-	maxFailures   = 5
-	lockout       = 15 * time.Minute
+	// A sign-in on its way is short-lived: a code is due within minutes,
+	// and an authenticator is set up within the half hour.
+	codeLife    = 5 * time.Minute
+	setupLife   = 30 * time.Minute
+	maxFailures = 5
+	lockout     = 15 * time.Minute
+)
+
+// A session's stage: the password passed and a code from the
+// authenticator or a backup code is due; the password passed but no
+// authenticator is set up yet, so one must be before anything else; or
+// signed in.
+type stage int
+
+const (
+	stageSignedIn stage = iota
+	stageCode
+	stageSetup
+)
+
+// errCodeDue and errSetupDue say a session is on its way in: the pages
+// send it to the step it is at, and the API treats it as nobody.
+var (
+	errCodeDue  = fmt.Errorf("%w: a code is due", station.ErrUnauthenticated)
+	errSetupDue = fmt.Errorf("%w: an authenticator must be set up", station.ErrUnauthenticated)
 )
 
 // identity is what tailnet mode asks: who is behind an address.
 type identity func(ctx context.Context, remoteAddr string) (login string, tags []string, err error)
 
 // auth is the station's Authenticator and Authorizer: users signing in
-// with a login and a password, API tokens acting as their users, and
-// Tailscale identities, allowed or known as users. Admins see and do
-// everything; a regular user's teams decide what they may do with each
-// device.
+// with a login, a password and a code from their authenticator, API
+// tokens acting as their users, and Tailscale identities, allowed or
+// known as users. Admins see and do everything; a regular user's teams
+// decide what they may do with each device.
 type auth struct {
 	cfg *Config
 	db  *sqlite.DB
@@ -38,9 +62,14 @@ type auth struct {
 	// proxied says a TLS proxy is in front (--http): the client's address
 	// is in the headers the proxy sets, not the connection's.
 	proxied bool
+	// delay is how long a wrong password or code waits before answering,
+	// twice that when throttled; tests set it to zero.
+	delay time.Duration
 
 	mu       sync.Mutex
 	sessions map[string]*session
+	// failures are the recent wrong passwords and codes, by address and
+	// by login, so a guesser moving between addresses is slowed too.
 	failures map[string][]time.Time
 }
 
@@ -48,10 +77,14 @@ type session struct {
 	user    string // the user's id; the principal is read afresh each request
 	csrf    string
 	expires time.Time
+	stage   stage
+	secret  string // the authenticator secret being set up, until a code confirms it
+	tries   int    // wrong codes so far
+	next    string // where to go once signed in
 }
 
 func newAuth(cfg *Config, db *sqlite.DB, who identity, tls, proxied bool) *auth {
-	return &auth{cfg: cfg, db: db, who: who, tls: tls, proxied: proxied, sessions: map[string]*session{}, failures: map[string][]time.Time{}}
+	return &auth{cfg: cfg, db: db, who: who, tls: tls, proxied: proxied, delay: 500 * time.Millisecond, sessions: map[string]*session{}, failures: map[string][]time.Time{}}
 }
 
 // clientIP is the address login failures are counted by: behind a proxy,
@@ -93,7 +126,7 @@ func principalOf(u station.User, subject string) station.Principal {
 }
 
 // user finds the user a token acts as: its own, or the owner for a token
-// from before tokens had owners. A disabled user's tokens are no good.
+// from before tokens had owners. A locked user's tokens are no good.
 func (a *auth) tokenUser(ctx context.Context, tok sqlite.APIToken) (station.User, error) {
 	var u station.User
 	var err error
@@ -102,7 +135,7 @@ func (a *auth) tokenUser(ctx context.Context, tok sqlite.APIToken) (station.User
 	} else {
 		u, err = a.db.UserByLogin(ctx, station.OwnerLogin)
 	}
-	if err != nil || u.Disabled {
+	if err != nil || u.Locked {
 		return station.User{}, station.ErrUnauthenticated
 	}
 	return u, nil
@@ -123,17 +156,18 @@ func (a *auth) identityUser(ctx context.Context, login string, tags []string) (s
 				log.Printf("identity: making a user for %s: %v", login, err)
 				return station.User{}, false
 			}
-		} else if !u.Admin && !u.Disabled {
+		} else if !u.Admin && !u.Locked {
 			u.Admin = true // --allow is the operator's word
 			a.db.PutUser(ctx, u)
 		}
-		return u, !u.Disabled
+		return u, !u.Locked
 	}
-	return u, err == nil && !u.Disabled
+	return u, err == nil && !u.Locked
 }
 
 // Authenticate finds the principal: a bearer token, the session cookie, or
-// a tailnet identity.
+// a tailnet identity. A session still on its way in is nobody yet, with
+// an error that says which step it is at.
 func (a *auth) Authenticate(r *http.Request) (station.Principal, error) {
 	ctx := r.Context()
 	if h := r.Header.Get("Authorization"); strings.HasPrefix(strings.ToLower(h), "bearer ") {
@@ -152,10 +186,16 @@ func (a *auth) Authenticate(r *http.Request) (station.Principal, error) {
 	}
 	if s := a.sessionOf(r); s != nil {
 		u, err := a.db.User(ctx, s.user)
-		if err == nil && !u.Disabled {
+		switch {
+		case err != nil || u.Locked:
+			a.drop(r) // the user is gone or locked: so is the session
+		case s.stage == stageCode:
+			return station.Principal{}, errCodeDue
+		case s.stage == stageSetup:
+			return station.Principal{}, errSetupDue
+		default:
 			return principalOf(u, ""), nil
 		}
-		a.drop(r) // the user is gone or disabled: so is the session
 	}
 	if a.who != nil {
 		login, tags, err := a.who(ctx, r.RemoteAddr)
@@ -177,6 +217,32 @@ func (a *auth) drop(r *http.Request) {
 		delete(a.sessions, c.Value)
 		a.mu.Unlock()
 	}
+}
+
+// dropUser ends every session of a user, when they are locked or their
+// sign-in is reset.
+func (a *auth) dropUser(userID string) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	for id, s := range a.sessions {
+		if s.user == userID {
+			delete(a.sessions, id)
+		}
+	}
+}
+
+// sessionUser is the request's session, at whatever stage, and its user.
+func (a *auth) sessionUser(r *http.Request) (*session, station.User, bool) {
+	s := a.sessionOf(r)
+	if s == nil {
+		return nil, station.User{}, false
+	}
+	u, err := a.db.User(r.Context(), s.user)
+	if err != nil || u.Locked {
+		a.drop(r)
+		return nil, station.User{}, false
+	}
+	return s, u, true
 }
 
 // hasUsers says whether anyone can sign in yet.
@@ -292,49 +358,249 @@ func (a *auth) csrfToken(r *http.Request) string {
 	return ""
 }
 
-// login checks a login and password, with a lockout after repeated
-// failures from one address, and starts a session.
-func (a *auth) login(w http.ResponseWriter, r *http.Request, login, password string) bool {
-	addr := a.clientIP(r)
+// throttled says whether any of the keys, an address or a login, has
+// failed too often lately; stale failures are forgotten on the way.
+func (a *auth) throttled(keys ...string) bool {
 	a.mu.Lock()
+	defer a.mu.Unlock()
 	now := time.Now()
-	var recent []time.Time
-	for _, t := range a.failures[addr] {
-		if now.Sub(t) < lockout {
-			recent = append(recent, t)
+	locked := false
+	for _, k := range keys {
+		var recent []time.Time
+		for _, t := range a.failures[k] {
+			if now.Sub(t) < lockout {
+				recent = append(recent, t)
+			}
+		}
+		if len(recent) == 0 {
+			delete(a.failures, k)
+		} else {
+			a.failures[k] = recent
+		}
+		if len(recent) >= maxFailures {
+			locked = true
 		}
 	}
-	a.failures[addr] = recent
-	locked := len(recent) >= maxFailures
-	a.mu.Unlock()
-	if locked {
-		time.Sleep(time.Second)
-		return false
+	return locked
+}
+
+func (a *auth) fail(keys ...string) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	now := time.Now()
+	for _, k := range keys {
+		a.failures[k] = append(a.failures[k], now)
+	}
+}
+
+func (a *auth) clear(keys ...string) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	for _, k := range keys {
+		delete(a.failures, k)
+	}
+}
+
+// keys are what a sign-in attempt counts against: the address and the login.
+func (a *auth) keys(r *http.Request, login string) []string {
+	return []string{"addr:" + a.clientIP(r), "login:" + strings.ToLower(strings.TrimSpace(login))}
+}
+
+// login checks a login and password and starts a session at the stage the
+// user is at: a code due when they have an authenticator, setting one up
+// when they have none yet. Failures count by address and by login.
+func (a *auth) login(w http.ResponseWriter, r *http.Request, login, password, next string) (stage, bool) {
+	keys := a.keys(r, login)
+	if a.throttled(keys...) {
+		time.Sleep(2 * a.delay)
+		return 0, false
 	}
 	u, hash, err := a.db.Credentials(r.Context(), login)
-	if err != nil || u.Disabled || hash == "" || !checkPassword(hash, password) {
+	if err != nil || u.Locked || hash == "" || !checkPassword(hash, password) {
+		a.fail(keys...)
+		time.Sleep(a.delay)
+		return 0, false
+	}
+	a.clear(keys...)
+	a.drop(r)
+	st := stageCode
+	if !u.TwoFactor {
+		st = stageSetup
+	}
+	a.begin(w, u.ID, st, next)
+	return st, true
+}
+
+// begin starts a session for a user at a stage and sets its cookie.
+func (a *auth) begin(w http.ResponseWriter, user string, st stage, next string) *session {
+	s := &session{user: user, csrf: randomID(), stage: st, next: next}
+	id := randomID()
+	a.mu.Lock()
+	s.expires = time.Now().Add(stageLife(st))
+	a.sessions[id] = s
+	a.mu.Unlock()
+	a.setCookie(w, id, stageLife(st))
+	return s
+}
+
+// advance moves a session on to a stage under a fresh id, so the id that
+// saw the password through is not the one that is signed in.
+func (a *auth) advance(w http.ResponseWriter, r *http.Request, s *session, st stage) {
+	id := randomID()
+	a.mu.Lock()
+	if c, err := r.Cookie(sessionCookie); err == nil {
+		delete(a.sessions, c.Value)
+	}
+	s.stage, s.tries = st, 0
+	if st == stageSignedIn {
+		s.secret = ""
+	}
+	s.expires = time.Now().Add(stageLife(st))
+	a.sessions[id] = s
+	a.mu.Unlock()
+	a.setCookie(w, id, stageLife(st))
+}
+
+func stageLife(st stage) time.Duration {
+	switch st {
+	case stageCode:
+		return codeLife
+	case stageSetup:
+		return setupLife
+	}
+	return sessionLife
+}
+
+func (a *auth) setCookie(w http.ResponseWriter, id string, life time.Duration) {
+	http.SetCookie(w, &http.Cookie{Name: sessionCookie, Value: id, Path: "/", HttpOnly: true, Secure: a.tls,
+		SameSite: http.SameSiteLaxMode, MaxAge: int(life / time.Second)})
+}
+
+// code checks the second factor for a session awaiting one: six digits
+// from the authenticator, good once per time step, or a backup code,
+// spent on use. A wrong code counts like a wrong password, and after
+// five the attempt is over and the session gone. It says whether the
+// code passed, whether it was a backup code, and how many of those are
+// left.
+func (a *auth) code(w http.ResponseWriter, r *http.Request, code string) (ok, backup bool, left int) {
+	s, u, found := a.sessionUser(r)
+	if !found || s.stage != stageCode {
+		return false, false, 0
+	}
+	ctx := r.Context()
+	keys := a.keys(r, u.Login)
+	if a.throttled(keys...) {
+		time.Sleep(2 * a.delay)
+		return false, false, 0
+	}
+	now := time.Now()
+	if isBackupCode(code) {
+		backup = true
+		left, ok, _ = a.db.UseBackupCode(ctx, u.ID, hashCode(code))
+	} else if secret, _, err := a.db.SecondFactor(ctx, u.ID); err == nil && secret != "" {
+		if step, good := totpCheck(secret, code, now); good {
+			ok, _ = a.db.AcceptStep(ctx, u.ID, step)
+		}
+	}
+	if !ok {
+		a.fail(keys...)
 		a.mu.Lock()
-		a.failures[addr] = append(a.failures[addr], now)
+		s.tries++
+		over := s.tries >= maxFailures
 		a.mu.Unlock()
-		time.Sleep(500 * time.Millisecond)
+		if over {
+			a.drop(r)
+		}
+		time.Sleep(a.delay)
+		return false, backup, 0
+	}
+	a.clear(keys...)
+	a.db.TouchUser(ctx, u.ID, now)
+	a.advance(w, r, s, stageSignedIn)
+	return true, backup, left
+}
+
+// setupSecret is the authenticator secret a session is setting up, made
+// the first time it is asked for and kept until a code confirms it.
+func (a *auth) setupSecret(s *session) string {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	if s.secret == "" {
+		s.secret = newTOTPSecret()
+	}
+	return s.secret
+}
+
+// startSetup sends a signed-in session back to setting up an
+// authenticator, for a user replacing theirs.
+func (a *auth) startSetup(w http.ResponseWriter, r *http.Request, s *session) {
+	a.mu.Lock()
+	s.secret = ""
+	a.mu.Unlock()
+	a.advance(w, r, s, stageSetup)
+}
+
+// cancelSetup leaves the setup where it was: a user who has an
+// authenticator keeps it and is signed in again; one who has none has
+// nothing to go back to.
+func (a *auth) cancelSetup(w http.ResponseWriter, r *http.Request) bool {
+	s, u, ok := a.sessionUser(r)
+	if !ok || s.stage != stageSetup || !u.TwoFactor {
 		return false
 	}
-	a.db.TouchUser(r.Context(), u.ID, now)
-	a.mu.Lock()
-	delete(a.failures, addr)
-	id := randomID()
-	a.sessions[id] = &session{user: u.ID, csrf: randomID(), expires: now.Add(sessionLife)}
-	a.mu.Unlock()
-	http.SetCookie(w, &http.Cookie{Name: sessionCookie, Value: id, Path: "/", HttpOnly: true, Secure: a.tls,
-		SameSite: http.SameSiteLaxMode, MaxAge: int(sessionLife / time.Second)})
+	a.advance(w, r, s, stageSignedIn)
 	return true
 }
 
-func (a *auth) logout(w http.ResponseWriter, r *http.Request) {
-	if c, err := r.Cookie(sessionCookie); err == nil {
-		a.mu.Lock()
-		delete(a.sessions, c.Value)
-		a.mu.Unlock()
+// confirmSetup checks a code against the secret being set up; when it
+// is right the authenticator is the user's from now on, a fresh set of
+// backup codes replaces any older one, and the session is signed in.
+// It returns the backup codes, to be shown once.
+func (a *auth) confirmSetup(w http.ResponseWriter, r *http.Request, code string) ([]string, bool) {
+	s, u, found := a.sessionUser(r)
+	if !found || s.stage != stageSetup || s.secret == "" {
+		return nil, false
 	}
+	ctx := r.Context()
+	keys := a.keys(r, u.Login)
+	if a.throttled(keys...) {
+		time.Sleep(2 * a.delay)
+		return nil, false
+	}
+	now := time.Now()
+	step, good := totpCheck(s.secret, code, now)
+	if !good {
+		a.fail(keys...)
+		time.Sleep(a.delay)
+		return nil, false
+	}
+	if err := a.db.SetSecondFactor(ctx, u.ID, s.secret, now); err != nil {
+		log.Printf("second factor for %s: %v", u.Login, err)
+		return nil, false
+	}
+	a.db.AcceptStep(ctx, u.ID, step)
+	codes, err := a.newBackupCodes(ctx, u.ID)
+	if err != nil {
+		log.Printf("backup codes for %s: %v", u.Login, err)
+		return nil, false
+	}
+	a.clear(keys...)
+	a.db.TouchUser(ctx, u.ID, now)
+	a.advance(w, r, s, stageSignedIn)
+	return codes, true
+}
+
+// newBackupCodes replaces a user's backup codes and returns the new ones.
+func (a *auth) newBackupCodes(ctx context.Context, userID string) ([]string, error) {
+	codes := newBackupCodes()
+	hashes := make([]string, len(codes))
+	for i, c := range codes {
+		hashes[i] = hashCode(c)
+	}
+	return codes, a.db.SetBackupCodes(ctx, userID, hashes)
+}
+
+func (a *auth) logout(w http.ResponseWriter, r *http.Request) {
+	a.drop(r)
 	http.SetCookie(w, &http.Cookie{Name: sessionCookie, Value: "", Path: "/", HttpOnly: true, Secure: a.tls, SameSite: http.SameSiteLaxMode, MaxAge: -1})
 }

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/VibiumDev/station"
 	"github.com/VibiumDev/station/sqlite"
@@ -32,27 +33,27 @@ func teamsServer(t *testing.T) (*server, station.Principal) {
 func TestTeamsOperations(t *testing.T) {
 	s, owner := teamsServer(t)
 	ctx := context.Background()
-	if _, err := s.addUser(ctx, owner, "Ann Example", "Ann", "long enough", false); err == nil {
+	if _, _, err := s.addUser(ctx, owner, "Ann Example", "Ann", false); err == nil {
 		t.Error("a login with a space passed")
 	}
-	if _, err := s.addUser(ctx, owner, "ann@example.com", "Ann", "short", false); err == nil {
-		t.Error("a short password passed")
+	ann, link, err := s.addUser(ctx, owner, "Ann@Example.com", "Ann", false)
+	if err != nil || ann.Login != "ann@example.com" || ann.Admin || !strings.HasPrefix(link, "/setup/") {
+		t.Fatalf("add: %+v %q %v", ann, link, err)
 	}
-	ann, err := s.addUser(ctx, owner, "Ann@Example.com", "Ann", "ann-secret", false)
-	if err != nil || ann.Login != "ann@example.com" || ann.Admin {
-		t.Fatalf("add: %+v %v", ann, err)
-	}
-	if _, err := s.addUser(ctx, owner, "ann@example.com", "", "another-one", false); !errors.Is(err, sqlite.ErrLoginTaken) {
+	if _, _, err := s.addUser(ctx, owner, "ann@example.com", "", false); !errors.Is(err, sqlite.ErrLoginTaken) {
 		t.Errorf("duplicate: %v", err)
 	}
-	if hash, _ := s.db.PasswordHash(ctx, ann.ID); !checkPassword(hash, "ann-secret") {
-		t.Error("the first password was not kept")
+	if u, _ := s.db.User(ctx, ann.ID); u.HasPassword || u.TwoFactor {
+		t.Error("a new user has no password until their setup link is used")
+	}
+	if open, _ := s.db.OpenInvites(ctx, time.Now()); open[ann.ID].IsZero() {
+		t.Error("the setup link is not open")
 	}
 	if err := s.setRole(ctx, owner, owner.User, false); !errors.Is(err, errLockout) {
 		t.Errorf("demoting oneself: %v", err)
 	}
-	if err := s.setDisabled(ctx, owner, owner.User, true); !errors.Is(err, errLockout) {
-		t.Errorf("disabling oneself: %v", err)
+	if err := s.setLocked(ctx, owner, owner.User, true); !errors.Is(err, errLockout) {
+		t.Errorf("locking oneself: %v", err)
 	}
 	if err := s.removeUser(ctx, owner, owner.User); !errors.Is(err, errLockout) {
 		t.Errorf("removing oneself: %v", err)
@@ -81,13 +82,24 @@ func TestTeamsOperations(t *testing.T) {
 	if l := s.auth.level(ctx, principalOf(annP, ""), "rig_a/phone"); l != station.LevelDrive {
 		t.Errorf("ann's level: %q", l)
 	}
-	if err := s.adminSetPassword(ctx, owner, ann.ID, "new-secret-1"); err != nil {
-		t.Fatal(err)
+	// A reset forgets the password and the authenticator and makes a new link.
+	s.db.SetPassword(ctx, ann.ID, "hash")
+	s.db.SetSecondFactor(ctx, ann.ID, newTOTPSecret(), time.Now())
+	s.db.SetBackupCodes(ctx, ann.ID, []string{"h1", "h2"})
+	link2, err := s.resetSignIn(ctx, owner, ann.ID)
+	if err != nil || !strings.HasPrefix(link2, "/setup/") || link2 == link {
+		t.Fatalf("reset: %q %v", link2, err)
 	}
-	if hash, _ := s.db.PasswordHash(ctx, ann.ID); !checkPassword(hash, "new-secret-1") {
-		t.Error("the admin's password did not take")
+	if u, _ := s.db.User(ctx, ann.ID); u.HasPassword || u.TwoFactor {
+		t.Error("the reset left the password or the authenticator")
 	}
-	if err := s.setDisabled(ctx, owner, ann.ID, true); err != nil {
+	if left, _ := s.db.BackupCodesLeft(ctx, ann.ID); left != 0 {
+		t.Error("the reset left backup codes")
+	}
+	if _, err := s.db.Invite(ctx, hashToken(strings.TrimPrefix(link, "/setup/")), time.Now()); err == nil {
+		t.Error("the older link still opens")
+	}
+	if err := s.setLocked(ctx, owner, ann.ID, true); err != nil {
 		t.Fatal(err)
 	}
 	if err := s.removeTeam(ctx, owner, team.ID); err != nil {
@@ -106,8 +118,8 @@ func TestTeamsOperations(t *testing.T) {
 func TestSettingsTeamsRender(t *testing.T) {
 	s, owner := teamsServer(t)
 	ctx := context.Background()
-	ann, _ := s.addUser(ctx, owner, "ann@example.com", "Ann", "ann-secret", false)
-	bob, _ := s.addUser(ctx, owner, "bob@example.com", "Bob", "bob-secret", false)
+	ann, _, _ := s.addUser(ctx, owner, "ann@example.com", "Ann", false)
+	bob, _, _ := s.addUser(ctx, owner, "bob@example.com", "Bob", false)
 	team, _ := s.addTeam(ctx, owner, "QA")
 	s.setMember(ctx, owner, team.ID, ann.ID, true)
 	_ = bob
@@ -119,7 +131,7 @@ func TestSettingsTeamsRender(t *testing.T) {
 	}
 	html := out.String()
 	for _, want := range []string{
-		`<b>owner</b> <span class="muted">you</span>`, `<b>ann@example.com</b>`, "Make admin", "Hold to remove",
+		`<b>owner</b> <span class="muted">you</span>`, `<b>ann@example.com</b>`, "Make admin", "Hold to remove", ">Lock<", "Reset sign-in", "setup link until",
 		`<option value="` + bob.ID + `">bob@example.com</option>`, // bob can still join QA
 		`<span class="member">ann@example.com`, "No devices yet.",
 	} {

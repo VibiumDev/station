@@ -53,15 +53,17 @@ changing a rig's capture, is for admins.
 
 ## Signing in
 
-The sign-in page asks for a login and a password. A login is an email
-address as a rule, kept lowercased, and the password is argon2id-hashed
-in the database. Sign-ins are rate-limited per address as before. An
-admin creates a user on Settings with a first password, shown once, and
-can set a new one at any time; every user changes their own on Settings
-under Password. `station passwd [login]` sets a password from the
-machine itself, for the owner when nobody else can sign in, and
-`STATION_PASSWORD` in the environment does the same for the owner at
-start, as on Fly.
+The sign-in page asks for a login and a password, and then for a code
+from an authenticator app or a backup code (`second-factor.md`). A
+login is an email address as a rule, kept lowercased, and the password
+is argon2id-hashed in the database. Sign-ins are throttled per address
+and per login. An admin adds a user on Settings and gets a single-use
+setup link to pass on, where the user chooses their own password and
+adds an authenticator; nobody chooses a password for anyone else. Every
+user changes their own on their Account page. `station passwd [login]`
+sets a password from the machine itself, for the owner when nobody else
+can sign in, and `STATION_PASSWORD` in the environment does the same for
+the owner at start, as on Fly.
 
 API tokens belong to a user and act as that user: they see what the user
 sees and drive what the user may drive, read-only when flagged, and they
@@ -71,10 +73,11 @@ never manage. A token minted for a jam is bound to its device as before.
 
 A Teams section on Settings, for admins:
 
-- **Users**: login, name, admin or regular, the teams they are in, last
-  sign-in. Add a user with a login, a name, whether they are an admin,
-  and a first password. Make a user an admin or a regular user, set a
-  new password, disable and enable, and remove (held for a moment).
+- **Users**: login, name, admin or regular, the teams they are in, how
+  they sign in, last sign-in. Add a user with a login, a name and
+  whether they are an admin, and get their setup link. Make a user an
+  admin or a regular user, lock and unlock, reset their sign-in (held
+  for a moment; a new setup link), and remove (held).
 - **Teams**: name and members. Add a team, add and remove members,
   remove a team (held).
 - **Device access**: a grid of every known device against every team,
@@ -86,7 +89,8 @@ Every change is audited.
 ## Data
 
 Four tables beside the ones the station has: `users` (id, login, name,
-password hash, admin, disabled, created, last sign-in), `teams` (id,
+password hash, admin, locked, created, last sign-in, and the second
+factor's columns), `teams` (id,
 name), `team_members` (team, user) and `device_access` (device, team,
 level). API tokens gain the user they belong to. The owner user is
 seeded from the config file's password hash the first time a station
@@ -99,8 +103,9 @@ are signed for users or teams.
 | Method and path | What it does |
 |---|---|
 | `GET /v1/users` | Every user, for admins |
-| `POST /v1/users` | `{"login", "name", "admin", "password"}`: a new user |
-| `PUT /v1/users/{id}` | Change `name`, `admin`, `disabled` or `password` |
+| `POST /v1/users` | `{"login", "name", "admin"}`: a new user and their `setup_url` |
+| `PUT /v1/users/{id}` | Change `name`, `admin` or `locked` |
+| `POST /v1/users/{id}/reset` | Forget their sign-in; a new `setup_url` |
 | `DELETE /v1/users/{id}` | Remove a user; their tokens go with them |
 | `GET /v1/teams` | Every team with its members |
 | `POST /v1/teams` | `{"name"}`: a new team |

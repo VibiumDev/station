@@ -63,8 +63,12 @@ device-neutral from the start.
 ## Security rules
 
 - Users with passwords: argon2id hashes in the database (`station passwd
-  [login]`; the owner is the first admin), rate-limited login with lockout, cookies `HttpOnly`
-  `Secure` `SameSite=Lax`, CSRF tokens on state-changing requests, a strict
+  [login]`; the owner is the first admin), a second factor on every
+  password sign-in (TOTP from an authenticator app, backup codes kept
+  hashed; `docs/specs/second-factor.md`), new users through single-use
+  setup links rather than passwords anyone else chose, login throttled
+  by address and by login with lockout, cookies `HttpOnly` `Secure`
+  `SameSite=Lax`, CSRF tokens on state-changing requests, a strict
   Content Security Policy.
 - Named API tokens stored hashed, optionally read-only. Tokens travel only
   in headers or the first WebSocket message, never in URLs. Browser

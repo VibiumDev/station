@@ -71,14 +71,61 @@ var pages = template.Must(template.New("").Funcs(template.FuncMap{"npub": npub, 
 {{define "kicker"}}{{if .Named}}<p class="kicker">{{.Name}}</p>{{end}}{{end}}
 
 {{define "login"}}{{template "head" (dict "Title" "Sign in" "Name" .Name "Named" .Named)}}
-<header class="top"><div class="wrap"><a class="brand" href="/"><img class="logo" src="/viewer/vibium-logo.png" alt=""><span class="wordmark">Vibium</span><span class="product">Station</span></a>{{template "theme"}}</div></header>
+{{template "bare-top"}}
 <main class="wrap login">{{template "kicker" .}}<h1 class="h1">Sign in.</h1>
 {{if .NoUsers}}<div class="msg">Nobody can sign in yet. On the station's machine, run <code>station passwd</code> to set the owner's password.</div>{{end}}
 {{if .Error}}<div class="msg error" role="alert">{{.Error}}</div>{{end}}
-<div class="card"><form method="post" action="/login"><input type="hidden" name="next" value="{{.Next}}">
+<div class="card"><form method="post" action="/login"><input type="hidden" name="next" value="{{.Next}}"><input type="hidden" name="csrf" value="{{.CSRF}}">
 <label for="login">Login</label><input id="login" type="text" name="login" value="{{.Login}}" autofocus autocomplete="username" autocapitalize="none" spellcheck="false" placeholder="you@example.com">
 <label for="password">Password</label><input id="password" type="password" name="password" autocomplete="current-password">
 <input class="primary" type="submit" value="Sign in"></form></div></main>
+{{template "foot" .}}{{end}}
+
+{{define "bare-top"}}<header class="top"><div class="wrap"><a class="brand" href="/"><img class="logo" src="/viewer/vibium-logo.png" alt=""><span class="wordmark">Vibium</span><span class="product">Station</span></a>{{template "theme"}}</div></header>{{end}}
+
+{{define "code"}}{{template "head" (dict "Title" "Sign in" "Name" .Name "Named" .Named)}}
+{{template "bare-top"}}
+<main class="wrap login">{{template "kicker" .}}<h1 class="h1">One more step.</h1>
+<p class="lead">Enter the six-digit code your authenticator app shows for <b>{{.Login}}</b>, or one of your backup codes.</p>
+{{if .Error}}<div class="msg error" role="alert">{{.Error}}</div>{{end}}
+<div class="card"><form method="post" action="/login/code"><input type="hidden" name="csrf" value="{{.CSRF}}">
+<label for="code">Code</label><input id="code" type="text" name="code" inputmode="numeric" autocomplete="one-time-code" autocapitalize="none" spellcheck="false" autofocus required>
+<input class="primary" type="submit" value="Continue"></form>
+<form class="inline" method="post" action="/logout"><input type="hidden" name="csrf" value="{{.CSRF}}"><button class="link" type="submit">Start over</button></form></div></main>
+{{template "foot" .}}{{end}}
+
+{{define "setup"}}{{template "head" (dict "Title" "Set up your sign-in" "Name" .Name "Named" .Named)}}
+{{template "bare-top"}}
+<main class="wrap login">{{template "kicker" .}}
+{{if .Expired}}<h1 class="h1">This link is spent.</h1>
+<p class="lead">It was used already or has expired. Ask an admin of this station for a new one.</p>
+{{else}}<h1 class="h1">Welcome{{if .UserName}}, {{.UserName}}{{end}}.</h1>
+<p class="lead">Choose a password for <b>{{.Login}}</b>: at least 12 characters, and a few unrelated words work well. An authenticator app comes next.</p>
+{{if .Error}}<div class="msg error" role="alert">{{.Error}}</div>{{end}}
+<div class="card"><form method="post" action="/setup/{{.Token}}"><input type="hidden" name="csrf" value="{{.CSRF}}"><input type="hidden" name="login" value="{{.Login}}" autocomplete="username">
+<label for="password">Password</label><input id="password" type="password" name="password" autocomplete="new-password" minlength="12" autofocus required>
+<label for="again">Again</label><input id="again" type="password" name="again" autocomplete="new-password" required>
+<input class="primary" type="submit" value="Continue"></form></div>{{end}}</main>
+{{template "foot" .}}{{end}}
+
+{{define "account-setup"}}{{template "head" (dict "Title" "Authenticator" "Name" .Name "Named" .Named)}}
+{{template "bare-top"}}
+<main class="wrap login">{{template "kicker" .}}<h1 class="h1">{{if .Replacing}}A new authenticator.{{else}}Add an authenticator.{{end}}</h1>
+<p class="lead">Scan this with an authenticator app, such as the one in your phone's password manager, then enter the code it shows. Every password sign-in to <b>{{.Login}}</b> asks for one from now on.</p>
+{{if .Error}}<div class="msg error" role="alert">{{.Error}}</div>{{end}}
+<div class="card">{{.QR}}<p class="muted">Or type the secret in: <span class="secret spaced">{{.Secret}}</span></p>
+<form method="post" action="/account/setup"><input type="hidden" name="csrf" value="{{.CSRF}}">
+<label for="code">Code from the app</label><input id="code" type="text" name="code" inputmode="numeric" autocomplete="one-time-code" autocapitalize="none" spellcheck="false" autofocus required>
+<input class="primary" type="submit" value="Confirm"></form>
+{{if .Replacing}}<form class="inline" method="post" action="/account/setup/cancel"><input type="hidden" name="csrf" value="{{.CSRF}}"><button class="link" type="submit">Keep the old one</button></form>{{else}}<form class="inline" method="post" action="/logout"><input type="hidden" name="csrf" value="{{.CSRF}}"><button class="link" type="submit">Sign out</button></form>{{end}}</div></main>
+{{template "foot" .}}{{end}}
+
+{{define "account-codes"}}{{template "head" (dict "Title" "Backup codes" "Name" .Name "Named" .Named)}}
+{{template "bare-top"}}
+<main class="wrap login">{{template "kicker" .}}<h1 class="h1">Your backup codes.</h1>
+<p class="lead">{{if .Fresh}}The authenticator is set up. {{end}}Each of these signs you in once when the authenticator is out of reach. Keep them somewhere safe: they are shown this once{{if not .Fresh}}, and the old set no longer works{{end}}.</p>
+<div class="card"><ul class="codes">{{range .Codes}}<li>{{.}}</li>{{end}}</ul>
+<a class="btn primary" href="{{.Next}}">I have kept them</a></div></main>
 {{template "foot" .}}{{end}}
 
 {{define "index"}}{{template "head" (dict "Title" "Devices" "Name" .Name "Named" .Named)}}{{template "header" .}}
@@ -139,18 +186,22 @@ var pages = template.Must(template.New("").Funcs(template.FuncMap{"npub": npub, 
 {{define "account"}}{{template "head" (dict "Title" "Account" "Name" .Name "Named" .Named)}}{{template "header" .}}
 <main class="wrap">
 <h2 class="h2">Account {{template "help" "account"}}</h2>
-<p class="helptext" id="help-account" hidden>Who you are signed in as, and the teams that decide what you see: an admin sees every device, jam and record and manages the station on Settings; a regular user sees the devices their teams were given, and the jams and records made on them.</p>
+<p class="helptext" id="help-account" hidden>Who you are signed in as, the teams that decide what you see, and how you sign in. An admin sees every device, jam and record and manages the station on Settings; a regular user sees the devices their teams were given, and the jams and records made on them. Changing your password, making new backup codes and replacing the authenticator each ask for your current password.</p>
 {{if .Message}}<div class="msg">{{.Message}}</div>{{end}}
 <div class="tablewrap"><table class="kv">
 <tr><th>Login</th><td>{{.User.Login}}</td></tr>
 {{if .User.Name}}<tr><th>Name</th><td>{{.User.Name}}</td></tr>{{end}}
 <tr><th>Role</th><td>{{if .User.Admin}}admin{{else}}regular user{{end}}</td></tr>
 <tr><th>Teams</th><td>{{if .TeamNames}}{{range $i, $t := .TeamNames}}{{if $i}}, {{end}}{{$t}}{{end}}{{else}}<span class="muted">{{if .User.Admin}}all, as an admin{{else}}none yet{{end}}</span>{{end}}</td></tr>
+<tr><th>Second factor</th><td>{{if .User.TwoFactor}}authenticator since {{.User.TwoFactorAt.Local.Format "Jan 2, 2006"}}, {{.BackupLeft}} backup {{if eq .BackupLeft 1}}code{{else}}codes{{end}} left{{else if .User.HasPassword}}<span class="muted">none yet; set up at your next password sign-in</span>{{else}}<span class="muted">no password; you sign in by identity</span>{{end}}</td></tr>
 </table></div>
-<h2 class="h2">Password</h2>
+{{if not .Token}}<h2 class="h2">Password</h2>
 <form class="row" method="post" action="/account/password"><input type="hidden" name="csrf" value="{{.CSRF}}">
-<input type="password" name="password" placeholder="new password" aria-label="New password" autocomplete="new-password"> <input type="password" name="again" placeholder="again" aria-label="New password again" autocomplete="new-password">
+{{if .User.HasPassword}}<input type="password" name="current" placeholder="current password" aria-label="Current password" autocomplete="current-password"> {{end}}<input type="password" name="password" placeholder="new password, 12 characters or more" aria-label="New password" autocomplete="new-password"> <input type="password" name="again" placeholder="again" aria-label="New password again" autocomplete="new-password">
 <input type="submit" value="Change"></form>
+{{if .User.TwoFactor}}<h2 class="h2">Authenticator</h2>
+<form class="row" method="post" action="/account/codes"><input type="hidden" name="csrf" value="{{.CSRF}}"><input type="password" name="current" placeholder="current password" aria-label="Current password, for new backup codes" autocomplete="current-password"> <input type="submit" value="New backup codes"></form>
+<form class="row" method="post" action="/account/authenticator"><input type="hidden" name="csrf" value="{{.CSRF}}"><input type="password" name="current" placeholder="current password" aria-label="Current password, to replace the authenticator" autocomplete="current-password"> <input type="submit" value="Replace the authenticator"></form>{{end}}{{end}}
 </main>{{template "foot" .}}{{end}}
 
 {{define "icon-account"}}<svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><circle cx="12" cy="8" r="4" stroke="currentColor" stroke-width="2" fill="none"/><path d="M4 20.5c1.5-4 4.5-6 8-6s6.5 2 8 6" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round"/></svg>{{end}}
@@ -306,19 +357,21 @@ var pages = template.Must(template.New("").Funcs(template.FuncMap{"npub": npub, 
 <td class="act"><form class="inline" method="post" action="/settings/rigs/remove"><input type="hidden" name="csrf" value="{{$.CSRF}}"><input type="hidden" name="rig" value="{{.ID}}"><button class="small hold" type="button" data-hold title="Hold to remove">Remove</button></form></td></tr>{{end}}</tbody></table></div>{{end}}
 
 <h2 class="h2" id="teams">Users {{template "help" "users"}}</h2>
-<p class="helptext" id="help-users" hidden>Who can sign in. An admin sees every device, jam and record and manages the station here; a regular user sees the devices their teams were given, and the jams and records made on them, and nothing until then. A new user gets a first password here; <code>station passwd login</code> sets one from the machine. Disabling a user ends their sign-ins and tokens and keeps their history; removing them deletes their tokens too. You cannot take your own admin rights or sign-in away.</p>
-{{if .Users}}<div class="tablewrap"><table><thead><tr><th>Login</th><th>Name</th><th>Role</th><th>Teams</th><th>Last sign-in</th><th></th></tr></thead><tbody>
+<p class="helptext" id="help-users" hidden>Who can sign in. An admin sees every device, jam and record and manages the station here; a regular user sees the devices their teams were given, and the jams and records made on them, and nothing until then. Adding a user makes a setup link, good for a day, that you pass on: they choose their own password there and add an authenticator app, and every password sign-in asks for a code from it. Lock ends a user's sign-ins and tokens and keeps their history. Reset sign-in forgets their password and authenticator and makes a new link, for a forgotten password or a lost phone. Remove deletes their tokens too. You cannot lock yourself or take your own admin rights away.</p>
+{{if .NoPassword}}<div class="msg">Nobody can sign in by password yet; <code>station passwd</code> on the station's machine creates the owner.</div>{{end}}
+{{if .SetupURL}}<div class="card featured">Setup link for <b>{{.SetupLogin}}</b>, shown once and good for 24 hours. Pass it on by a channel you trust:<p class="secret">{{.SetupURL}}</p></div>{{end}}
+{{if .Users}}<div class="tablewrap"><table><thead><tr><th>Login</th><th>Name</th><th>Role</th><th>Teams</th><th>Sign-in</th><th>Last sign-in</th><th></th></tr></thead><tbody>
 {{range .Users}}<tr>
-<td data-l="Login"><b>{{.Login}}</b>{{if .Disabled}} <span class="muted">disabled</span>{{end}}{{if .Self}} <span class="muted">you</span>{{end}}</td>
+<td data-l="Login"><b>{{.Login}}</b>{{if .Locked}} <span class="muted">locked</span>{{end}}{{if .Self}} <span class="muted">you</span>{{end}}</td>
 <td data-l="Name">{{.Name}}</td>
 <td data-l="Role">{{if .Admin}}admin{{else}}regular{{end}}</td>
 <td data-l="Teams">{{if .Admin}}<span class="muted">all</span>{{else if .TeamNames}}{{range $i, $t := .TeamNames}}{{if $i}}, {{end}}{{$t}}{{end}}{{else}}<span class="muted">none</span>{{end}}</td>
+<td data-l="Sign-in">{{.SignIn}}</td>
 <td data-l="Last sign-in">{{if .LastLogin.IsZero}}<span class="muted">never</span>{{else}}{{.LastLogin.Local.Format "Jan 2 15:04"}}{{end}}</td>
-<td class="act">{{if not .Self}}<form class="inline" method="post" action="/settings/users/role"><input type="hidden" name="csrf" value="{{$.CSRF}}"><input type="hidden" name="user" value="{{.ID}}"><input type="hidden" name="admin" value="{{if .Admin}}0{{else}}1{{end}}"><button class="small" type="submit">{{if .Admin}}Make regular{{else}}Make admin{{end}}</button></form> <form class="inline" method="post" action="/settings/users/disable"><input type="hidden" name="csrf" value="{{$.CSRF}}"><input type="hidden" name="user" value="{{.ID}}"><input type="hidden" name="disabled" value="{{if .Disabled}}0{{else}}1{{end}}"><button class="small" type="submit">{{if .Disabled}}Enable{{else}}Disable{{end}}</button></form> {{end}}<form class="inline" method="post" action="/settings/users/password"><input type="hidden" name="csrf" value="{{$.CSRF}}"><input type="hidden" name="user" value="{{.ID}}"><input class="short" type="password" name="password" placeholder="new password" aria-label="New password for {{.Login}}" autocomplete="new-password"><button class="small" type="submit">Set</button></form>{{if not .Self}} <form class="inline" method="post" action="/settings/users/remove"><input type="hidden" name="csrf" value="{{$.CSRF}}"><input type="hidden" name="user" value="{{.ID}}"><button class="small hold" type="button" data-hold title="Hold to remove">Remove</button></form>{{end}}</td>
+<td class="act">{{if not .Self}}<form class="inline" method="post" action="/settings/users/role"><input type="hidden" name="csrf" value="{{$.CSRF}}"><input type="hidden" name="user" value="{{.ID}}"><input type="hidden" name="admin" value="{{if .Admin}}0{{else}}1{{end}}"><button class="small" type="submit">{{if .Admin}}Make regular{{else}}Make admin{{end}}</button></form> <form class="inline" method="post" action="/settings/users/lock"><input type="hidden" name="csrf" value="{{$.CSRF}}"><input type="hidden" name="user" value="{{.ID}}"><input type="hidden" name="locked" value="{{if .Locked}}0{{else}}1{{end}}"><button class="small" type="submit">{{if .Locked}}Unlock{{else}}Lock{{end}}</button></form> {{end}}<form class="inline" method="post" action="/settings/users/reset"><input type="hidden" name="csrf" value="{{$.CSRF}}"><input type="hidden" name="user" value="{{.ID}}"><button class="small hold" type="button" data-hold title="Hold to forget their password and authenticator and make a new setup link">Reset sign-in</button></form>{{if not .Self}} <form class="inline" method="post" action="/settings/users/remove"><input type="hidden" name="csrf" value="{{$.CSRF}}"><input type="hidden" name="user" value="{{.ID}}"><button class="small hold" type="button" data-hold title="Hold to remove">Remove</button></form>{{end}}</td>
 </tr>{{end}}</tbody></table></div>{{end}}
 <form class="card modelform" method="post" action="/settings/users"><input type="hidden" name="csrf" value="{{.CSRF}}">
-<div class="row"><input type="text" name="login" placeholder="login, such as ann@example.com" aria-label="Login" autocomplete="off" autocapitalize="none" spellcheck="false" required> <input type="text" name="name" placeholder="name" aria-label="Name" autocomplete="off"></div>
-<div class="row"><input type="password" name="password" placeholder="first password, 8 characters or more" aria-label="First password" autocomplete="new-password" required> <label class="check"><input type="checkbox" name="admin"> admin</label> <input type="submit" value="Add user"></div></form>
+<div class="row"><input type="text" name="login" placeholder="login, such as ann@example.com" aria-label="Login" autocomplete="off" autocapitalize="none" spellcheck="false" required> <input type="text" name="name" placeholder="name" aria-label="Name" autocomplete="off"> <label class="check"><input type="checkbox" name="admin"> admin</label> <input type="submit" value="Add user"></div></form>
 
 <h2 class="h2">Teams {{template "help" "teams"}}</h2>
 <p class="helptext" id="help-teams" hidden>A team is a group of users; devices are shared with teams, under Device access. A user may be in several teams, and admins are in every team without being listed.</p>
@@ -350,12 +403,6 @@ var pages = template.Must(template.New("").Funcs(template.FuncMap{"npub": npub, 
 <input type="text" name="name" placeholder="name" aria-label="Token name" required> <label class="check"><input type="checkbox" name="read_only"> read-only</label>
 <input type="submit" value="Create token"></form>
 
-<h2 class="h2">Password {{template "help" "password"}}</h2>
-<p class="helptext" id="help-password" hidden>Your own password for signing in, kept as an argon2id hash in the station's database; other users change theirs on their Account page, and an admin can set anyone's under Teams. In tailnet mode the people under Tailnet identities sign in by their Tailscale identity and need no password, but one still works. Sign-ins are rate-limited, and <code>station passwd [login]</code> sets a password from the command line.</p>
-{{if .NoPassword}}<div class="msg">Nobody can sign in yet; <code>station passwd</code> creates the owner.</div>{{end}}
-<form class="row" method="post" action="/settings/password"><input type="hidden" name="csrf" value="{{.CSRF}}">
-<input type="password" name="password" placeholder="new password" aria-label="New password" autocomplete="new-password"> <input type="password" name="again" placeholder="again" aria-label="New password again" autocomplete="new-password">
-<input type="submit" value="Change"></form>
 
 <h2 class="h2">Network {{template "help" "network"}}</h2>
 <div class="helptext" id="help-network" hidden>
