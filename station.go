@@ -197,10 +197,23 @@ type User struct {
 	Login     string    `json:"login"` // lowercased; an email address as a rule
 	Name      string    `json:"name,omitempty"`
 	Admin     bool      `json:"admin"`
-	Disabled  bool      `json:"disabled,omitempty"`
+	Locked    bool      `json:"locked,omitempty"` // cannot sign in; sessions and tokens stop
 	CreatedAt time.Time `json:"created"`
 	LastLogin time.Time `json:"last_login,omitempty"`
 	Teams     []string  `json:"teams,omitempty"` // team ids
+	// How they sign in by password: whether one is set, and whether an
+	// authenticator confirmed since.
+	HasPassword bool      `json:"has_password"`
+	TwoFactor   bool      `json:"two_factor"`
+	TwoFactorAt time.Time `json:"two_factor_at,omitempty"`
+}
+
+// Invite is a setup link: one user's single-use way to choose a
+// password and set up an authenticator, good until it expires.
+type Invite struct {
+	UserID    string
+	ExpiresAt time.Time
+	By        string // who made it
 }
 
 // OwnerLogin is the login of the first admin, whose password `station
@@ -266,12 +279,31 @@ type UserStore interface {
 	Users(ctx context.Context) ([]User, error)
 	User(ctx context.Context, id string) (User, error)
 	UserByLogin(ctx context.Context, login string) (User, error)
-	// PutUser creates a user, or updates everything but the password.
+	// PutUser creates a user, or updates everything but the password,
+	// the second factor and the teams of one that exists.
 	PutUser(ctx context.Context, u User) error
 	RemoveUser(ctx context.Context, id string) error
 	SetPassword(ctx context.Context, id, hash string) error
 	PasswordHash(ctx context.Context, id string) (string, error)
 	TouchUser(ctx context.Context, id string, at time.Time) error
+	// The second factor: an authenticator secret once a code confirmed
+	// it, the last time step a code was accepted for, and backup codes
+	// kept as hashes, each good once.
+	SetSecondFactor(ctx context.Context, id, secret string, at time.Time) error
+	SecondFactor(ctx context.Context, id string) (secret string, lastStep int64, err error)
+	// AcceptStep remembers a step a code was accepted for, and says no
+	// when one at or after it was already used.
+	AcceptStep(ctx context.Context, id string, step int64) (bool, error)
+	SetBackupCodes(ctx context.Context, id string, hashes []string) error
+	UseBackupCode(ctx context.Context, id, hash string) (left int, ok bool, err error)
+	BackupCodesLeft(ctx context.Context, id string) (int, error)
+	// ResetSignIn forgets a user's password, authenticator and backup codes.
+	ResetSignIn(ctx context.Context, id string) error
+	// Setup links, kept as hashes; a user has at most one open.
+	PutInvite(ctx context.Context, hash string, inv Invite) error
+	Invite(ctx context.Context, hash string, now time.Time) (Invite, error)
+	UseInvite(ctx context.Context, hash string) error
+	OpenInvites(ctx context.Context, now time.Time) (map[string]time.Time, error)
 	Teams(ctx context.Context) ([]Team, error)
 	PutTeam(ctx context.Context, t Team) error
 	RemoveTeam(ctx context.Context, id string) error

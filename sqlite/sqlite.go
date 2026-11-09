@@ -176,9 +176,24 @@ CREATE TABLE IF NOT EXISTS users (
 	name          TEXT NOT NULL DEFAULT '',
 	password_hash TEXT NOT NULL DEFAULT '',
 	admin         INTEGER NOT NULL DEFAULT 0,
-	disabled      INTEGER NOT NULL DEFAULT 0,
+	locked        INTEGER NOT NULL DEFAULT 0,
 	created_at    INTEGER NOT NULL,
-	last_login    INTEGER NOT NULL DEFAULT 0
+	last_login    INTEGER NOT NULL DEFAULT 0,
+	totp_secret   TEXT NOT NULL DEFAULT '',
+	totp_at       INTEGER NOT NULL DEFAULT 0,
+	totp_step     INTEGER NOT NULL DEFAULT 0
+);
+CREATE TABLE IF NOT EXISTS backup_codes (
+	user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+	hash    TEXT NOT NULL,
+	used_at INTEGER NOT NULL DEFAULT 0,
+	PRIMARY KEY (user_id, hash)
+);
+CREATE TABLE IF NOT EXISTS invites (
+	hash       TEXT PRIMARY KEY,
+	user_id    TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+	made_by    TEXT NOT NULL DEFAULT '',
+	expires_at INTEGER NOT NULL
 );
 CREATE TABLE IF NOT EXISTS teams (
 	id         TEXT PRIMARY KEY,
@@ -236,6 +251,12 @@ func (d *DB) migrate() error {
 			return fmt.Errorf("schema: reread results: %w", err)
 		}
 	}
+	// A disabled user became a locked one when the second factor came.
+	if has, err := d.hasColumn("users", "disabled"); err == nil && has {
+		if _, err := d.db.Exec("ALTER TABLE users RENAME COLUMN disabled TO locked"); err != nil {
+			return fmt.Errorf("schema: rename users.disabled: %w", err)
+		}
+	}
 	if _, err := d.db.Exec(schema); err != nil {
 		return fmt.Errorf("schema: %w", err)
 	}
@@ -255,6 +276,9 @@ func (d *DB) migrate() error {
 		{"api_tokens", "device", "TEXT NOT NULL DEFAULT ''"},
 		{"api_tokens", "expires_at", "INTEGER NOT NULL DEFAULT 0"},
 		{"api_tokens", "user_id", "TEXT NOT NULL DEFAULT ''"},
+		{"users", "totp_secret", "TEXT NOT NULL DEFAULT ''"},
+		{"users", "totp_at", "INTEGER NOT NULL DEFAULT 0"},
+		{"users", "totp_step", "INTEGER NOT NULL DEFAULT 0"},
 	} {
 		has, err := d.hasColumn(c.table, c.column)
 		if err != nil {

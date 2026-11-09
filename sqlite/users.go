@@ -13,20 +13,24 @@ import (
 // Users, teams and device access: who may sign in, and what a regular
 // user's teams let them see and do.
 
-const userCols = `id, login, name, password_hash, admin, disabled, created_at, last_login`
+const userCols = `id, login, name, password_hash, admin, locked, created_at, last_login, totp_secret, totp_at`
 
 func scanUser(s scanner) (station.User, string, error) {
 	var u station.User
-	var hash string
-	var admin, disabled int
-	var created, last int64
-	if err := s.Scan(&u.ID, &u.Login, &u.Name, &hash, &admin, &disabled, &created, &last); err != nil {
+	var hash, secret string
+	var admin, locked int
+	var created, last, totpAt int64
+	if err := s.Scan(&u.ID, &u.Login, &u.Name, &hash, &admin, &locked, &created, &last, &secret, &totpAt); err != nil {
 		return u, "", err
 	}
-	u.Admin, u.Disabled = admin != 0, disabled != 0
+	u.Admin, u.Locked = admin != 0, locked != 0
+	u.HasPassword, u.TwoFactor = hash != "", secret != ""
 	u.CreatedAt = time.Unix(0, created)
 	if last != 0 {
 		u.LastLogin = time.Unix(0, last)
+	}
+	if totpAt != 0 {
+		u.TwoFactorAt = time.Unix(0, totpAt)
 	}
 	return u, hash, nil
 }
@@ -114,23 +118,23 @@ func (d *DB) Credentials(ctx context.Context, login string) (station.User, strin
 	return d.userWhere(ctx, "login = ?", strings.ToLower(strings.TrimSpace(login)))
 }
 
-// PutUser creates a user, or updates everything but the password and
-// the teams of one that exists.
+// PutUser creates a user, or updates everything but the password, the
+// second factor and the teams of one that exists.
 func (d *DB) PutUser(ctx context.Context, u station.User) error {
-	admin, disabled := 0, 0
+	admin, locked := 0, 0
 	if u.Admin {
 		admin = 1
 	}
-	if u.Disabled {
-		disabled = 1
+	if u.Locked {
+		locked = 1
 	}
 	created := u.CreatedAt
 	if created.IsZero() {
 		created = time.Now()
 	}
-	_, err := d.db.ExecContext(ctx, `INSERT INTO users (id, login, name, admin, disabled, created_at) VALUES (?, ?, ?, ?, ?, ?)
-		ON CONFLICT(id) DO UPDATE SET login = excluded.login, name = excluded.name, admin = excluded.admin, disabled = excluded.disabled`,
-		u.ID, strings.ToLower(strings.TrimSpace(u.Login)), strings.TrimSpace(u.Name), admin, disabled, created.UnixNano())
+	_, err := d.db.ExecContext(ctx, `INSERT INTO users (id, login, name, admin, locked, created_at) VALUES (?, ?, ?, ?, ?, ?)
+		ON CONFLICT(id) DO UPDATE SET login = excluded.login, name = excluded.name, admin = excluded.admin, locked = excluded.locked`,
+		u.ID, strings.ToLower(strings.TrimSpace(u.Login)), strings.TrimSpace(u.Name), admin, locked, created.UnixNano())
 	if err != nil && strings.Contains(err.Error(), "UNIQUE") {
 		return ErrLoginTaken
 	}
@@ -168,6 +172,143 @@ func (d *DB) PasswordHash(ctx context.Context, id string) (string, error) {
 // TouchUser notes a sign-in.
 func (d *DB) TouchUser(ctx context.Context, id string, at time.Time) error {
 	return d.update(ctx, `UPDATE users SET last_login = ? WHERE id = ?`, at.UnixNano(), id)
+}
+
+// SetSecondFactor stores a user's confirmed authenticator secret, or
+// forgets it with an empty one; either way no step has been used yet.
+func (d *DB) SetSecondFactor(ctx context.Context, id, secret string, at time.Time) error {
+	var when int64
+	if secret != "" {
+		when = at.UnixNano()
+	}
+	return d.update(ctx, `UPDATE users SET totp_secret = ?, totp_at = ?, totp_step = 0 WHERE id = ?`, secret, when, id)
+}
+
+// SecondFactor is a user's authenticator secret, empty when none is
+// set, and the last time step a code was accepted for.
+func (d *DB) SecondFactor(ctx context.Context, id string) (string, int64, error) {
+	var secret string
+	var step int64
+	err := d.db.QueryRowContext(ctx, `SELECT totp_secret, totp_step FROM users WHERE id = ?`, id).Scan(&secret, &step)
+	if errors.Is(err, sql.ErrNoRows) {
+		return "", 0, station.ErrNotFound
+	}
+	return secret, step, err
+}
+
+// AcceptStep remembers a step a code was accepted for; it says no when
+// a code from that step or a later one was already used, so a code seen
+// on the wire cannot be replayed.
+func (d *DB) AcceptStep(ctx context.Context, id string, step int64) (bool, error) {
+	res, err := d.db.ExecContext(ctx, `UPDATE users SET totp_step = ? WHERE id = ? AND totp_step < ?`, step, id, step)
+	if err != nil {
+		return false, err
+	}
+	n, _ := res.RowsAffected()
+	return n > 0, nil
+}
+
+// SetBackupCodes replaces a user's backup codes with the hashes given.
+func (d *DB) SetBackupCodes(ctx context.Context, id string, hashes []string) error {
+	return d.tx(ctx, func(tx *sql.Tx) error {
+		if _, err := tx.ExecContext(ctx, `DELETE FROM backup_codes WHERE user_id = ?`, id); err != nil {
+			return err
+		}
+		for _, h := range hashes {
+			if _, err := tx.ExecContext(ctx, `INSERT INTO backup_codes (user_id, hash) VALUES (?, ?)`, id, h); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+}
+
+// UseBackupCode spends the backup code with that hash, if the user has
+// it unused, and says how many are left.
+func (d *DB) UseBackupCode(ctx context.Context, id, hash string) (int, bool, error) {
+	res, err := d.db.ExecContext(ctx, `UPDATE backup_codes SET used_at = ? WHERE user_id = ? AND hash = ? AND used_at = 0`, time.Now().UnixNano(), id, hash)
+	if err != nil {
+		return 0, false, err
+	}
+	n, _ := res.RowsAffected()
+	left, err := d.BackupCodesLeft(ctx, id)
+	return left, n > 0, err
+}
+
+// BackupCodesLeft counts a user's unused backup codes.
+func (d *DB) BackupCodesLeft(ctx context.Context, id string) (int, error) {
+	var n int
+	err := d.db.QueryRowContext(ctx, `SELECT count(*) FROM backup_codes WHERE user_id = ? AND used_at = 0`, id).Scan(&n)
+	return n, err
+}
+
+// ResetSignIn forgets a user's password, authenticator and backup codes,
+// for a setup link to make anew.
+func (d *DB) ResetSignIn(ctx context.Context, id string) error {
+	return d.tx(ctx, func(tx *sql.Tx) error {
+		res, err := tx.ExecContext(ctx, `UPDATE users SET password_hash = '', totp_secret = '', totp_at = 0, totp_step = 0 WHERE id = ?`, id)
+		if err != nil {
+			return err
+		}
+		if n, _ := res.RowsAffected(); n == 0 {
+			return station.ErrNotFound
+		}
+		_, err = tx.ExecContext(ctx, `DELETE FROM backup_codes WHERE user_id = ?`, id)
+		return err
+	})
+}
+
+// PutInvite stores a setup link's hash for a user, replacing any older
+// link of theirs.
+func (d *DB) PutInvite(ctx context.Context, hash string, inv station.Invite) error {
+	return d.tx(ctx, func(tx *sql.Tx) error {
+		if _, err := tx.ExecContext(ctx, `DELETE FROM invites WHERE user_id = ?`, inv.UserID); err != nil {
+			return err
+		}
+		_, err := tx.ExecContext(ctx, `INSERT INTO invites (hash, user_id, made_by, expires_at) VALUES (?, ?, ?, ?)`,
+			hash, inv.UserID, inv.By, inv.ExpiresAt.UnixNano())
+		if err != nil && strings.Contains(err.Error(), "FOREIGN KEY") {
+			return station.ErrNotFound
+		}
+		return err
+	})
+}
+
+// Invite finds the open setup link with that hash; one that expired or
+// was used is not found.
+func (d *DB) Invite(ctx context.Context, hash string, now time.Time) (station.Invite, error) {
+	var inv station.Invite
+	var expires int64
+	err := d.db.QueryRowContext(ctx, `SELECT user_id, made_by, expires_at FROM invites WHERE hash = ? AND expires_at > ?`, hash, now.UnixNano()).Scan(&inv.UserID, &inv.By, &expires)
+	if errors.Is(err, sql.ErrNoRows) {
+		return inv, station.ErrNotFound
+	}
+	inv.ExpiresAt = time.Unix(0, expires)
+	return inv, err
+}
+
+// UseInvite spends a setup link.
+func (d *DB) UseInvite(ctx context.Context, hash string) error {
+	return d.update(ctx, `DELETE FROM invites WHERE hash = ?`, hash)
+}
+
+// OpenInvites is when each user's open setup link expires.
+func (d *DB) OpenInvites(ctx context.Context, now time.Time) (map[string]time.Time, error) {
+	rows, err := d.db.QueryContext(ctx, `SELECT user_id, expires_at FROM invites WHERE expires_at > ?`, now.UnixNano())
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := map[string]time.Time{}
+	for rows.Next() {
+		var user string
+		var expires int64
+		if err := rows.Scan(&user, &expires); err != nil {
+			return nil, err
+		}
+		out[user] = time.Unix(0, expires)
+	}
+	return out, rows.Err()
 }
 
 // Teams lists every team, by name, with its members.

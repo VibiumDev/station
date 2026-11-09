@@ -3,7 +3,9 @@ package sqlite
 import (
 	"context"
 	"errors"
+	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/VibiumDev/station"
 )
@@ -119,5 +121,151 @@ func TestUsersTeamsAndAccess(t *testing.T) {
 	}
 	if _, err := station.ParseLevel("boss"); err == nil {
 		t.Error("a made-up level parsed")
+	}
+}
+
+// The second factor: the authenticator secret and the steps it was used
+// at, backup codes spent once, setup links that open once and expire,
+// and the reset that forgets it all.
+func TestSecondFactorAndInvites(t *testing.T) {
+	d := open(t)
+	ctx := context.Background()
+	ann := station.User{ID: "usr_ann", Login: "ann@example.com"}
+	if err := d.PutUser(ctx, ann); err != nil {
+		t.Fatal(err)
+	}
+	if u, _ := d.User(ctx, ann.ID); u.HasPassword || u.TwoFactor {
+		t.Errorf("fresh user: %+v", u)
+	}
+	now := time.Now()
+	if err := d.SetSecondFactor(ctx, ann.ID, "SECRET", now); err != nil {
+		t.Fatal(err)
+	}
+	if secret, step, err := d.SecondFactor(ctx, ann.ID); err != nil || secret != "SECRET" || step != 0 {
+		t.Fatalf("factor: %q %d %v", secret, step, err)
+	}
+	if u, _ := d.User(ctx, ann.ID); !u.TwoFactor || !u.TwoFactorAt.Equal(now) {
+		t.Errorf("user: %+v", u)
+	}
+	for _, c := range []struct {
+		step int64
+		ok   bool
+	}{{100, true}, {100, false}, {99, false}, {101, true}} {
+		if ok, _ := d.AcceptStep(ctx, ann.ID, c.step); ok != c.ok {
+			t.Errorf("step %d: %v", c.step, ok)
+		}
+	}
+	if _, _, err := d.SecondFactor(ctx, "usr_nobody"); !errors.Is(err, station.ErrNotFound) {
+		t.Errorf("nobody's factor: %v", err)
+	}
+	if err := d.SetBackupCodes(ctx, ann.ID, []string{"h1", "h2", "h3"}); err != nil {
+		t.Fatal(err)
+	}
+	if left, ok, _ := d.UseBackupCode(ctx, ann.ID, "h2"); !ok || left != 2 {
+		t.Errorf("use: %v %d", ok, left)
+	}
+	if left, ok, _ := d.UseBackupCode(ctx, ann.ID, "h2"); ok || left != 2 {
+		t.Errorf("reuse: %v %d", ok, left)
+	}
+	if _, ok, _ := d.UseBackupCode(ctx, ann.ID, "nope"); ok {
+		t.Error("a made-up code")
+	}
+	if err := d.SetBackupCodes(ctx, ann.ID, []string{"n1"}); err != nil {
+		t.Fatal(err)
+	}
+	if left, _ := d.BackupCodesLeft(ctx, ann.ID); left != 1 {
+		t.Errorf("after replacing: %d", left)
+	}
+	// Setup links: one per user, found while open, spent once.
+	inv := station.Invite{UserID: ann.ID, ExpiresAt: now.Add(time.Hour), By: "owner"}
+	if err := d.PutInvite(ctx, "link1", inv); err != nil {
+		t.Fatal(err)
+	}
+	if err := d.PutInvite(ctx, "link2", inv); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := d.Invite(ctx, "link1", now); !errors.Is(err, station.ErrNotFound) {
+		t.Error("the older link still opens")
+	}
+	got, err := d.Invite(ctx, "link2", now)
+	if err != nil || got.UserID != ann.ID || got.By != "owner" || !got.ExpiresAt.Equal(inv.ExpiresAt) {
+		t.Fatalf("invite: %+v %v", got, err)
+	}
+	if _, err := d.Invite(ctx, "link2", now.Add(2*time.Hour)); !errors.Is(err, station.ErrNotFound) {
+		t.Error("an expired link opens")
+	}
+	if open, _ := d.OpenInvites(ctx, now); !open[ann.ID].Equal(inv.ExpiresAt) || len(open) != 1 {
+		t.Errorf("open: %v", open)
+	}
+	if err := d.PutInvite(ctx, "link3", station.Invite{UserID: "usr_nobody", ExpiresAt: now.Add(time.Hour)}); !errors.Is(err, station.ErrNotFound) {
+		t.Errorf("a link for nobody: %v", err)
+	}
+	if err := d.UseInvite(ctx, "link2"); err != nil {
+		t.Fatal(err)
+	}
+	if err := d.UseInvite(ctx, "link2"); !errors.Is(err, station.ErrNotFound) {
+		t.Errorf("spent twice: %v", err)
+	}
+	// Reset forgets password, factor and codes; removal takes the rest.
+	d.SetPassword(ctx, ann.ID, "hash")
+	if err := d.ResetSignIn(ctx, ann.ID); err != nil {
+		t.Fatal(err)
+	}
+	if u, _ := d.User(ctx, ann.ID); u.HasPassword || u.TwoFactor {
+		t.Errorf("after reset: %+v", u)
+	}
+	if left, _ := d.BackupCodesLeft(ctx, ann.ID); left != 0 {
+		t.Errorf("codes after reset: %d", left)
+	}
+	if err := d.ResetSignIn(ctx, "usr_nobody"); !errors.Is(err, station.ErrNotFound) {
+		t.Errorf("resetting nobody: %v", err)
+	}
+	d.PutInvite(ctx, "link4", inv)
+	d.SetBackupCodes(ctx, ann.ID, []string{"z"})
+	if err := d.RemoveUser(ctx, ann.ID); err != nil {
+		t.Fatal(err)
+	}
+	if open, _ := d.OpenInvites(ctx, now); len(open) != 0 {
+		t.Error("a removed user's link stays")
+	}
+	var n int
+	d.db.QueryRow(`SELECT count(*) FROM backup_codes`).Scan(&n)
+	if n != 0 {
+		t.Error("a removed user's codes stay")
+	}
+}
+
+// A database from before the second factor had users.disabled; it is
+// users.locked now, with the same rows.
+func TestDisabledBecomesLocked(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "station.db")
+	d, err := Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx := context.Background()
+	if err := d.PutUser(ctx, station.User{ID: "usr_a", Login: "a@example.com", Locked: true}); err != nil {
+		t.Fatal(err)
+	}
+	for _, q := range []string{
+		`ALTER TABLE users DROP COLUMN totp_secret`, `ALTER TABLE users DROP COLUMN totp_at`, `ALTER TABLE users DROP COLUMN totp_step`,
+		`ALTER TABLE users RENAME COLUMN locked TO disabled`,
+	} {
+		if _, err := d.db.Exec(q); err != nil {
+			t.Fatal(q, err)
+		}
+	}
+	d.Close()
+	d, err = Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer d.Close()
+	u, err := d.User(ctx, "usr_a")
+	if err != nil || !u.Locked {
+		t.Fatalf("after the migration: %+v %v", u, err)
+	}
+	if has, _ := d.hasColumn("users", "disabled"); has {
+		t.Error("users.disabled is still there")
 	}
 }
