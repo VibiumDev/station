@@ -191,7 +191,7 @@ func (m *jams) start(ctx context.Context, p station.Principal, prompt, deviceID,
 		return j, errors.New("starting Vibium: " + err.Error())
 	}
 	lj.loop = jam.New(model.Client(), mcp, jam.Options{Prompt: prompt, Mode: mode, DeviceKind: dev.Kind, MaxActions: jamMaxActions, TimeLimit: jamTimeLimit,
-		Grace: jamGrace, Watched: lj.watched, Shortcuts: jamShortcuts(dev.Shortcuts), Emit: func(ev jam.Event) { lj.emit(m, ev) }})
+		Grace: jamGrace, Watched: lj.watched, Shortcuts: jamShortcuts(dev.Shortcuts), About: deviceAbout(dev), Emit: func(ev jam.Event) { lj.emit(m, ev) }})
 	m.s.db.Audit(ctx, station.AuditEntry{Subject: p.Subject, Action: "jam", DeviceID: dev.ID, Detail: "started " + j.ID + " with " + model.Name})
 	go m.watchHold(lj)
 	go func() {
@@ -200,6 +200,35 @@ func (m *jams) start(ctx context.Context, p station.Principal, prompt, deviceID,
 		m.finish(lj, res, nil)
 	}()
 	return j, nil
+}
+
+// deviceAbout words what the device is for the model's instruction:
+// "an iPhone 15 Pro Max on iOS 26.6", or "" when the rig said nothing.
+func deviceAbout(d deviceView) string {
+	var b strings.Builder
+	if d.Model != "" {
+		b.WriteString(article(d.Model) + " " + d.Model)
+	}
+	if d.Platform != "" {
+		if b.Len() > 0 {
+			b.WriteString(" on ")
+		} else {
+			b.WriteString("running ")
+		}
+		b.WriteString(platformName(d.Platform))
+		if d.OSVersion != "" {
+			b.WriteString(" " + d.OSVersion)
+		}
+	}
+	return b.String()
+}
+
+// article is "a" or "an" for the word that follows.
+func article(word string) string {
+	if word != "" && strings.ContainsRune("aeiouAEIOU", rune(word[0])) {
+		return "an"
+	}
+	return "a"
 }
 
 // jamShortcuts turns the device's announced shortcuts, in the viewer's
@@ -635,10 +664,7 @@ type jamView struct {
 func jamViews(list []station.Jam, devs []deviceView) []jamView {
 	labels := map[string]string{}
 	for _, d := range devs {
-		labels[d.ID] = d.Name
-		if d.Label != "" {
-			labels[d.ID] = d.Label
-		}
+		labels[d.ID] = d.Title
 	}
 	var out []jamView
 	for _, j := range list {
@@ -699,10 +725,7 @@ func (s *server) jamPage(w http.ResponseWriter, r *http.Request, p station.Princ
 	dev, _ := s.db.Device(ctx, j.DeviceID)
 	label := j.DeviceID
 	if dev.ID != "" {
-		label = dev.Name()
-		if dev.Label != "" {
-			label = dev.Label
-		}
+		label = dev.Title()
 	}
 	data := map[string]any{"Page": "jams", "Principal": p, "CSRF": s.auth.csrfToken(r), "Jam": j, "Open": live, "Events": views, "Last": last,
 		"DeviceLabel": label, "When": j.CreatedAt.Local().Format("Jan 2, 2006 15:04"), "Took": j.Took, "Message": r.URL.Query().Get("msg")}

@@ -37,6 +37,7 @@ type Options struct {
 	Grace      time.Duration // how long a settled result waits when someone is watching; 0 means DefaultGrace
 	Watched    func() bool   // whether anyone is watching the jam; nil means nobody
 	Shortcuts  []Shortcut    // the device's own keys, as its provider announces them
+	About      string        // what the device is, for the instruction: "an iPhone 15 Pro Max on iOS 26.6"
 	Emit       func(Event)   // every step, in order
 }
 
@@ -783,7 +784,12 @@ func (l *Loop) instruction() string {
 	case "browser":
 		b.WriteString("The device is a web browser: map the page, find elements, click, fill and read, and take a screenshot when the picture matters. ")
 	default:
-		b.WriteString("The device is a phone with a touch screen, which you see only through screenshots. Coordinates are pixels in the most recent screenshot, whose width and height are given with it, with (0, 0) at the top left. ")
+		if l.opt.About != "" {
+			b.WriteString("The device is " + l.opt.About + ": a phone with a touch screen, which you see only through screenshots. ")
+		} else {
+			b.WriteString("The device is a phone with a touch screen, which you see only through screenshots. ")
+		}
+		b.WriteString("Coordinates are pixels in the most recent screenshot, whose width and height are given with it, with (0, 0) at the top left. ")
 		b.WriteString("Tap, long press and swipe touch the screen; type enters text where the cursor is; keys presses a key or a chord, such as Enter or Meta+h. " + l.keysText())
 		b.WriteString("After each action you receive a fresh screenshot. When the screen is still changing, sleep briefly and look again rather than act on a half-drawn screen. ")
 		b.WriteString("Before you deliver a result, tidy up: close any browser tabs you opened and return to the home screen. ")

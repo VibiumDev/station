@@ -42,3 +42,22 @@ func TestJamShortcutsSpeakVibium(t *testing.T) {
 		t.Error("no shortcuts should stay none")
 	}
 }
+
+// The instruction's sentence about the device, from what the rig said.
+func TestDeviceAbout(t *testing.T) {
+	cases := []struct {
+		d    deviceView
+		want string
+	}{
+		{deviceView{}, ""},
+		{deviceView{Model: "iPhone 15 Pro Max", Platform: "ios", OSVersion: "26.6"}, "an iPhone 15 Pro Max on iOS 26.6"},
+		{deviceView{Model: "Pixel 8a", Platform: "android"}, "a Pixel 8a on Android"},
+		{deviceView{Platform: "android", OSVersion: "15"}, "running Android 15"},
+		{deviceView{Model: "Galaxy S24"}, "a Galaxy S24"},
+	}
+	for _, c := range cases {
+		if got := deviceAbout(c.d); got != c.want {
+			t.Errorf("%+v: got %q, want %q", c.d, got, c.want)
+		}
+	}
+}

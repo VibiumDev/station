@@ -393,6 +393,9 @@ type deviceView struct {
 	Extras    string             `json:"extras,omitempty"`
 	Label     string             `json:"label,omitempty"`
 	Platform  string             `json:"platform,omitempty"`
+	Model     string             `json:"model,omitempty"`
+	OSVersion string             `json:"os_version,omitempty"`
+	Title     string             `json:"title"` // the label, else the model, else the name
 	Rig       rigView            `json:"rig"`
 	Online    bool               `json:"online"`
 	Recorded  bool               `json:"recorded,omitempty"` // the rig records every hold, by its announcement
@@ -426,7 +429,7 @@ func (s *server) devices(ctx context.Context) ([]deviceView, error) {
 		recorded := s.tunnel.RecordsHolds(rg.ID)
 		for _, d := range rg.Devices {
 			v := deviceView{ID: d.ID, Name: d.Name(), Kind: d.Kind, Caps: d.Caps, Shortcuts: d.Shortcuts, Input: d.Input, Extras: d.Extras,
-				Label: d.Label, Platform: d.Platform, Rig: rigView{ID: rg.ID, Name: rg.Name, Npub: npub(rg.PubKey)}, Online: online, Recorded: recorded}
+				Label: d.Label, Platform: d.Platform, Model: d.Model, OSVersion: d.OSVersion, Title: d.Title(), Rig: rigView{ID: rg.ID, Name: rg.Name, Npub: npub(rg.PubKey)}, Online: online, Recorded: recorded}
 			if l, err := s.db.Current(ctx, d.ID); err == nil {
 				v.Hold = &holdView{ID: l.ID, Seq: l.Seq, Subject: l.Subject, Scopes: station.ScopeStrings(l.Scopes), Since: l.CreatedAt, Expires: l.ExpiresAt, JamID: jamOfSubject(l.Subject)}
 			}
@@ -759,11 +762,7 @@ func (s *server) viewPage(w http.ResponseWriter, r *http.Request, p station.Prin
 	if q.Get("minimal") == "1" {
 		w.Header().Set("Content-Security-Policy", framedCSP)
 	}
-	label := dev.Name()
-	if dev.Label != "" {
-		label = dev.Label
-	}
-	cfg := viewer.Config{Mode: "station", Device: dev.ID, Name: rg.Name + " / " + label, API: viewer.Relayed("", dev.ID),
+	cfg := viewer.Config{Mode: "station", Device: dev.ID, Name: rg.Name + " / " + dev.Title(), API: viewer.Relayed("", dev.ID),
 		InputMode: dev.Input, Shortcuts: dev.Shortcuts, CSRF: s.auth.csrfToken(r), WebRTC: true, Recorded: s.tunnel.RecordsHolds(rg.ID)}
 	for _, c := range dev.Caps {
 		if c == station.CapVideo {
@@ -779,7 +778,7 @@ func (s *server) viewPage(w http.ResponseWriter, r *http.Request, p station.Prin
 	if dev.Extras != "" {
 		cfg.Extras = "/v1/devices/" + dev.ID + "/extras.js"
 	}
-	viewer.Render(w, viewer.Page{Title: rg.Name + " / " + label + " · " + s.title(), Minimal: q.Get("minimal") == "1", Home: "/devices", HomeTitle: "Devices", Config: cfg})
+	viewer.Render(w, viewer.Page{Title: rg.Name + " / " + dev.Title() + " · " + s.title(), Minimal: q.Get("minimal") == "1", Home: "/devices", HomeTitle: "Devices", Config: cfg})
 }
 
 func (s *server) settingsData(r *http.Request, p station.Principal, extra map[string]any) map[string]any {

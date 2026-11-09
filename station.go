@@ -119,6 +119,23 @@ type Device struct {
 	// Platform is what the device runs: "ios", "android", "macos",
 	// "windows", "linux", or empty when the kind says enough.
 	Platform string `json:"platform,omitempty"`
+	// Model is the device's model name, such as "iPhone 15 Pro Max",
+	// and OSVersion the version of what it runs, such as "26.6", both
+	// as the rig was told; empty when it was not.
+	Model     string `json:"model,omitempty"`
+	OSVersion string `json:"os_version,omitempty"`
+}
+
+// Title is the device's name for people: its label, else its model,
+// else its name in the address.
+func (d Device) Title() string {
+	switch {
+	case d.Label != "":
+		return d.Label
+	case d.Model != "":
+		return d.Model
+	}
+	return d.Name()
 }
 
 // Name is the device's name inside its rig.

@@ -83,14 +83,14 @@ var pages = template.Must(template.New("").Funcs(template.FuncMap{"npub": npub, 
 <main class="wrap"><p class="lead">Open a device to drive it, or to watch when someone else has it. {{template "help" "devices"}}</p>
 <div class="helptext" id="help-devices" hidden>
 <p>Every device on every host enrolled here. Open, the arrow leaving a box, takes a device nobody holds, and you drive it: the picture, touch, keys and sound. A device someone else holds opens watching, and Hold in the viewer takes it from them; an agent's run ends when you do. Release in the viewer gives the device back and returns here. A hold also ends after 5 idle minutes, or after 8 hours.</p>
-<p><b>Device.</b> The device's label, or its name when the host gave it no label, with its kind and platform under it. The name is the last part of the device's address, rig/name, which holds and the API use; Roadie's <code>--label</code> sets the label and <code>--platform</code> the platform.</p>
+<p><b>Device.</b> The device's label, else its model, else its name, with its kind, its model when the label differs, its platform and version, and its name under it. The name is the last part of the device's address, rig/name, which holds and the API use; Roadie's <code>--label</code>, <code>--model</code>, <code>--os-version</code>, <code>--platform</code> and <code>--device-name</code> set the rest.</p>
 <p><b>Host.</b> The machine the device is wired to or runs on, a Roadie rig today: the name it enrolled with, and the id the station gave it. <i>Records sessions</i> means the host records every hold on the device, yours as much as an agent's: each input, and a frame of the screen after each burst of input, go into a recording that is uploaded to the Record Store when the hold ends, where the Records page lists it. That is the host's own setting (Roadie's <code>--record</code>), which the host announces when it connects; the viewer shows REC while such a session is live.</p>
 <p><b>Status.</b> Online while the host's tunnel to the station is up, offline otherwise. Under it, available when nobody holds the device, or who holds it and how many agents are waiting their turn.</p>
 </div>
 {{if not .Devices}}<div class="msg">No hosts yet. Make an enrollment code on <a href="/settings">Settings</a>, then on the host run <code>roadie enroll --code …</code>.</div>{{end}}
 {{if .Devices}}<div class="tablewrap"><table><thead><tr><th>Device</th><th>Host</th><th>Status</th><th></th></tr></thead><tbody>
 {{range .Devices}}<tr>
-<td data-l="Device">{{if .ID}}<b>{{if .Label}}{{.Label}}{{else}}{{.Name}}{{end}}</b><span class="sub">{{.Kind}}{{if .Platform}} · {{platform .Platform}}{{end}}{{if .Label}} · {{.Name}}{{end}}</span>{{else}}<span class="muted">no devices announced</span>{{end}}</td>
+<td data-l="Device">{{if .ID}}<b>{{.Title}}</b><span class="sub">{{.Kind}}{{if and .Model (ne .Model .Title)}} · {{.Model}}{{end}}{{if .Platform}} · {{platform .Platform}}{{if .OSVersion}} {{.OSVersion}}{{end}}{{end}}{{if ne .Title .Name}} · {{.Name}}{{end}}</span>{{else}}<span class="muted">no devices announced</span>{{end}}</td>
 <td data-l="Host"><b>{{.Rig.Name}}</b><span class="sub">{{.Rig.ID}}{{if .Recorded}} · <span class="hint" title="This host records every session on the device: each input, and a frame of the screen after each burst of input, kept in the Record Store when the session ends.">records sessions</span>{{end}}</span></td>
 <td data-l="Status">{{if .Online}}<span class="dot on"></span>online{{else}}<span class="dot"></span><span class="muted">offline</span>{{end}}<span class="sub">{{if .Hold}}held by {{if .Hold.JamID}}<a href="/jams/{{.Hold.JamID}}">jam {{.Hold.JamID}}</a>{{else}}{{.Hold.Subject}}{{end}}{{else}}available{{end}}{{if .Waiting}} · {{.Waiting}} waiting{{end}}</span></td>
 <td class="act">{{if .ID}}<a class="btn small icon" href="/devices/{{.ID}}/view" title="Open" aria-label="Open {{.Name}}">{{template "icon-open"}}</a> <a class="btn small icon" href="/records?device={{.ID}}" title="Records" aria-label="Records of {{.Name}}">{{template "icon-records"}}</a>{{end}}</td>
@@ -150,7 +150,7 @@ var pages = template.Must(template.New("").Funcs(template.FuncMap{"npub": npub, 
 <form class="promptbox" method="post" action="/jams"><input type="hidden" name="csrf" value="{{.CSRF}}">
 <textarea name="prompt" class="prompt" rows="3" placeholder="Something to check, or something to try" required maxlength="4000" aria-label="Prompt">{{.Prompt}}</textarea>
 <div class="promptbar">
-{{if gt (len .Devices) 1}}<select name="device" aria-label="Device">{{range .Devices}}<option value="{{.ID}}">{{if .Label}}{{.Label}}{{else}}{{.Name}}{{end}}</option>{{end}}</select>{{else}}{{range .Devices}}<input type="hidden" name="device" value="{{.ID}}"><span class="muted">{{if .Label}}{{.Label}}{{else}}{{.Name}}{{end}}</span>{{else}}<span class="muted">no device is online</span>{{end}}{{end}}
+{{if gt (len .Devices) 1}}<select name="device" aria-label="Device">{{range .Devices}}<option value="{{.ID}}">{{.Title}}</option>{{end}}</select>{{else}}{{range .Devices}}<input type="hidden" name="device" value="{{.ID}}"><span class="muted">{{.Title}}</span>{{else}}<span class="muted">no device is online</span>{{end}}{{end}}
 {{if gt (len .Models) 1}}<select name="model" aria-label="Model">{{range .Models}}<option value="{{.Name}}"{{if .Default}} selected{{end}}>{{.Name}}</option>{{end}}</select>{{end}}
 <button class="primary send" type="submit" aria-label="Send">{{template "icon-send"}}</button>
 </div></form>
@@ -273,7 +273,7 @@ var pages = template.Must(template.New("").Funcs(template.FuncMap{"npub": npub, 
 {{if not .Rigs}}<p class="muted">None enrolled.</p>{{end}}
 {{if .Rigs}}<div class="tablewrap"><table><thead><tr><th>Rig</th><th>Key</th><th>Devices</th><th>Enrolled</th><th></th></tr></thead><tbody>
 {{range .Rigs}}<tr><td data-l="Rig"><b>{{.Name}}</b><span class="sub">{{.ID}}</span></td><td data-l="Key"><code>{{npub .PubKey}}</code></td>
-<td data-l="Devices">{{range .Devices}}{{if .Label}}{{.Label}}{{else}}{{.Name}}{{end}} <span class="muted">({{.Kind}}{{if .Platform}}, {{platform .Platform}}{{end}})</span> {{end}}</td><td data-l="Enrolled">{{.EnrolledAt.Format "Jan 2, 2006"}}</td>
+<td data-l="Devices">{{range .Devices}}{{.Title}} <span class="muted">({{.Kind}}{{if .Platform}}, {{platform .Platform}}{{if .OSVersion}} {{.OSVersion}}{{end}}{{end}})</span> {{end}}</td><td data-l="Enrolled">{{.EnrolledAt.Format "Jan 2, 2006"}}</td>
 <td class="act"><form class="inline" method="post" action="/settings/rigs/remove"><input type="hidden" name="csrf" value="{{$.CSRF}}"><input type="hidden" name="rig" value="{{.ID}}"><button class="small" type="submit">Remove</button></form></td></tr>{{end}}</tbody></table></div>{{end}}
 
 <h2 class="h2">API tokens {{template "help" "tokens"}}</h2>

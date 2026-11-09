@@ -140,16 +140,18 @@ type Offer struct {
 	Caps      []string           `json:"caps"`
 	Key       string             `json:"key,omitempty"`
 	Shortcuts []station.Shortcut `json:"shortcuts,omitempty"`
-	Input     string             `json:"input,omitempty"`    // "touch" or "mouse"
-	Extras    string             `json:"extras,omitempty"`   // the rig's viewer extras script path
-	Label     string             `json:"label,omitempty"`    // the device's name for people
-	Platform  string             `json:"platform,omitempty"` // "ios", "android", ...
+	Input     string             `json:"input,omitempty"`      // "touch" or "mouse"
+	Extras    string             `json:"extras,omitempty"`     // the rig's viewer extras script path
+	Label     string             `json:"label,omitempty"`      // the device's name for people
+	Platform  string             `json:"platform,omitempty"`   // "ios", "android", ...
+	Model     string             `json:"model,omitempty"`      // "iPhone 15 Pro Max"
+	OSVersion string             `json:"os_version,omitempty"` // "26.6"
 }
 
 // Device is the offer as the station's device under the rig's id.
 func (o Offer) Device(rigID string) station.Device {
 	return station.Device{ID: station.DeviceID(rigID, o.Name), Kind: o.Kind, Caps: o.Caps, Key: o.Key, Shortcuts: o.Shortcuts,
-		Input: o.Input, Extras: o.Extras, Label: o.Label, Platform: o.Platform}
+		Input: o.Input, Extras: o.Extras, Label: o.Label, Platform: o.Platform, Model: o.Model, OSVersion: o.OSVersion}
 }
 
 func fail(w http.ResponseWriter, code int, msg string) {

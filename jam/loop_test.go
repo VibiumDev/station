@@ -283,7 +283,7 @@ func TestLoopFollowUpInWordsAndTidy(t *testing.T) {
 	}}
 	tools := &fakeTools{}
 	emit, events := collect()
-	l := New(model, tools, Options{Prompt: "home?", DeviceKind: "phone", Emit: emit, IdleWait: 300 * time.Millisecond,
+	l := New(model, tools, Options{Prompt: "home?", DeviceKind: "phone", Emit: emit, IdleWait: 300 * time.Millisecond, About: "an iPhone 15 Pro Max on iOS 26.6",
 		Shortcuts: []Shortcut{{Label: "Home", Keys: "Meta+h"}, {Label: "Back", Keys: "Escape"}, {Label: "Recents", Keys: "Alt+Tab"}, {Label: "Lock", Keys: "Control+Meta+q"}}})
 	go l.Run(context.Background())
 	deadline := time.Now().Add(5 * time.Second)
@@ -319,7 +319,7 @@ func TestLoopFollowUpInWordsAndTidy(t *testing.T) {
 	}
 	// The instruction names the device's keys and asks for tidying.
 	sys, _ := model.requests[0][0].Content.(string)
-	for _, want := range []string{"On this device, Home is Meta+h, Back is Escape and Recents is Alt+Tab.", "close any browser tabs you opened", "reply in a sentence or two instead"} {
+	for _, want := range []string{"On this device, Home is Meta+h, Back is Escape and Recents is Alt+Tab.", "close any browser tabs you opened", "reply in a sentence or two instead", "The device is an iPhone 15 Pro Max on iOS 26.6: a phone"} {
 		if !strings.Contains(sys, want) {
 			t.Errorf("instruction lacks %q", want)
 		}

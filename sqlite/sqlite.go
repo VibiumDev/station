@@ -81,7 +81,9 @@ CREATE TABLE IF NOT EXISTS devices (
 	input     TEXT NOT NULL DEFAULT '',
 	extras    TEXT NOT NULL DEFAULT '',
 	label     TEXT NOT NULL DEFAULT '',
-	platform  TEXT NOT NULL DEFAULT ''
+	platform  TEXT NOT NULL DEFAULT '',
+	model     TEXT NOT NULL DEFAULT '',
+	os_version TEXT NOT NULL DEFAULT ''
 );
 CREATE TABLE IF NOT EXISTS hold_seq (
 	device_id TEXT PRIMARY KEY,
@@ -217,6 +219,8 @@ func (d *DB) migrate() error {
 		{"devices", "extras", "TEXT NOT NULL DEFAULT ''"},
 		{"devices", "label", "TEXT NOT NULL DEFAULT ''"},
 		{"devices", "platform", "TEXT NOT NULL DEFAULT ''"},
+		{"devices", "model", "TEXT NOT NULL DEFAULT ''"},
+		{"devices", "os_version", "TEXT NOT NULL DEFAULT ''"},
 		{"blobs", "steps", "INTEGER NOT NULL DEFAULT 0"},
 		{"blobs", "frames", "INTEGER NOT NULL DEFAULT 0"},
 		{"blobs", "duration_ms", "INTEGER NOT NULL DEFAULT 0"},

@@ -415,11 +415,7 @@ func (s *server) recordsData(r *http.Request, p station.Principal, extra map[str
 	labels := map[string]string{}
 	if devs, err := s.devices(r.Context()); err == nil {
 		for _, d := range devs {
-			if d.Label != "" {
-				labels[d.ID] = d.Label
-			} else {
-				labels[d.ID] = d.Name
-			}
+			labels[d.ID] = d.Title
 		}
 	}
 	// The tags in use among what matched, most used first, as chips

@@ -158,12 +158,15 @@ func TestRigsAndDevices(t *testing.T) {
 	if err != nil || got.ID != "rig_1" || len(got.Devices) != 1 || got.Devices[0].Shortcuts[0].Keys != "GUI+h" {
 		t.Fatalf("by key: %+v %v", got, err)
 	}
-	if err := d.SetDevices(ctx, "rig_1", []station.Device{{ID: "rig_1/phone", Kind: "phone", Caps: []string{"video"}}, {ID: "rig_1/tablet", Kind: "phone", Caps: nil, Input: "touch"}}); err != nil {
+	if err := d.SetDevices(ctx, "rig_1", []station.Device{{ID: "rig_1/phone", Kind: "phone", Caps: []string{"video"}}, {ID: "rig_1/tablet", Kind: "phone", Caps: nil, Input: "touch", Model: "iPad Air", OSVersion: "26.6", Platform: "ios"}}); err != nil {
 		t.Fatal(err)
 	}
 	dev, err := d.Device(ctx, "rig_1/tablet")
-	if err != nil || dev.Kind != "phone" || dev.Input != "touch" {
+	if err != nil || dev.Kind != "phone" || dev.Input != "touch" || dev.Model != "iPad Air" || dev.OSVersion != "26.6" || dev.Title() != "iPad Air" {
 		t.Fatalf("device: %+v %v", dev, err)
+	}
+	if plain, _ := d.Device(ctx, "rig_1/phone"); plain.Title() != "phone" {
+		t.Errorf("an unlabelled device without a model is titled by its name: %q", plain.Title())
 	}
 	rigs, _ := d.Rigs(ctx)
 	if len(rigs) != 1 || len(rigs[0].Devices) != 2 {
