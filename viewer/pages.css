@@ -340,6 +340,22 @@ main.home { padding-top: clamp(44px, 30vh, 320px); }
   .examples::-webkit-scrollbar { display: none; }
   .example { flex: 0 0 auto; display: inline-block; max-width: 240px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; line-height: 20px; }
 }
+/* One jam's header: a way back, the prompt as the title with the result
+   as a pill and the actions at the right, and the facts in a quiet
+   line under it. */
+.jamhead { margin: 0 0 20px; }
+.crumb { margin: 0 0 8px; font-size: 14px; }
+.crumb a { color: var(--text-muted); text-decoration: none; }
+.crumb a:hover { color: var(--text); text-decoration: underline; text-underline-offset: 3px; }
+.titlerow { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 14px; }
+.jamtitle { flex: 1 1 320px; min-width: 0; margin: 0; font: 600 clamp(20px, 2.4vw, 26px)/1.25 var(--sans); letter-spacing: -0.01em; color: var(--text); display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; overflow-wrap: anywhere; }
+.titlerow .act { margin-left: auto; display: inline-flex; gap: 6px; align-items: center; }
+.meta { margin: 10px 0 0; font: 13px/1.6 var(--mono); color: var(--text-muted); overflow-wrap: anywhere; }
+.pill { display: inline-flex; align-items: center; gap: 7px; padding: 3px 11px; border-radius: 999px; border: 1px solid var(--line-card); background: var(--surface); font: 600 13px/1.4 var(--sans); letter-spacing: 0.03em; color: var(--text-2); white-space: nowrap; }
+.pill .dot { margin: 0; }
+.pill.passed, .pill.completed { color: var(--success-text); border-color: transparent; background: color-mix(in srgb, var(--success) 16%, transparent); }
+.pill.failed, .pill.not_completed { color: var(--error-text); border-color: transparent; background: var(--error-bg); }
+.pill.inconclusive { color: var(--link); border-color: transparent; background: color-mix(in srgb, var(--link) 16%, transparent); }
 .jamgrid { display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; align-items: start; }
 .jam.watching .jamgrid { grid-template-columns: minmax(0, 1fr) 300px; }
 @media (max-width: 820px) { .jam.watching .jamgrid { grid-template-columns: minmax(0, 1fr); } }

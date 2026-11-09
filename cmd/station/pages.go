@@ -159,9 +159,13 @@ var pages = template.Must(template.New("").Funcs(template.FuncMap{"npub": npub, 
 
 {{define "jam"}}{{template "head" (dict "Title" "Jam" "Name" .Name "Named" .Named)}}{{template "header" .}}
 <main class="wrap jam{{if .Watch}} watching{{end}}">
-<p class="lead"><a href="/jams">Jams</a> › <b>{{.Jam.ID}}</b> <span class="muted">{{.When}} · {{.Jam.Subject}} · {{.DeviceLabel}} · {{.Jam.Model}}{{if .Took}} · {{.Took}}{{end}}{{if .Word}} · {{end}}</span>{{if .Word}}<b class="verdict {{.Jam.Result}}">{{.Word}}</b>{{end}}
-{{if .Open}} <form class="inline" method="post" action="/jams/{{.Jam.ID}}/stop"><input type="hidden" name="csrf" value="{{.CSRF}}"><button class="small icon" type="submit" title="Stop the jam" aria-label="Stop the jam">{{template "icon-stop"}}</button></form>{{end}}
-{{if .Play}} <a class="btn small icon" href="{{.Play}}" title="Play the recording" aria-label="Play the recording">{{template "icon-play"}}</a>{{end}} <a class="btn small icon" href="/devices/{{.Jam.DeviceID}}/view" title="Open the device" aria-label="Open the device">{{template "icon-open"}}</a></p>
+<header class="jamhead">
+<p class="crumb"><a href="/jams">‹ Jams</a></p>
+<div class="titlerow"><h1 class="jamtitle" title="{{.Jam.Prompt}}">{{.Jam.Prompt}}</h1>
+{{if .Word}}<span class="pill {{.Jam.Result}}">{{.Word}}</span>{{else if .Open}}<span class="pill running"><span class="dot on"></span>running</span>{{else}}<span class="pill">{{.Jam.Status}}</span>{{end}}
+<span class="act">{{if .Open}}<form class="inline" method="post" action="/jams/{{.Jam.ID}}/stop"><input type="hidden" name="csrf" value="{{.CSRF}}"><button class="small icon" type="submit" title="Stop the jam" aria-label="Stop the jam">{{template "icon-stop"}}</button></form>{{end}}{{if .Play}}<a class="btn small icon" href="{{.Play}}" title="Play the recording" aria-label="Play the recording">{{template "icon-play"}}</a>{{end}}<a class="btn small icon" href="/devices/{{.Jam.DeviceID}}/view" title="Open the device" aria-label="Open the device">{{template "icon-open"}}</a></span></div>
+<p class="meta">{{.When}} · {{.Jam.Subject}} · {{.DeviceLabel}} · {{.Jam.Model}}{{if .Took}} · {{.Took}}{{end}} · {{.Jam.ID}}</p>
+</header>
 {{if .Message}}<div class="msg error" role="alert">{{.Message}}</div>{{end}}
 <div class="jamgrid">
 <div class="transcript" id="transcript" data-jam="{{.Jam.ID}}" data-after="{{.Last}}"{{if .Open}} data-open="1"{{end}}>
