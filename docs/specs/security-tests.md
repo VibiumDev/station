@@ -133,6 +133,19 @@ may call it. The plan's "found" list
 below records every hole the suite turned up and the commit that closed
 it, so the history is readable later.
 
+## Where the tests live
+
+| Phase | Tests |
+|---|---|
+| 1 | `cmd/station/e2e_test.go`: `TestAuthorizationMatrix`, `TestMatrixIsComplete`, `TestCSRFOnEveryChange`, `TestCookieFlagsAndOrigin` |
+| 2 | `cmd/station/records_e2e_test.go`, with `records/records_test.go` for the store's own rules |
+| 3 | `cmd/station/holds_e2e_test.go`, with `hold/hold_test.go` for the manager |
+| 4 | `cmd/station/signin_test.go`, `auth_test.go`, `tokens_test.go`, `TestNoSecretsLeakAndLockBites` in `e2e_test.go` |
+| 5 | `enroll/enroll_test.go`, `rig/rig_test.go`, `token/token_test.go` |
+| 6 | Roadie's `auth_routes_test.go`, `allowlist_test.go`, `auth_test.go`, with `rig/rig_test.go` for the gate |
+| 7 | `cmd/station/fuzz_test.go`, `records/fuzz_test.go` |
+| 8 | `.github/workflows/ci.yml` runs the station's tests under `-race`; the matrix's completeness check |
+
 ## Found and fixed
 
 Phase 1, the matrix, on its first runs:

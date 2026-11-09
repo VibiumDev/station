@@ -518,3 +518,61 @@ func TestSafeNext(t *testing.T) {
 		}
 	}
 }
+
+// A setup link is good for its user alone and only while they may sign
+// in: a locked or removed user's link is spent, and a link belongs to
+// the one it was made for.
+func TestSetupLinkFollowsItsUser(t *testing.T) {
+	s, owner := signinServer(t)
+	ctx := context.Background()
+	ann, link, err := s.addUser(ctx, owner, "ann@example.com", "Ann", false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	token := strings.TrimPrefix(link, "https://st.example/setup/")
+	get := func() int {
+		r := httptest.NewRequest("GET", "/setup/"+token, nil)
+		r.SetPathValue("token", token)
+		w := httptest.NewRecorder()
+		s.setupLinkPage(w, r)
+		return w.Code
+	}
+	post := func() int {
+		r := form("POST", "/setup/"+token, url.Values{"password": {"correct horse battery"}, "again": {"correct horse battery"}}, nil)
+		r.SetPathValue("token", token)
+		w := httptest.NewRecorder()
+		s.setupLinkPost(w, r)
+		return w.Code
+	}
+	if get() != 200 {
+		t.Fatal("a fresh link does not open")
+	}
+	s.setLocked(ctx, owner, ann.ID, true)
+	if get() != http.StatusGone || post() != http.StatusGone {
+		t.Error("a locked user's link still works")
+	}
+	s.setLocked(ctx, owner, ann.ID, false)
+	if get() != 200 {
+		t.Error("an unlocked user's link stays spent")
+	}
+	// A new link replaces the old one.
+	link2, _ := s.resetSignIn(ctx, owner, ann.ID)
+	if get() != http.StatusGone {
+		t.Error("the older link still opens after a reset")
+	}
+	token = strings.TrimPrefix(link2, "https://st.example/setup/")
+	if get() != 200 {
+		t.Fatal("the new link does not open")
+	}
+	s.removeUser(ctx, owner, ann.ID)
+	if get() != http.StatusGone || post() != http.StatusGone {
+		t.Error("a removed user's link still works")
+	}
+	// Expiry: a link past its day is gone.
+	bob, link3, _ := s.addUser(ctx, owner, "bob@example.com", "Bob", false)
+	token = strings.TrimPrefix(link3, "https://st.example/setup/")
+	s.db.PutInvite(ctx, hashToken(token), station.Invite{UserID: bob.ID, ExpiresAt: time.Now().Add(-time.Minute), By: "owner"})
+	if get() != http.StatusGone {
+		t.Error("an expired link still opens")
+	}
+}
