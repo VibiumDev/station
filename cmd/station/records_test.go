@@ -93,7 +93,7 @@ func TestRecordsTemplatesRender(t *testing.T) {
 	q := parseRecordsQuery(httptest.NewRequest(http.MethodGet, "/records?q=%23flaky&view=list", nil))
 	rec := func(golden, canEdit bool) recordView {
 		b := station.Blob{SHA256: strings.Repeat("ab", 32), Size: 1234, Type: "application/zip", Name: "record.zip", Uploader: "token:ci", HoldID: "hld_1", DeviceID: "rig_a/phone", Golden: golden, Tags: []string{"flaky"}, CreatedAt: time.Now()}
-		return recordView{Blob: b, URL: "/" + b.SHA256 + ".zip", When: "Nov 8 10:47", Size: "1 KB", Device: b.DeviceID, Label: "phone", CanEdit: canEdit, CanPlay: true, HasThumb: true, Meta: "3 steps",
+		return recordView{Blob: b, Title: recordTitle(b), URL: "/" + b.SHA256 + ".zip", When: "Nov 8 10:47", Size: "1 KB", Device: b.DeviceID, Label: "phone", CanEdit: canEdit, CanPlay: true, HasThumb: true, Meta: "3 steps",
 			TagLinks: []chip{{Tag: "flaky", URL: q.Link("q", ""), On: true}}}
 	}
 	base := map[string]any{"Page": "records", "Principal": station.Principal{Subject: "owner", Admin: true}, "CSRF": "c", "Name": "Station", "Named": true,
@@ -121,11 +121,11 @@ func TestRecordsTemplatesRender(t *testing.T) {
 		if !grid && !strings.Contains(html, `class="minithumb"`) {
 			t.Error("the list has no tiny thumbnail")
 		}
-		if !strings.Contains(html, `<b><a href="/records/`+strings.Repeat("ab", 32)+`/play">record.zip</a></b>`) {
+		if !strings.Contains(html, `<b><a href="/records/`+strings.Repeat("ab", 32)+`/play">record</a></b>`) {
 			t.Errorf("grid=%v: the record's name should open it", grid)
 		}
-		if grid && strings.Contains(html, `?device=`) {
-			t.Error("the grid's device name should not be a filter link")
+		if strings.Contains(html, `?device=`) {
+			t.Errorf("grid=%v: a device name should not be a filter link", grid)
 		}
 		if strings.Count(html, `aria-pressed="true"`) != 1 {
 			t.Errorf("grid=%v: golden stars pressed: %d", grid, strings.Count(html, `aria-pressed="true"`))
@@ -167,5 +167,16 @@ func TestDevicesPageOffersDriveAndWatch(t *testing.T) {
 	}
 	if strings.Contains(html, `title="Open"`) {
 		t.Error("the page still says Open")
+	}
+}
+
+func TestRecordTitle(t *testing.T) {
+	for name, want := range map[string]string{"record.zip": "record", "hld_972d1871.zip": "hld_972d1871", "shot.final.png": "shot.final", "notes": "notes", ".hidden": ".hidden"} {
+		if got := recordTitle(station.Blob{Name: name, SHA256: strings.Repeat("ab", 32)}); got != want {
+			t.Errorf("%q: got %q, want %q", name, got, want)
+		}
+	}
+	if got := recordTitle(station.Blob{SHA256: strings.Repeat("ab", 32)}); got != "abababababab…" {
+		t.Errorf("nameless: %q", got)
 	}
 }

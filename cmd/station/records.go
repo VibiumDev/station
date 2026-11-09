@@ -334,6 +334,7 @@ func (s *server) setRecordTags(w http.ResponseWriter, r *http.Request, p station
 // recordView is a blob as the Records page shows it.
 type recordView struct {
 	station.Blob
+	Title   string // the name without its extension, or the hash's start
 	URL     string
 	Play    string
 	When    string
@@ -364,6 +365,19 @@ type chip struct {
 type perChoice struct {
 	N  int
 	On bool
+}
+
+// recordTitle is a record's name as a person reads it: the file name
+// without its extension, since the type shows beside it and Download
+// keeps the whole name, or the start of the hash for a nameless file.
+func recordTitle(b station.Blob) string {
+	if b.Name == "" {
+		return b.SHA256[:12] + "…"
+	}
+	if i := strings.LastIndex(b.Name, "."); i > 0 {
+		return b.Name[:i]
+	}
+	return b.Name
 }
 
 // recordingMeta words a recording's steps and length.
@@ -450,7 +464,7 @@ func (s *server) recordsData(r *http.Request, p station.Principal, extra map[str
 	q.Page = pageNo
 	views := make([]recordView, 0, to-from)
 	for _, b := range bs[from:to] {
-		v := recordView{Blob: b, URL: s.records.URL(b), Play: playURL(b), When: b.CreatedAt.Local().Format("Jan 2 15:04"), Size: humanSize(b.Size),
+		v := recordView{Blob: b, Title: recordTitle(b), URL: s.records.URL(b), Play: playURL(b), When: b.CreatedAt.Local().Format("Jan 2 15:04"), Size: humanSize(b.Size),
 			Device: b.DeviceID, Label: labels[b.DeviceID], CanEdit: p.Admin || p.Subject == b.Uploader, CanPlay: viewer.HasPlayer() && (b.Type == "application/zip"),
 			HasThumb: b.Type == "application/zip" || strings.HasPrefix(b.Type, "image/"), Meta: recordingMeta(b)}
 		for _, t := range b.Tags {
@@ -502,15 +516,11 @@ func (s *server) playPage(w http.ResponseWriter, r *http.Request, p station.Prin
 		http.Redirect(w, r, s.records.URL(b)+"?download", http.StatusSeeOther)
 		return
 	}
-	name := b.Name
-	if name == "" {
-		name = sha[:12]
-	}
 	var tagLinks []chip
 	for _, t := range b.Tags {
 		tagLinks = append(tagLinks, chip{Tag: t, URL: "/records?q=" + url.QueryEscape("#"+t)})
 	}
-	data := map[string]any{"Page": "records", "Principal": p, "CSRF": s.auth.csrfToken(r), "Title": name,
+	data := map[string]any{"Page": "records", "Principal": p, "CSRF": s.auth.csrfToken(r), "Title": recordTitle(b),
 		"Player": playURL(b), "Full": "/records/" + sha + "/play?full", "Download": s.records.URL(b) + "?download", "Device": b.DeviceID, "Hold": b.HoldID, "Uploader": b.Uploader,
 		"When": b.CreatedAt.Local().Format("Jan 2, 2006 15:04"), "Size": humanSize(b.Size),
 		"SHA": sha, "Golden": b.Golden, "Tags": strings.Join(b.Tags, " "), "TagLinks": tagLinks, "CanEdit": p.Admin || p.Subject == b.Uploader,
