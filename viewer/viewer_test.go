@@ -49,3 +49,22 @@ func TestRenderAndAssets(t *testing.T) {
 		t.Error("the transport module")
 	}
 }
+
+// A watching page carries the flag in its config and a way to the
+// driving page; a driving page a way to the watching one.
+func TestRenderWatchAndDriveLinks(t *testing.T) {
+	var watch strings.Builder
+	if err := Render(&watch, Page{Title: "Watching pi / phone", Config: Config{Mode: "station", Watch: true, API: Relayed("", "rig_a/phone")}, Drive: "/devices/rig_a/phone/drive"}); err != nil {
+		t.Fatal(err)
+	}
+	if h := watch.String(); !strings.Contains(h, `&#34;watch&#34;:true`) && !strings.Contains(h, `"watch":true`) || !strings.Contains(h, `id="driveLink"`) || strings.Contains(h, `id="watchLink"`) {
+		t.Errorf("watching page: %q", h[:min(len(h), 300)])
+	}
+	var drive strings.Builder
+	if err := Render(&drive, Page{Title: "pi / phone", Config: Config{Mode: "station", API: Relayed("", "rig_a/phone")}, Watch: "/devices/rig_a/phone/view"}); err != nil {
+		t.Fatal(err)
+	}
+	if h := drive.String(); strings.Contains(h, `watch&#34;:true`) || strings.Contains(h, `"watch":true`) || !strings.Contains(h, `id="watchLink"`) || strings.Contains(h, `id="driveLink"`) {
+		t.Error("driving page carries the watch flag or the wrong link")
+	}
+}

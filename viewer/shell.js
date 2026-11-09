@@ -14,6 +14,9 @@
   try { cfg = JSON.parse(document.body.dataset.config || '{}'); } catch (e) {}
   var api = cfg.api || {};
   var station = cfg.mode === 'station';
+  // A page that only watches: the host said so (a /view page), or on a
+  // station ?watch=1 asked for a look. It never drives, whoever holds.
+  var watchOnly = !!cfg.watch || (station && new URLSearchParams(location.search).get('watch') === '1');
   var assets = '';
   if (document.currentScript && document.currentScript.src) assets = document.currentScript.src.replace(/\/viewer\/shell\.js(\?.*)?$/, '');
   function $(id) { return document.getElementById(id); }
@@ -823,7 +826,7 @@
 
   // --- Input to the device, over the WebRTC "hid" channel when it is up,
   // otherwise the input socket. Held back while the host is busy.
-  var hidWs = null, hidReady = false, hidWanted = !station;
+  var hidWs = null, hidReady = false, hidWanted = !station && !watchOnly;
   function openHID() {
     if (!driving()) return;  // a watcher has no input to send
     hidWanted = true;
@@ -1319,14 +1322,17 @@
   // released by the button or when the page goes away. A grant is good
   // for one signaling connection, so each gets a fresh one.
   var grant = null, grantUsed = false, hold = null, observer = false, released = false;
-  var watchOnly = station && qs.get('watch') === '1';
   var role = watchOnly ? 'watch' : 'drive';
   var lookAgain = null;
   var holdStatus = $('holdStatus');
   var recNote = $('recNote'); // REC while a session is live on a host that records them
   var takeBtn = $('takeBtn'), releaseBtn = $('releaseBtn');
   function holding() { return !station || (!!hold && !released); }
-  function driving() { return !station || (holding() && role === 'drive'); }
+  function driving() { return !watchOnly && (!station || (holding() && role === 'drive')); }
+  if (watchOnly && !station && holdStatus) {
+    holdStatus.textContent = 'watching';
+    holdStatus.title = 'Watching only: this page sends no input';
+  }
   function wanted() { return role === 'drive' ? ['view', 'input'] : ['view']; }
   function request(method, path, data) {
     return fetch(path, opts({method: method, headers: {'Content-Type': 'application/json'}, body: data ? JSON.stringify(data) : undefined})).then(function (r) {

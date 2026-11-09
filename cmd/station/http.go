@@ -150,6 +150,7 @@ func (s *server) handler() http.Handler {
 	mux.Handle("POST /jams/{id}/stop", s.page(station.ActionView, s.jamStopForm))
 	mux.Handle("POST /jams/{id}/keep", s.page(station.ActionView, s.jamKeepForm))
 	mux.Handle("GET /jams/{id}/shots/{seq}", s.page(station.ActionView, s.jamShot))
+	mux.Handle("GET /devices/{rig}/{name}/drive", s.page(station.ActionView, s.drivePage))
 	mux.Handle("GET /devices/{rig}/{name}/view", s.page(station.ActionView, s.viewPage))
 	mux.Handle("GET /records", s.page(station.ActionView, s.recordsPage))
 	mux.Handle("GET /records/{sha}/play", s.page(station.ActionView, s.playPage))
@@ -749,7 +750,19 @@ func (s *server) indexPage(w http.ResponseWriter, r *http.Request, p station.Pri
 	s.render(w, "index", map[string]any{"Page": "index", "Devices": devs, "Principal": p, "CSRF": s.auth.csrfToken(r), "JamsOn": s.jams.on()})
 }
 
+// drivePage is GET /devices/{rig}/{name}/drive: the viewer that takes
+// the device and drives it, or watches with a Hold button when someone
+// else has it. viewPage is GET /devices/{rig}/{name}/view: the same
+// viewer looking only, which never takes the device and sends no input.
+func (s *server) drivePage(w http.ResponseWriter, r *http.Request, p station.Principal) {
+	s.devicePage(w, r, p, false)
+}
+
 func (s *server) viewPage(w http.ResponseWriter, r *http.Request, p station.Principal) {
+	s.devicePage(w, r, p, true)
+}
+
+func (s *server) devicePage(w http.ResponseWriter, r *http.Request, p station.Principal, watch bool) {
 	id := deviceID(r)
 	dev, err := s.db.Device(r.Context(), id)
 	if err != nil {
@@ -762,7 +775,7 @@ func (s *server) viewPage(w http.ResponseWriter, r *http.Request, p station.Prin
 	if q.Get("minimal") == "1" {
 		w.Header().Set("Content-Security-Policy", framedCSP)
 	}
-	cfg := viewer.Config{Mode: "station", Device: dev.ID, Name: rg.Name + " / " + dev.Title(), API: viewer.Relayed("", dev.ID),
+	cfg := viewer.Config{Mode: "station", Watch: watch, Device: dev.ID, Name: rg.Name + " / " + dev.Title(), API: viewer.Relayed("", dev.ID),
 		InputMode: dev.Input, Shortcuts: dev.Shortcuts, CSRF: s.auth.csrfToken(r), WebRTC: true, Recorded: s.tunnel.RecordsHolds(rg.ID)}
 	for _, c := range dev.Caps {
 		if c == station.CapVideo {
@@ -778,7 +791,14 @@ func (s *server) viewPage(w http.ResponseWriter, r *http.Request, p station.Prin
 	if dev.Extras != "" {
 		cfg.Extras = "/v1/devices/" + dev.ID + "/extras.js"
 	}
-	viewer.Render(w, viewer.Page{Title: rg.Name + " / " + dev.Title() + " · " + s.title(), Minimal: q.Get("minimal") == "1", Home: "/devices", HomeTitle: "Devices", Config: cfg})
+	page := viewer.Page{Title: rg.Name + " / " + dev.Title() + " · " + s.title(), Minimal: q.Get("minimal") == "1", Home: "/devices", HomeTitle: "Devices", Config: cfg}
+	if watch {
+		page.Title = "Watching " + page.Title
+		page.Drive = "/devices/" + dev.ID + "/drive"
+	} else {
+		page.Watch = "/devices/" + dev.ID + "/view"
+	}
+	viewer.Render(w, page)
 }
 
 func (s *server) settingsData(r *http.Request, p station.Principal, extra map[string]any) map[string]any {

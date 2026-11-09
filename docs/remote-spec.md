@@ -383,10 +383,11 @@ WebRTC media is encrypted end to end between browser and Pi (DTLS-SRTP), so even
 | --- | --- |
 | `/login` | Sign in with the password |
 | `/` | See enrolled devices: name, online status, current controller, Open button |
-| `/devices/{id}/view` | The shared viewer: WebRTC video, audio, touch and keyboard; quality picker; latency readout; MJPEG fallback; Take control / Release; a copyable agent snippet |
+| `/devices/{id}/drive` | The shared viewer: WebRTC video, audio, touch and keyboard; quality picker; latency readout; MJPEG fallback; Take control / Release; a copyable agent snippet |
+| `/devices/{id}/view` | The same viewer looking only: no hold with input, no input sent |
 | `/settings` | Change the password; create and revoke API tokens; create enrollment codes; see network mode and TURN status |
 
-The viewer page comes from the station; the browser then connects to the Pi over WebRTC. Roadie's own `/view` on the Pi stays for LAN use behind the local admin token, and both serve the same viewer module.
+The viewer page comes from the station; the browser then connects to the Pi over WebRTC. Roadie's own `/drive` and `/view` on the Pi stay for LAN use behind the local admin token, and both serve the same viewer module.
 
 **Look and feel.** Extremely minimal, in the spirit of exe.dev and Roadie's existing pages: server-rendered HTML, system fonts, mostly text, monochrome plus one accent colour, no frameworks, no build step. The viewer is the device's screen plus a thin toolbar.
 

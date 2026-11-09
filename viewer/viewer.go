@@ -52,6 +52,10 @@ type Endpoints struct {
 type Config struct {
 	// Mode is "local" (a Roadie's own page: no holds) or "station".
 	Mode string `json:"mode"`
+	// Watch makes the page look only: on a station it never takes the
+	// device and asks for a watching seat alone, and on a Roadie it opens
+	// no input socket. Nothing the person does reaches the device.
+	Watch bool `json:"watch,omitempty"`
 	// Device is the device id on a station, empty on a Roadie.
 	Device string `json:"device,omitempty"`
 	// Name is shown in the title and screenshots.
@@ -91,7 +95,13 @@ type Page struct {
 	// page as a rule; empty leaves the button out. HomeTitle names it.
 	Home      string
 	HomeTitle string
-	Config    Config
+	// Drive and Watch are the other page for the same device, when there
+	// is one: a watching page names the driving page as Drive, a driving
+	// page names the watching page as Watch, and the toolbar shows the
+	// one that is set.
+	Drive  string
+	Watch  string
+	Config Config
 }
 
 // ConfigJSON is the config for the page's data attribute.

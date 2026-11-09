@@ -144,3 +144,22 @@ func TestRecordsTemplatesRender(t *testing.T) {
 		t.Error("a reader should see the tags as links, not a form")
 	}
 }
+
+// The Devices page offers Drive and Watch for each device, as the wheel
+// and the eye, plus Records.
+func TestDevicesPageOffersDriveAndWatch(t *testing.T) {
+	devs := []deviceView{{ID: "rig_a/iphone_1", Name: "iphone_1", Kind: "phone", Platform: "ios", OSVersion: "26.6", Model: "iPhone 15 Pro Max", Title: "iPhone 15 Pro Max", Online: true, Rig: rigView{ID: "rig_a", Name: "pi"}}}
+	var out strings.Builder
+	if err := pages.ExecuteTemplate(&out, "index", map[string]any{"Page": "index", "Devices": devs, "Principal": station.Principal{Subject: "owner", Admin: true}, "CSRF": "c", "JamsOn": true, "Name": "Station", "Named": true}); err != nil {
+		t.Fatal(err)
+	}
+	html := out.String()
+	for _, want := range []string{`href="/devices/rig_a/iphone_1/drive" title="Drive"`, `href="/devices/rig_a/iphone_1/view" title="Watch, without touching it"`, `href="/records?device=rig_a%2fiphone_1"`, "iOS 26.6", "<b>iPhone 15 Pro Max</b>"} {
+		if !strings.Contains(html, want) {
+			t.Errorf("devices page lacks %q", want)
+		}
+	}
+	if strings.Contains(html, `title="Open"`) {
+		t.Error("the page still says Open")
+	}
+}

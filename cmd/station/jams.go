@@ -738,7 +738,7 @@ func (s *server) jamPage(w http.ResponseWriter, r *http.Request, p station.Princ
 	}
 	rigID, _, _ := station.SplitDeviceID(j.DeviceID)
 	if live && s.tunnel.IsOnline(rigID) {
-		data["Watch"] = "/devices/" + j.DeviceID + "/view?minimal=1&watch=1"
+		data["Watch"] = "/devices/" + j.DeviceID + "/view?minimal=1"
 	}
 	if b, ok := s.jams.recordingOf(ctx, j); ok {
 		data["Recording"] = b
