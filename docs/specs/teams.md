@@ -77,6 +77,10 @@ nothing yet. Everyone makes and revokes their own tokens on their
 Account page; an admin makes anyone's on Settings. Drive is the default
 and what most tokens need. A token minted for a jam is bound to its
 device, at drive, as before.
+A record uploaded through a token belongs to the token's user as
+much as to the token: the person deletes, shares and refiles it in
+person or through any drive token of theirs, and a watch token changes
+nothing, not even its user's own.
 
 ## Settings
 

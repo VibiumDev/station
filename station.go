@@ -500,6 +500,7 @@ type Blob struct {
 	Type      string // the media type
 	Name      string // a file name hint, such as record.zip
 	Uploader  string // "owner", "token:<name>", a login, or "rig:<rig id>"
+	User      string // the id of the user behind the uploader, when a person or their token uploaded it
 	PubKey    string // hex: the key that signed the upload
 	HoldID    string
 	DeviceID  string

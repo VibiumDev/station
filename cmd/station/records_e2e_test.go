@@ -148,7 +148,8 @@ func TestRecordsPublicAndPrivate(t *testing.T) {
 	}{
 		{"watch user", true, false}, {"drive user", true, true}, {"jam user", true, false}, {"no team", false, false},
 		{"admin's drive token", true, false}, {"admin's watch token", true, false}, {"admin's admin token", true, true}, {"admin", true, true},
-		{"drive user's drive token", true, false}, // the token's subject is not the uploader's
+		{"drive user's drive token", true, true},  // the token acts as the driver, who uploaded it
+		{"drive user's watch token", true, false}, // a watch token changes nothing, even its user's own
 	} {
 		w := f.do(by[c.who], "GET", "/"+mine, "", true)
 		if (w.Code == 200) != c.read {

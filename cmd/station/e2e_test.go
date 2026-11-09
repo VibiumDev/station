@@ -330,9 +330,11 @@ var (
 	// The admin's jam on A: its starter, admins and jam-level people act
 	// on it, never a watch token.
 	ruleJamAct = func(c caller) bool { return ruleBidiA(c) }
-	// The admin's recording: changes are the uploader's and admins' with
-	// admin power, so an admin's watch or drive token has no say.
-	ruleOwnRecord = ruleManage
+	// The admin's recording: changes are for admins with admin power and
+	// for the uploader, in person or through a drive token of theirs; a
+	// watch token changes nothing, and other users' tokens are not the
+	// uploader's.
+	ruleOwnRecord = func(c caller) bool { return c.signed && c.admin && c.token != station.TokenWatch }
 )
 
 type row struct {

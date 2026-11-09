@@ -256,6 +256,9 @@ func (s *Store) UploadAuth(ctx context.Context, p station.Principal, req UploadR
 			{"expiration", strconv.FormatInt(now.Add(AuthLifetime).Unix(), 10)},
 			{"sub", p.Subject},
 		}}
+	if p.User != "" {
+		ev.Tags = append(ev.Tags, nostr.Tag{"user", p.User})
+	}
 	for _, t := range [][2]string{{"hold", h.ID}, {"dev", h.DeviceID}, {"rig", h.RigID}} {
 		if t[1] != "" {
 			ev.Tags = append(ev.Tags, nostr.Tag{t[0], t[1]})
@@ -351,6 +354,7 @@ func tagValue(ev *nostr.Event, name string) string {
 
 // origin is who an authorization speaks for, and what it may name.
 type origin struct {
+	user     string // the id of the user behind the uploader, when known
 	uploader string // "token:ci", "owner", a login, or "rig:<id>"
 	rig      station.Rig
 	hold     station.Hold
@@ -363,7 +367,7 @@ type origin struct {
 // rig's, which may name only its own devices and holds.
 func (s *Store) originOf(ctx context.Context, ev *nostr.Event) (origin, error) {
 	if ev.PubKey == s.Signer.PubKey() {
-		o := origin{uploader: tagValue(ev, "sub"), deviceID: tagValue(ev, "dev"), rigID: tagValue(ev, "rig")}
+		o := origin{uploader: tagValue(ev, "sub"), user: tagValue(ev, "user"), deviceID: tagValue(ev, "dev"), rigID: tagValue(ev, "rig")}
 		if id := tagValue(ev, "hold"); id != "" {
 			if h, err := s.Holds.Hold(ctx, id); err == nil {
 				o.hold = h
@@ -475,7 +479,7 @@ func (s *Store) ServeUpload(w http.ResponseWriter, r *http.Request) {
 		mediaType = "application/octet-stream"
 	}
 	mediaType, _, _ = strings.Cut(mediaType, ";")
-	b := station.Blob{SHA256: sha, Size: size, Type: strings.TrimSpace(mediaType), Name: tagValue(auth, "name"), Uploader: o.uploader,
+	b := station.Blob{SHA256: sha, Size: size, Type: strings.TrimSpace(mediaType), Name: tagValue(auth, "name"), Uploader: o.uploader, User: o.user,
 		PubKey: auth.PubKey.Hex(), HoldID: o.hold.ID, DeviceID: o.deviceID, RigID: o.rigID, CreatedAt: s.now()}
 	if prev, err := s.Index.Blob(ctx, sha); err == nil {
 		// The same bytes again: the first upload's record stands.
@@ -550,7 +554,7 @@ func (s *Store) mayRead(ctx context.Context, b station.Blob, p *station.Principa
 		return true
 	}
 	if p != nil && (p.Device == "" || p.Device == b.DeviceID) {
-		if p.Admin || p.Subject == b.Uploader {
+		if p.Admin || owns(p, b) {
 			return true
 		}
 		if s.Access != nil && b.DeviceID != "" && s.Access(ctx, *p, b.DeviceID) {
@@ -568,6 +572,18 @@ func (s *Store) mayRead(ctx context.Context, b station.Blob, p *station.Principa
 	return false
 }
 
+// owns says whether a blob is the principal's own: uploaded under their
+// subject, or by them or a token of theirs, as the user behind it.
+func owns(p *station.Principal, b station.Blob) bool {
+	return p.Subject == b.Uploader || p.User != "" && p.User == b.User
+}
+
+// mayChange says whether a principal may delete, share or refile a blob:
+// an admin's power, or their own, and never through a watch token.
+func mayChange(p *station.Principal, b station.Blob) bool {
+	return !p.ReadOnly && (p.Manages() || owns(p, b))
+}
+
 // MayRead says whether a principal may fetch a blob.
 func (s *Store) MayRead(ctx context.Context, b station.Blob, p station.Principal) bool {
 	return s.mayRead(ctx, b, &p, nil)
@@ -577,7 +593,7 @@ func (s *Store) MayRead(ctx context.Context, b station.Blob, p station.Principal
 // t=delete authorization for it signed by the station or the uploading
 // rig.
 func (s *Store) mayDelete(b station.Blob, p *station.Principal, auth *nostr.Event) bool {
-	if p != nil && (p.Manages() || p.Subject == b.Uploader) {
+	if p != nil && mayChange(p, b) {
 		return true
 	}
 	if auth != nil && verb(auth) == "delete" && tagValue(auth, "x") == b.SHA256 {
@@ -703,7 +719,7 @@ func (s *Store) SetPublic(ctx context.Context, p station.Principal, sha string, 
 	if err != nil {
 		return err
 	}
-	if !p.Manages() && p.Subject != b.Uploader {
+	if !mayChange(&p, b) {
 		return refuse(http.StatusForbidden, "not yours to share")
 	}
 	if err := s.Index.SetBlobPublic(ctx, sha, public); err != nil {
@@ -727,7 +743,7 @@ func (s *Store) own(ctx context.Context, p station.Principal, sha string) (stati
 	if err != nil {
 		return b, err
 	}
-	if !p.Manages() && p.Subject != b.Uploader {
+	if !mayChange(&p, b) {
 		return b, refuse(http.StatusForbidden, "not yours to file")
 	}
 	return b, nil

@@ -200,3 +200,8 @@ Phases 2 to 5, on their first runs:
   `//evil.example`; it refuses backslashes, line breaks and NULs now.
 - Nothing else: the record store's rules, the lists, the enrollment
   handler and the throttles answered as the specs say.
+- Later, with the Vibium upload path in view: a record uploaded through
+  a token was owned by the token's subject alone, so the person behind
+  it could not delete or share it. Records now carry the uploading
+  user's id and `owns` matches by it; a watch token still changes
+  nothing (`mayChange`).
