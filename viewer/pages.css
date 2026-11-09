@@ -299,9 +299,9 @@ iframe.player.full { position: fixed; inset: 0; width: 100%; height: 100%; borde
 td .sub.tags, .card.rec .meta .tags { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 5px; font: inherit; }
 .star.on { color: var(--link); }
 .star.on svg path { fill: currentColor; }
-.thumbcell { width: 30px; padding-right: 0; }
-.minithumb { display: block; width: 30px; height: 40px; border-radius: 5px; overflow: hidden; background: #000; margin: -2px 0; }
-.minithumb img { display: block; width: 100%; height: 100%; object-fit: cover; }
+.thumbcell { width: 36px; padding-right: 0; }
+.minithumb { display: flex; align-items: center; justify-content: center; width: 36px; height: 48px; border-radius: 5px; overflow: hidden; background: #000; margin: -4px 0; }
+.minithumb img { display: block; max-width: 100%; max-height: 100%; width: auto; height: auto; }
 .minithumb .nothumb { display: block; width: 100%; height: 100%; background: var(--surface-2); }
 .tagsform input { min-height: 32px; padding: 4px 10px; font: 14px var(--sans); width: 200px; border: 1px solid var(--line-strong); border-radius: 8px; background: var(--surface); color: var(--text); vertical-align: middle; }
 .tagsform button { vertical-align: middle; }
