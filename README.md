@@ -104,11 +104,11 @@ Then enroll a rig:
    agent or someone else holds the device watches it instead, with a Hold
    button that takes it; `?watch=1` only ever watches.
 
-Agents use API tokens from the Settings page or `station token create
-NAME`, sent as `Authorization: Bearer`. A token acts as its user at a
-level of its own: watch only looks, drive holds and drives devices and
-runs jams and agents, and admin manages the station too on an admin's
-token. See [API.md](API.md), and
+Agents use API tokens from the Account page, the Settings page or
+`station token create NAME`, sent as `Authorization: Bearer`. A token
+acts as its user at a level of its own, never above the user's: watch
+only looks, drive holds and drives devices and runs jams and agents,
+and admin manages the station too. See [API.md](API.md), and
 [docs/tutorials/agent-through-the-station.md](docs/tutorials/agent-through-the-station.md)
 for pointing Claude Code, Codex, the Vibium CLI or a script at a device
 through the station, which comes down to the address, the token and the

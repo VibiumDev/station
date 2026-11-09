@@ -418,17 +418,26 @@ func (d *DB) SetAccess(ctx context.Context, a station.Access) error {
 
 // LevelFor is the highest level any of the teams has on the device.
 func (d *DB) LevelFor(ctx context.Context, teams []string, deviceID string) (station.Level, error) {
+	return d.bestLevel(ctx, teams, `device_id = ? AND `, deviceID)
+}
+
+// BestLevel is the highest level any of the teams has on any device:
+// what a token of theirs may be allowed at most.
+func (d *DB) BestLevel(ctx context.Context, teams []string) (station.Level, error) {
+	return d.bestLevel(ctx, teams, "")
+}
+
+func (d *DB) bestLevel(ctx context.Context, teams []string, where string, args ...any) (station.Level, error) {
 	best := station.LevelNone
 	if len(teams) == 0 {
 		return best, nil
 	}
-	args := []any{deviceID}
 	marks := make([]string, len(teams))
 	for i, t := range teams {
 		marks[i] = "?"
 		args = append(args, t)
 	}
-	rows, err := d.db.QueryContext(ctx, `SELECT level FROM device_access WHERE device_id = ? AND team_id IN (`+strings.Join(marks, ", ")+`)`, args...)
+	rows, err := d.db.QueryContext(ctx, `SELECT level FROM device_access WHERE `+where+`team_id IN (`+strings.Join(marks, ", ")+`)`, args...)
 	if err != nil {
 		return best, err
 	}

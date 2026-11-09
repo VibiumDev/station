@@ -175,6 +175,8 @@ func (s *server) handler() http.Handler {
 	mux.Handle("POST /account/password", s.page(station.ActionView, s.changePassword))
 	mux.Handle("POST /account/codes", s.page(station.ActionView, s.accountCodes))
 	mux.Handle("POST /account/authenticator", s.page(station.ActionView, s.accountAuthenticator))
+	mux.Handle("POST /account/tokens", s.page(station.ActionView, s.accountTokens))
+	mux.Handle("POST /account/tokens/revoke", s.page(station.ActionView, s.accountTokenRevoke))
 	mux.Handle("GET /settings", s.page(station.ActionManage, s.settingsPage))
 	mux.Handle("POST /settings/name", s.page(station.ActionManage, s.setName))
 	mux.Handle("POST /settings/tokens", s.page(station.ActionManage, s.createToken))
@@ -866,28 +868,25 @@ func (s *server) settingsPage(w http.ResponseWriter, r *http.Request, p station.
 	s.render(w, "settings", s.settingsData(r, p, nil))
 }
 
+// createToken is POST /settings/tokens: an admin makes a token for any
+// user, within that user's ceiling.
 func (s *server) createToken(w http.ResponseWriter, r *http.Request, p station.Principal) {
-	name := strings.TrimSpace(r.FormValue("name"))
-	if name == "" {
-		s.render(w, "settings", s.settingsData(r, p, map[string]any{"Message": "A token needs a name."}))
+	ctx := r.Context()
+	userID := r.FormValue("user")
+	if userID == "" {
+		userID = p.User
+	}
+	u, err := s.db.User(ctx, userID)
+	if err != nil {
+		s.render(w, "settings", s.settingsData(r, p, map[string]any{"Message": "No such user."}))
 		return
 	}
-	owner := r.FormValue("user")
-	if owner == "" {
-		owner = p.User
-	}
-	level, err := station.ParseTokenLevel(r.FormValue("level"))
+	secret, err := s.makeToken(ctx, p, u, r.FormValue("name"), r.FormValue("level"))
 	if err != nil {
 		s.render(w, "settings", s.settingsData(r, p, map[string]any{"Message": capitalize(err.Error()) + "."}))
 		return
 	}
-	secret, err := s.db.CreateToken(r.Context(), name, level, owner)
-	if err != nil {
-		s.render(w, "settings", s.settingsData(r, p, map[string]any{"Message": err.Error()}))
-		return
-	}
-	s.db.Audit(r.Context(), station.AuditEntry{Subject: p.Subject, Action: "token", Detail: "created " + name + " (" + string(level) + ")"})
-	s.render(w, "settings", s.settingsData(r, p, map[string]any{"NewToken": secret, "NewTokenName": name}))
+	s.render(w, "settings", s.settingsData(r, p, map[string]any{"NewToken": secret, "NewTokenName": strings.TrimSpace(r.FormValue("name"))}))
 }
 
 func (s *server) revokeToken(w http.ResponseWriter, r *http.Request, p station.Principal) {

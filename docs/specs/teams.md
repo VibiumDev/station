@@ -70,9 +70,13 @@ the owner at start, as on Fly.
 API tokens belong to a user and act as that user, within a level of
 their own: `watch` only looks, `drive` holds and drives devices and runs
 jams and agents, as the user's teams allow on each device, and `admin`
-manages the station too, which only means something on an admin's token.
-Drive is the default and what most tokens need. A token minted for a jam
-is bound to its device, at drive, as before.
+manages the station too. A token's level never exceeds its user's own:
+admin for an admin, drive for a user with drive or jam on some device,
+watch for one who may only watch, and no token at all for a user given
+nothing yet. Everyone makes and revokes their own tokens on their
+Account page; an admin makes anyone's on Settings. Drive is the default
+and what most tokens need. A token minted for a jam is bound to its
+device, at drive, as before.
 
 ## Settings
 

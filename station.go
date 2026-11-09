@@ -342,6 +342,8 @@ type UserStore interface {
 	SetAccess(ctx context.Context, a Access) error
 	// LevelFor is the highest level any of the teams has on the device.
 	LevelFor(ctx context.Context, teams []string, deviceID string) (Level, error)
+	// BestLevel is the highest level any of the teams has on any device.
+	BestLevel(ctx context.Context, teams []string) (Level, error)
 }
 
 // Hold is control of one device by one subject, numbered per device so

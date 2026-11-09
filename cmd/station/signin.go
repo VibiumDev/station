@@ -296,7 +296,8 @@ func (s *server) accountData(r *http.Request, p station.Principal, extra map[str
 		}
 	}
 	left, _ := s.db.BackupCodesLeft(ctx, u.ID)
-	data := map[string]any{"Page": "account", "Principal": p, "CSRF": s.auth.csrfToken(r), "User": u, "TeamNames": teams, "Token": !person(p), "BackupLeft": left}
+	data := map[string]any{"Page": "account", "Principal": p, "CSRF": s.auth.csrfToken(r), "User": u, "TeamNames": teams, "Token": !person(p), "BackupLeft": left,
+		"Tokens": s.ownTokens(ctx, u), "TokenLevels": tokenLevels(s.tokenCeiling(ctx, u))}
 	for k, v := range extra {
 		data[k] = v
 	}

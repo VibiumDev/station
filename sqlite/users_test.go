@@ -58,6 +58,9 @@ func TestUsersTeamsAndAccess(t *testing.T) {
 	if err := d.SetMember(ctx, "team_dev", "usr_ann", true); err != nil {
 		t.Fatal(err)
 	}
+	if l, _ := d.BestLevel(ctx, []string{"team_qa", "team_dev"}); l != station.LevelNone {
+		t.Errorf("best level before any access: %q", l)
+	}
 	if err := d.SetMember(ctx, "team_qa", "usr_nobody", true); !errors.Is(err, station.ErrNotFound) {
 		t.Errorf("member who is not a user: %v", err)
 	}
@@ -76,6 +79,12 @@ func TestUsersTeamsAndAccess(t *testing.T) {
 	}
 	if l, _ := d.LevelFor(ctx, []string{"team_qa"}, "rig_1/phone"); l != station.LevelWatch {
 		t.Errorf("qa level: %q", l)
+	}
+	if l, _ := d.BestLevel(ctx, ann.Teams); l != station.LevelJam {
+		t.Errorf("ann's best level: %q", l)
+	}
+	if l, _ := d.BestLevel(ctx, []string{"team_qa"}); l != station.LevelWatch {
+		t.Errorf("QA's best level: %q", l)
 	}
 	if l, _ := d.LevelFor(ctx, ann.Teams, "rig_2/phone"); l != station.LevelNone {
 		t.Errorf("unshared device: %q", l)
