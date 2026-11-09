@@ -254,7 +254,8 @@ func TestLoopStopAndFailure(t *testing.T) {
 	model := &scripted{replies: []Reply{toolReply(call("c1", "browser_tap", `{"x":1,"y":2}`)), toolReply(call("c2", "browser_tap", `{"x":1,"y":2}`))}}
 	tools := &fakeTools{}
 	l := New(model, tools, Options{Prompt: "home?"})
-	go func() { time.Sleep(20 * time.Millisecond); l.Stop("the owner took the device") }()
+	first := l // the goroutine stops this loop, not whatever l names later
+	go func() { time.Sleep(20 * time.Millisecond); first.Stop("the owner took the device") }()
 	res := l.Run(context.Background())
 	if res.Status != "stopped" && res.Status != "failed" {
 		t.Errorf("stop: %+v", res)

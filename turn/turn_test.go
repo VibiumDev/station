@@ -4,6 +4,7 @@ import (
 	"net"
 	"net/netip"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -97,8 +98,15 @@ func client(t *testing.T, s *Server, username, password string) *pion.Client {
 }
 
 func TestServer(t *testing.T) {
+	// The server asks whether a hold has ended from its own goroutines,
+	// while the test marks one ended: the map is shared under a lock.
+	var mu sync.Mutex
 	ended := map[string]bool{}
-	s := start(t, func(hold string) bool { return !ended[hold] }, 1)
+	s := start(t, func(hold string) bool {
+		mu.Lock()
+		defer mu.Unlock()
+		return !ended[hold]
+	}, 1)
 	creds := s.Credentials("hld_ok", time.Now().Add(time.Hour))
 	if len(creds) != 1 || len(creds[0].URLs) != 2 || !strings.HasPrefix(creds[0].URLs[1], "turn:127.0.0.1:") {
 		t.Fatalf("credentials: %+v", creds)
@@ -147,7 +155,9 @@ func TestServer(t *testing.T) {
 		r.Close()
 		t.Error("a malformed username was accepted")
 	}
+	mu.Lock()
 	ended["hld_gone"] = true
+	mu.Unlock()
 	gone := s.Credentials("hld_gone", time.Now().Add(time.Hour))
 	if r, err := client(t, s, gone[0].Username, gone[0].Credential).Allocate(); err == nil {
 		r.Close()
