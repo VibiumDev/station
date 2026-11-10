@@ -490,6 +490,7 @@ type rigView struct {
 type holdView struct {
 	JamID    string    `json:"jam,omitempty"`      // when a jam's token holds the device
 	Watching bool      `json:"watching,omitempty"` // the hold only watches, and gives way to anyone asking for control
+	Mine     bool      `json:"mine,omitempty"`     // the caller holds it: how a client that came in by /session finds its device
 	ID       string    `json:"id"`
 	Seq      uint64    `json:"seq"`
 	Subject  string    `json:"subject"`
@@ -557,6 +558,13 @@ func (s *server) listDevices(w http.ResponseWriter, r *http.Request, p station.P
 	}
 	if devs == nil {
 		devs = []deviceView{}
+	}
+	for i := range devs {
+		if h := devs[i].Hold; h != nil && h.Subject == p.Subject {
+			mine := *h
+			mine.Mine = true
+			devs[i].Hold = &mine
+		}
 	}
 	apiJSON(w, devs)
 }
