@@ -304,7 +304,8 @@ shows in the transcript alone. The event kinds are `start`, `turn`
 arguments), `result` (what the tool returned, with `error` when it
 failed), `shot` (a screenshot, at `image`), `verdict` (a result the
 model delivered, with its `took`, `status`, `summary` and `evidence`),
-`usage` (tokens in and out), `grace` (a settled result landed while
+`usage` (tokens in and out), `brake` (the station's word that the jam
+is going in circles), `grace` (a settled result landed while
 someone was watching: the jam ends at `until`, Unix milliseconds,
 unless a follow-up or `keep` arrives first; sent to watchers, not kept
 in the transcript), `kept` (someone kept it open) and `end`, whose
@@ -315,7 +316,10 @@ seconds later when someone does, who can send a follow-up or `keep` in that
 time. It also ends after thirty minutes, a hundred actions, or five
 minutes without a follow-up on an `inconclusive` or `not_completed`
 result, or a kept one, which stay open for a person to look and follow
-up. It then presses the device's Home shortcut when it announces one,
+up. A jam going in circles is braked sooner: when the model repeats
+actions and the screen comes back as it was each time, the station
+tells it so after four such steps, and after eight takes no more
+actions and has it deliver its result. It then presses the device's Home shortcut when it announces one,
 so the device is left on its home screen.
 
 ## station-probe

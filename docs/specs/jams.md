@@ -380,6 +380,29 @@ minutes and a hundred actions by default, which the loop enforces and
 the token's expiry backs even if the loop hangs. A listen or a say
 counts as an action, and its seconds count against the clock.
 
+A model can go in circles: it taps the same two buttons in turn, and
+each tap costs a full round of tokens. The loop has a brake for that.
+
+- A step is in a circle when it repeats an earlier action and the
+  screen afterwards looks like one that followed that action before.
+- Two actions are the same when the tool is the same and each number
+  is within 16 of the other. A model aiming at one button lands a few
+  points off each time.
+- Two screens are the same when no cell of a 24 by 24 grid of their
+  brightness differs by more than 16 of 255. A blinking caret stays
+  under that. A new digit does not.
+- A step in a circle goes one deeper. Any other step comes one out.
+  Looking and waiting are not steps: a screenshot, a sleep, a listen.
+- At four deep the station tells the model to try another way. The
+  transcript shows a `brake` event.
+- At eight deep the station takes no more actions. The model must
+  deliver its result, which is not completed or inconclusive.
+- The same button pressed many times is not a circle while the screen
+  keeps changing.
+
+On the jam that prompted it, 67 actions and 341,000 tokens, the brake
+would have spoken at the 14th action and stopped the jam at the 18th.
+
 Model cost falls on the key the model was set up with. The first
 milestone records the tokens the provider reports in the jam's
 transcript, so the list can show what a jam cost, and sets no budget. A budget per jam

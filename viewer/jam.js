@@ -46,7 +46,7 @@
         }
         if (v.reason) body.appendChild(h('span', 'muted', v.reason));
         break;
-      case 'error': body.textContent = d.text || ''; break;
+      case 'error': case 'brake': body.textContent = d.text || ''; break;
       default: return null;
     }
     ev.appendChild(body);
@@ -93,7 +93,7 @@
     }
     showGrace(parseInt(g && g.dataset.until, 10));
     var es = new EventSource('/v1/jams/' + tr.dataset.jam + '/events?after=' + (tr.dataset.after || 0));
-    ['start', 'turn', 'text', 'call', 'result', 'shot', 'verdict', 'error', 'grace', 'kept', 'end'].forEach(function (kind) {
+    ['start', 'turn', 'text', 'call', 'result', 'shot', 'verdict', 'error', 'brake', 'grace', 'kept', 'end'].forEach(function (kind) {
       es.addEventListener(kind, function (e) {
         var d = {};
         try { d = JSON.parse(e.data); } catch (err) {}

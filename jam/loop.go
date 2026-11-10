@@ -66,8 +66,8 @@ const (
 // Event is one step of a jam, as the page shows it and the transcript
 // keeps it.
 type Event struct {
-	Kind    string          `json:"kind"`              // turn, text, call, result, shot, verdict, usage, grace, kept, end
-	Text    string          `json:"text,omitempty"`    // the prompt, the model's text, a tool's text, the end's status and reason
+	Kind    string          `json:"kind"`              // turn, text, call, result, shot, verdict, usage, brake, grace, kept, end
+	Text    string          `json:"text,omitempty"`    // the prompt, the model's text, a tool's text, the brake's word, the end's status and reason
 	Tool    string          `json:"tool,omitempty"`    // call, result, shot: the tool
 	Args    json.RawMessage `json:"args,omitempty"`    // call: the arguments
 	Error   bool            `json:"error,omitempty"`   // result: the tool failed
@@ -415,7 +415,8 @@ func (l *Loop) grace(ctx context.Context) (prompt, reason string, what graceEnd)
 // round takes one prompt to its result, or, when words will do, to
 // the model's reply.
 func (l *Loop) round(ctx context.Context, messages *[]Message, shots *[]int, tools []Tool, res *Result, wordsDo bool) (*Verdict, error) {
-	force, corrected, limited := "", false, false
+	force, corrected, ending := "", false, ""
+	circle := &brake{}
 	for {
 		if ctx.Err() != nil {
 			return nil, ctx.Err()
@@ -489,7 +490,12 @@ func (l *Loop) round(ctx context.Context, messages *[]Message, shots *[]int, too
 			}
 			if res.Actions >= l.opt.MaxActions {
 				feedback("Error: the action limit is reached. Deliver the result now with " + l.resultToolNames() + ".")
-				force, limited = l.forcedTool(), true
+				force, ending = l.forcedTool(), "the action limit was reached"
+				continue
+			}
+			if circle.depth >= brakeStop {
+				feedback("Error: the jam is going in circles. Deliver the result now with " + l.resultToolNames() + ".")
+				force = l.forcedTool()
 				continue
 			}
 			res.Actions++
@@ -508,17 +514,33 @@ func (l *Loop) round(ctx context.Context, messages *[]Message, shots *[]int, too
 			feedback(out)
 			// What the device shows now: the tool's own picture, or a
 			// fresh one after an action.
+			var screen []byte
 			if png, mime := r.Image(); png != nil {
 				msg, ev := shotMessage(png, mime, "after "+name)
 				*messages = append(*messages, msg)
 				*shots = append(*shots, len(*messages)-1)
 				l.opt.Emit(ev)
+				screen = png
 			} else if !r.IsError && name != "browser_screenshot" {
 				if msg, ev, ok := l.look(ctx, "after "+name); ok {
 					*messages = append(*messages, msg)
 					*shots = append(*shots, len(*messages)-1)
 					l.opt.Emit(ev)
+					screen = ev.PNG
 				}
+			}
+			failure := ""
+			if r.IsError {
+				failure = out
+			}
+			switch circle.note(name, args, outcomeOf(screen, failure)) {
+			case brakeWarns:
+				l.opt.Emit(Event{Kind: "brake", Text: "Going in circles: the same actions keep leading to the same screens. The model is told to try another way."})
+				*messages = append(*messages, Message{Role: "user", Content: "From the station, not the device: your last actions repeated earlier ones, and the screen came back the same each time. That way is not working. Look at the screen again and try something different. If nothing else can work, deliver the result with " + l.resultToolNames() + " and say what stopped you."})
+			case brakeStops:
+				l.opt.Emit(Event{Kind: "brake", Text: "Still going in circles. No more actions are taken, and the model must deliver its result."})
+				*messages = append(*messages, Message{Role: "user", Content: "From the station, not the device: the jam is going in circles. The same actions keep leading to the same screens, so no more actions are taken. Deliver the result now with " + l.resultToolNames() + ", and say what you tried and what stopped you."})
+				force, ending = l.forcedTool(), "the jam went in circles"
 			}
 			for len(*shots) > KeptScreenshots {
 				at := (*shots)[0]
@@ -526,8 +548,8 @@ func (l *Loop) round(ctx context.Context, messages *[]Message, shots *[]int, too
 				*shots = (*shots)[1:]
 			}
 		}
-		if limited && force == "" {
-			return nil, errors.New("the action limit was reached and the model delivered no result")
+		if ending != "" && force == "" {
+			return nil, errors.New(ending + " and the model delivered no result")
 		}
 	}
 }

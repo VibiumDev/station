@@ -413,7 +413,7 @@ main.home { padding-top: clamp(44px, 30vh, 320px); }
 .ev.turn .body { background: var(--bg-band); border-radius: 10px; padding: 8px 12px; }
 .ev.turn b { display: block; font-size: 12px; color: var(--text-muted); margin-bottom: 2px; }
 .ev.call code { word-break: break-all; }
-.ev.result.error .body, .ev.error .body { color: var(--error-text); }
+.ev.result.error .body, .ev.error .body, .ev.brake .body { color: var(--error-text); }
 .ev.shot img { max-width: 220px; max-height: 300px; border: 1px solid var(--line); border-radius: 8px; display: block; }
 .ev.verdict .body { border-left: 3px solid var(--line-strong); padding-left: 10px; }
 .ev.verdict ul { margin: 6px 0 0; padding-left: 18px; }
