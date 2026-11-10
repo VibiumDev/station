@@ -255,7 +255,7 @@ var pages = template.Must(template.New("").Funcs(template.FuncMap{"npub": npub, 
 <p class="crumb"><a href="/jams">‹ Jams</a></p>
 <div class="titlerow"><h1 class="jamtitle" title="{{.Jam.Prompt}}">{{.Jam.Prompt}}</h1>
 {{if .Word}}<span class="pill {{.Jam.Result}}">{{.Word}}</span>{{else if .Open}}<span class="pill running"><span class="dot on"></span>running</span>{{else}}<span class="pill">{{.Jam.Status}}</span>{{end}}
-<span class="act">{{if .Open}}<form class="inline" id="stopjam" method="post" action="/jams/{{.Jam.ID}}/stop"><input type="hidden" name="csrf" value="{{.CSRF}}"><button class="small icon" type="submit" title="Stop the jam" aria-label="Stop the jam">{{template "icon-stop"}}</button></form>{{end}}{{if .Play}}<a class="btn small icon" href="{{.Play}}" title="Play the recording" aria-label="Play the recording">{{template "icon-play"}}</a>{{end}}<a class="btn small icon" href="/devices/{{.Jam.DeviceID}}/drive" title="Drive the device" aria-label="Drive the device">{{template "icon-drive"}}</a></span></div>
+<span class="act">{{if and .Open (not .Watch)}}<form class="inline" method="post" action="/jams/{{.Jam.ID}}/stop"><input type="hidden" name="csrf" value="{{.CSRF}}"><button class="small icon" type="submit" title="Stop the jam" aria-label="Stop the jam">{{template "icon-stop"}}</button></form>{{end}}{{if .Play}}<a class="btn small icon" href="{{.Play}}" title="Play the recording" aria-label="Play the recording">{{template "icon-play"}}</a>{{end}}{{if not .Watch}}<a class="btn small icon" href="/devices/{{.Jam.DeviceID}}/drive" title="Drive the device" aria-label="Drive the device">{{template "icon-drive"}}</a>{{end}}</span></div>
 <p class="meta">{{.When}} · {{.Jam.Subject}} · {{.DeviceLabel}} · AI model {{.Jam.Model}}{{if .Took}} · {{.Took}}{{end}} · {{.Jam.ID}}</p>
 </header>
 {{if .Message}}<div class="msg error" role="alert">{{.Message}}</div>{{end}}
@@ -263,12 +263,13 @@ var pages = template.Must(template.New("").Funcs(template.FuncMap{"npub": npub, 
 <div class="transcript" id="transcript" data-jam="{{.Jam.ID}}" data-after="{{.Last}}"{{if .Open}} data-open="1"{{end}}>
 {{range .Events}}{{template "event" .}}{{end}}
 </div>
-{{if .Watch}}<iframe class="watch" src="{{.Watch}}" title="Watching {{.DeviceLabel}}" allow="autoplay"></iframe>{{end}}
+{{if .Watch}}<aside class="watchside"><div class="watchbar"><form class="inline" method="post" action="/jams/{{.Jam.ID}}/stop"><input type="hidden" name="csrf" value="{{.CSRF}}"><button class="small icon" type="submit" title="Stop the jam">{{template "icon-stop"}} Stop</button></form><a class="btn small icon" href="/devices/{{.Jam.DeviceID}}/drive" title="Drive the device yourself">{{template "icon-drive"}} Drive</a></div>
+<iframe class="watch" src="{{.Watch}}" title="Watching {{.DeviceLabel}}" allow="autoplay"></iframe></aside>{{end}}
 </div>
 {{if .Open}}<div class="grace" id="grace" data-until="{{.GraceUntil}}" data-total="{{.GraceSeconds}}" hidden><div class="bar"><span></span></div><p>The result is in. The session ends in <b class="left">{{.GraceSeconds}}</b> s unless you keep it open or send a follow-up.</p><form method="post" action="/jams/{{.Jam.ID}}/keep"><input type="hidden" name="csrf" value="{{.CSRF}}"><button class="small" type="submit">Keep it open</button></form></div>
 <form class="promptbox" method="post" action="/jams/{{.Jam.ID}}/turns"><input type="hidden" name="csrf" value="{{.CSRF}}">
 <textarea name="prompt" class="prompt" rows="2" placeholder="A follow-up, once the result is in" required maxlength="4000" aria-label="Follow-up prompt"></textarea>
-<div class="promptbar"><button class="small icon stop" type="submit" form="stopjam" title="Stop the jam" aria-label="Stop the jam">{{template "icon-stop"}} Stop</button><button class="primary send" type="submit" aria-label="Send">{{template "icon-send"}}</button></div></form>
+<div class="promptbar"><button class="primary send" type="submit" aria-label="Send">{{template "icon-send"}}</button></div></form>
 {{else}}<p class="muted">{{.Jam.Status}} · {{.Jam.Actions}} actions · {{.Jam.TokensIn}} tokens in, {{.Jam.TokensOut}} out</p>{{end}}
 </main>{{template "foot" .}}{{end}}
 

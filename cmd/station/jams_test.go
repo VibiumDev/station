@@ -118,32 +118,55 @@ func TestJamVideoSwitch(t *testing.T) {
 	}
 }
 
-func TestARunningJamCanBeStoppedFromEitherEndOfItsPage(t *testing.T) {
+func TestStopAndDriveSitByTheLiveView(t *testing.T) {
 	_, owner := teamsServer(t)
-	page := func(open bool) string {
+	page := func(extra map[string]any) (head, side string) {
 		t.Helper()
 		data := map[string]any{"Page": "jams", "Principal": owner, "CSRF": "c", "Name": "Station", "Named": true,
-			"Jam": station.Jam{ID: "jam_1", Prompt: "check the clock", Status: "running"}, "Open": open}
+			"Jam": station.Jam{ID: "jam_1", DeviceID: "rig_1/phone_1", Prompt: "check the clock", Status: "running"}}
+		for k, v := range extra {
+			data[k] = v
+		}
 		var out strings.Builder
 		if err := pages.ExecuteTemplate(&out, "jam", data); err != nil {
 			t.Fatal(err)
 		}
-		return out.String()
+		head, rest, _ := strings.Cut(out.String(), `class="jamgrid"`)
+		if _, after, found := strings.Cut(rest, `<aside class="watchside">`); found {
+			side, _, _ = strings.Cut(after, "</aside>")
+		}
+		if strings.Contains(rest, "promptbar") && strings.Contains(strings.SplitN(rest, "promptbar", 2)[1], "/stop") {
+			t.Error("the prompt bar has a Stop")
+		}
+		return head, side
+	}
+	const stop, drive = `action="/jams/jam_1/stop"`, `href="/devices/rig_1/phone_1/drive"`
+
+	// A running jam with its device in view: the two are on the live
+	// view, where they stay on screen, and not in the header.
+	head, side := page(map[string]any{"Open": true, "Watch": "/devices/rig_1/phone_1/view?minimal=1"})
+	if !strings.Contains(side, stop) || !strings.Contains(side, drive) {
+		t.Errorf("the live view's bar: %s", side)
+	}
+	if !strings.Contains(side, "Stop</button>") || !strings.Contains(side, "Drive</a>") {
+		t.Errorf("the buttons have no words: %s", side)
+	}
+	if strings.Index(side, stop) > strings.Index(side, "<iframe") {
+		t.Error("the bar is under the live view, where a short window cuts it off")
+	}
+	if strings.Contains(head, stop) || strings.Contains(head, drive) {
+		t.Error("the header repeats Stop or Drive")
 	}
 
-	running := page(true)
-	head, rest, _ := strings.Cut(running, `id="transcript"`)
-	if !strings.Contains(head, `<form class="inline" id="stopjam" method="post" action="/jams/jam_1/stop">`) {
-		t.Error("the header has no Stop form")
-	}
-	// A long transcript puts the header far from where its reader is. The
-	// button by the prompt box sends the header's form.
-	_, bar, _ := strings.Cut(rest, `class="promptbar"`)
-	if !strings.Contains(bar, `<button class="small icon stop" type="submit" form="stopjam"`) {
-		t.Errorf("the prompt bar has no Stop button: %s", bar)
+	// Running, but the rig is away and there is no live view: the header.
+	head, side = page(map[string]any{"Open": true})
+	if side != "" || !strings.Contains(head, stop) || !strings.Contains(head, drive) {
+		t.Errorf("without a live view: side %q", side)
 	}
 
-	if ended := page(false); strings.Contains(ended, "stopjam") {
-		t.Error("a jam that ended still offers Stop")
+	// Ended: nothing to stop. Drive and Play are in the header.
+	head, side = page(map[string]any{"Play": "/records/abc/play"})
+	if side != "" || strings.Contains(head, stop) || !strings.Contains(head, drive) || !strings.Contains(head, `href="/records/abc/play"`) {
+		t.Errorf("an ended jam's header: %s", head)
 	}
 }
