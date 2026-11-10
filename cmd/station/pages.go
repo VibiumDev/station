@@ -202,7 +202,12 @@ var pages = template.Must(template.New("").Funcs(template.FuncMap{"npub": npub, 
 {{if .User.TwoFactor}}<h2 class="h2">Authenticator</h2>
 <form class="row" method="post" action="/account/codes"><input type="hidden" name="csrf" value="{{.CSRF}}"><input type="password" name="current" placeholder="current password" aria-label="Current password, for new backup codes" autocomplete="current-password"> <input type="submit" value="New backup codes"></form>
 <form class="row" method="post" action="/account/authenticator"><input type="hidden" name="csrf" value="{{.CSRF}}"><input type="password" name="current" placeholder="current password" aria-label="Current password, to replace the authenticator" autocomplete="current-password"> <input type="submit" value="Replace the authenticator"></form>{{end}}
-<h2 class="h2">API tokens {{template "help" "my-tokens"}}</h2>
+{{if .JamsPossible}}<h2 class="h2" id="jam-notes">Jam notes {{template "help" "my-jam-notes"}}</h2>
+<p class="helptext" id="help-my-jam-notes" hidden>Your own standing guidance for the model, given to it with every jam you start, after the station's notes. A jam's transcript shows the notes it was given. They travel with every step of a jam, so short notes cost fewer tokens.</p>
+<form method="post" action="/account/jam-notes"><input type="hidden" name="csrf" value="{{.CSRF}}">
+<textarea class="notes" name="notes" rows="6" maxlength="{{.MaxNotes}}" aria-label="Notes for every jam you start" placeholder="Reload a page before you use its microphone.">{{.JamNotes}}</textarea>
+<input type="submit" value="Save notes"></form>
+{{end}}<h2 class="h2">API tokens {{template "help" "my-tokens"}}</h2>
 <p class="helptext" id="help-my-tokens" hidden>A token lets a script or an agent act as you without signing in, sent as <code>Authorization: Bearer &lt;token&gt;</code>, at a level no higher than your own: watch only looks, drive holds and drives devices and runs jams and agents, admin also manages the station. {{if .TokenLevels}}You may make {{range $i, $l := .TokenLevels}}{{if $i}}, {{end}}{{$l}}{{end}} tokens.{{else}}You have no device access yet, so no token of yours could do anything.{{end}} The secret is shown once; the station keeps only a hash. Revoke stops a token at once.</p>
 {{if .NewToken}}<div class="card featured">Token <b>{{.NewTokenName}}</b>, shown once:<p class="secret">{{.NewToken}}</p></div>{{end}}
 {{if .Tokens}}<div class="tablewrap"><table><thead><tr><th>Name</th><th>Access</th><th>Created</th><th>Last used</th><th></th></tr></thead><tbody>
@@ -276,6 +281,7 @@ var pages = template.Must(template.New("").Funcs(template.FuncMap{"npub": npub, 
 {{define "event"}}{{if eq .Kind "turn"}}<div class="ev turn"><span class="t">{{.When}}</span><div class="body"><b>Prompt</b><p>{{.Text}}</p></div></div>
 {{else if eq .Kind "start"}}<div class="ev start"><span class="t">{{.When}}</span><div class="body muted">{{.Text}}</div></div>
 {{else if eq .Kind "kept"}}<div class="ev kept"><span class="t">{{.When}}</span><div class="body muted">{{.Text}}</div></div>
+{{else if eq .Kind "notes"}}<div class="ev notes"><span class="t">{{.When}}</span><details class="body"><summary>Notes given to the model</summary><p>{{.Text}}</p></details></div>
 {{else if eq .Kind "text"}}<div class="ev text"><span class="t">{{.When}}</span><div class="body"><p>{{.Text}}</p></div></div>
 {{else if eq .Kind "call"}}<div class="ev call"><span class="t">{{.When}}</span><div class="body"><code>{{.Tool}}{{if .Args}} {{.Args}}{{end}}</code></div></div>
 {{else if eq .Kind "result"}}<div class="ev result{{if .Error}} error{{end}}"><span class="t">{{.When}}</span><div class="body">{{.Text}}</div></div>
@@ -353,7 +359,12 @@ var pages = template.Must(template.New("").Funcs(template.FuncMap{"npub": npub, 
 {{end}}<tr><th>Vibium</th><td>{{if .Vibium}}<code>{{.Vibium}}</code>{{else}}<span class="muted">not found ({{.VibiumMissing}}); jam sessions drive devices through <code>vibium mcp</code>, so put the binary on the station's PATH or pass <code>--vibium</code></span>{{end}}</td></tr>
 </table></div>
 
-<h2 class="h2">Enroll a rig {{template "help" "enroll"}}</h2>
+{{if .JamsPossible}}<h2 class="h2" id="jam-notes">Jam notes {{template "help" "jam-notes"}}</h2>
+<p class="helptext" id="help-jam-notes" hidden>Standing guidance for the model, given to it with every jam on this station, whoever starts it. Each person can add notes of their own on Account. A jam's transcript shows the notes it was given. They travel with every step of a jam, so short notes cost fewer tokens. They are guidance and not a guard: a prompt that asks for something else is followed. The notes are also the file <code>jam-notes.md</code> in the station's data directory, which can be edited by hand. A change applies to the next jam.</p>
+<form method="post" action="/settings/jam-notes"><input type="hidden" name="csrf" value="{{.CSRF}}">
+<textarea class="notes" name="notes" rows="6" maxlength="{{.MaxNotes}}" aria-label="Notes for every jam on this station" placeholder="After a completed run or a passed check, leave the device on its home screen.">{{.JamNotes}}</textarea>
+<input type="submit" value="Save notes"></form>
+{{end}}<h2 class="h2">Enroll a rig {{template "help" "enroll"}}</h2>
 <p class="helptext" id="help-enroll" hidden>A rig is a machine with devices on it: a Raspberry Pi running Roadie with a phone wired to it. Enrolling joins it to this station. From then on the rig keeps a tunnel open to the station, the station lists the rig's devices, and holds on them go through the tunnel. An enrollment code is used once and expires after 15 minutes. Its last group is this station's key fingerprint, which the rig checks, so it enrolls with the station you meant. On the same network the rig finds the station by mDNS and the address can be left out.</p>
 {{if .NewCode}}<div class="card featured">On the rig, within 15 minutes (until {{.CodeExpires}}):
 <p class="secret">roadie enroll {{.PublicURL}} --code {{.NewCode}}</p>

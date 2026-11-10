@@ -195,6 +195,10 @@ func (m *jams) start(ctx context.Context, p station.Principal, prompt, deviceID,
 	m.live[j.ID] = lj
 	m.mu.Unlock()
 	lj.emit(m, jam.Event{Kind: "start", Text: dev.ID + " with " + model.Name})
+	stationNotes, personNotes := m.s.jamNotes(ctx, p)
+	if ev, ok := jam.NotesEvent(stationNotes, personNotes); ok {
+		lj.emit(m, ev)
+	}
 	logf := func(format string, args ...any) {
 		line := strings.TrimPrefix(fmt.Sprintf(format, args...), "vibium: vibium: ")
 		fmt.Printf("jam %s: %s\n", j.ID, line)
@@ -205,7 +209,7 @@ func (m *jams) start(ctx context.Context, p station.Principal, prompt, deviceID,
 		return j, errors.New("starting Vibium: " + err.Error())
 	}
 	lj.loop = jam.New(model.Client(), mcp, jam.Options{Prompt: prompt, Mode: mode, DeviceKind: dev.Kind, MaxActions: jamMaxActions, TimeLimit: jamTimeLimit,
-		Grace: jamGrace, Watched: lj.watched, Shortcuts: jamShortcuts(dev.Shortcuts), About: deviceAbout(dev), Speaks: m.has(jam.RoleSay), Hears: m.has(jam.RoleListen), Emit: func(ev jam.Event) { lj.emit(m, ev) }})
+		Grace: jamGrace, Watched: lj.watched, Shortcuts: jamShortcuts(dev.Shortcuts), About: deviceAbout(dev), Speaks: m.has(jam.RoleSay), Hears: m.has(jam.RoleListen), StationNotes: stationNotes, PersonNotes: personNotes, Emit: func(ev jam.Event) { lj.emit(m, ev) }})
 	m.s.db.Audit(ctx, station.AuditEntry{Subject: p.Subject, Action: "jam", DeviceID: dev.ID, Detail: "started " + j.ID + " with " + model.Name})
 	go m.watchHold(lj)
 	go func() {

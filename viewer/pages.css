@@ -181,6 +181,8 @@ input[type=text], input[type=password] { min-height: 44px; padding: 10px 12px; b
 input[type=text]:focus, input[type=password]:focus { outline: 2px solid var(--accent); outline-offset: 1px; border-color: var(--accent); }
 form.inline { display: inline; }
 form.row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin: 12px 0; }
+textarea.notes { display: block; width: 100%; max-width: 640px; box-sizing: border-box; min-height: 132px; margin: 12px 0; padding: 10px 12px; border-radius: 10px; border: 1px solid var(--line-strong); background: var(--bg); color: var(--text); font: 15px/1.5 var(--sans); resize: vertical; }
+textarea.notes:focus { outline: 2px solid var(--accent); outline-offset: 1px; border-color: var(--accent); }
 .check { display: inline-flex; gap: 8px; align-items: center; font-weight: 400; color: var(--text-2); }
 .chip { display: inline-block; font: 13.5px var(--mono); padding: 5px 11px; border-radius: 999px; border: 1px solid var(--line-strong); color: var(--text); }
 
@@ -418,6 +420,8 @@ main.home { padding-top: clamp(44px, 30vh, 320px); }
 .ev.turn b { display: block; font-size: 12px; color: var(--text-muted); margin-bottom: 2px; }
 .ev.call code { word-break: break-all; }
 .ev.result.error .body, .ev.error .body, .ev.brake .body { color: var(--error-text); }
+.ev.notes summary { color: var(--text-muted); cursor: pointer; }
+.ev.notes p { margin-top: 6px; }
 .ev.shot img { max-width: 220px; max-height: 300px; border: 1px solid var(--line); border-radius: 8px; display: block; }
 .ev.verdict .body { border-left: 3px solid var(--line-strong); padding-left: 10px; }
 .ev.verdict ul { margin: 6px 0 0; padding-left: 18px; }

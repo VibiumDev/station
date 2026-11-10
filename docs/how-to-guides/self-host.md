@@ -228,6 +228,8 @@ and recreate the container with the same volume.
 copy the directory and start it again. What the copy holds:
 
 - `config.json`: the name, the password hash and the allow list.
+- `jam-notes.md`: the station's jam notes, when an admin wrote any.
+  It is plain text and can be edited by hand.
 - `station.key`: the station's identity. Every rig pins it at
   enrollment, so losing it means enrolling every rig again.
 - `station.db`, with its `-wal` and `-shm` companions: rigs, devices,

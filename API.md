@@ -282,6 +282,12 @@ The Jam video switch on Settings leaves it out of jams started from
 then on. When a jam made no record of its own, its recording is the
 host's recording of its hold.
 
+Every jam is given the station's jam notes, and the notes of the user
+who started it, which for a token is the token's user. An admin writes
+the station's on Settings, or in `jam-notes.md` in the data directory.
+Each person writes their own on Account. One set is at most 4,000
+characters. A jam's `notes` event holds what it was given.
+
 | Method and path | What it does |
 |---|---|
 | `GET /v1/models` | The models on Settings, each with `name`, `role` (`agent`, `listen` or `say`), `provider`, `model` and `default`; never a key |
@@ -299,7 +305,8 @@ read the prompt as a `check` or a `run`, `result` one of `passed`,
 `failed`, `inconclusive`, `completed` and `not_completed`, and
 `summary` the model's explanation. The result is the first prompt's;
 a follow-up of the same kind replaces it, and one of the other kind
-shows in the transcript alone. The event kinds are `start`, `turn`
+shows in the transcript alone. The event kinds are `start`, `notes`
+(the jam notes the model was given, when there are any), `turn`
 (a prompt), `text` (the model's words), `call` (a tool and its
 arguments), `result` (what the tool returned, with `error` when it
 failed), `shot` (a screenshot, at `image`), `verdict` (a result the
@@ -391,8 +398,8 @@ the caller may see.
 | `/records/{sha256}/thumb.jpg` | A recording's last frame, from its unpacked copy, or a screenshot itself; the same readers as the file |
 | `/records/{sha256}/files/{path}` | One file out of a recording's unpacked copy, such as `trace.trace` or `resources/<frame>`; the same readers as the file |
 | `/records/{sha256}/play` | A recording in the embedded [Record Player](https://github.com/VibiumDev/record-player), framed under the station's own bar with the golden star, the record's tags to edit, Download and a full-page link; the player is served by the station at `/viewer/player/app/?record=<sha256>.zip` and fetches the file with the browser's own session. In the frame it runs with `chrome=hidden`, without its own logo, title and theme switch, and paints with the station's colors and theme, which it reads from the framing page; `?full` is the same frame filling the window, without the bar |
-| `/account` | Who you are signed in as, your role and teams, the authenticator and the backup codes left; change the password, make new backup codes or replace the authenticator, each with the current password; your API tokens, made and revoked here within your own level |
-| `/settings` | The AI models, the Jams switch and the Jam video switch, enrollment codes, rigs, API tokens, Users, Teams and Device access (who signs in and what each team may do with each device), the password, the network, the Record Store's room and limits; Remove and Revoke are held for a moment rather than clicked |
+| `/account` | Who you are signed in as, your role and teams, the authenticator and the backup codes left; change the password, make new backup codes or replace the authenticator, each with the current password; your jam notes; your API tokens, made and revoked here within your own level |
+| `/settings` | The AI models, the Jams switch and the Jam video switch, the station's jam notes, enrollment codes, rigs, API tokens, Users, Teams and Device access (who signs in and what each team may do with each device), the password, the network, the Record Store's room and limits; Remove and Revoke are held for a moment rather than clicked |
 
 The viewer's files are at `/viewer/shell.js`, `/viewer/shell.css`,
 `/viewer/webrtc.js` and the audio worklets; a Roadie serves the same

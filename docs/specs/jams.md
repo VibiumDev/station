@@ -256,6 +256,32 @@ and refuses what its policy does not allow, and it may belong to
 someone other than the person typing the prompt. A customer's model key
 and prompt do not go there.
 
+## Notes
+
+A model starts every jam knowing nothing of the station it is on. Jam
+notes are standing guidance it is given each time: what holds for
+every jam here, which a prompt should not have to repeat.
+
+- The station has one set of notes. An admin edits it on Settings. It
+  is the file `jam-notes.md` in the station's data directory, and it
+  can be edited by hand. The file is read when a jam starts, so a
+  change applies to the next jam.
+- Each person has a set of their own, edited on Account. It goes with
+  the jams that person starts, from a page or with one of their
+  tokens.
+- A jam is given the station's notes and then its starter's, at the
+  end of the system instruction. The model is told who wrote them,
+  that they are not from the device, and that the prompt is followed
+  where it asks for something else.
+- Notes are guidance and not a guard. What a jam may do is decided by
+  access levels and the rig's policy.
+- One set is at most 4,000 characters. The notes travel with every
+  model request of a jam, so they cost tokens at every step.
+- The transcript holds a `notes` event with what the jam was given, so
+  a reader can tell why the model did what no prompt asked for. A jam
+  given no notes has none.
+- A follow-up prompt runs under the notes the jam started with.
+
 ## Provider settings
 
 Jams are bring your own keys. Settings gains an **AI** section that

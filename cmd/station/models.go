@@ -19,6 +19,7 @@ func (s *server) modelsData(data map[string]any) {
 	data["Models"], data["Providers"], data["Roles"], data["Efforts"] = models, jam.Providers, jam.Roles, jam.Efforts
 	data["JamsOn"], data["JamsPossible"], data["Vibium"], data["VibiumMissing"] = s.jams.on(), s.jams.possible(), s.jams.vibium, s.jams.missing
 	data["JamVideo"] = s.jams.video()
+	data["JamNotes"], data["MaxNotes"] = s.stationNotes(), jam.MaxNotes
 }
 
 // addModel is POST /settings/models: a new model, or the same name again
