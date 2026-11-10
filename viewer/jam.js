@@ -85,6 +85,12 @@
       timer = setInterval(tick, 100);
     }
     function hideGrace() { if (g) { g.hidden = true; } clearInterval(timer); }
+    // The page follows the transcript while its end is on screen. A
+    // reader who has scrolled away, to the Stop button say, stays there.
+    function atEnd() {
+      var last = tr.lastElementChild;
+      return !last || last.getBoundingClientRect().top < window.innerHeight;
+    }
     showGrace(parseInt(g && g.dataset.until, 10));
     var es = new EventSource('/v1/jams/' + tr.dataset.jam + '/events?after=' + (tr.dataset.after || 0));
     ['start', 'turn', 'text', 'call', 'result', 'shot', 'verdict', 'error', 'grace', 'kept', 'end'].forEach(function (kind) {
@@ -93,8 +99,9 @@
         try { d = JSON.parse(e.data); } catch (err) {}
         if (kind === 'grace') { showGrace(d.until); return; }
         hideGrace();
+        var follow = atEnd();
         var node = render(kind, d);
-        if (node) { tr.appendChild(node); node.scrollIntoView({block: 'nearest'}); }
+        if (node) { tr.appendChild(node); if (follow) node.scrollIntoView({block: 'nearest'}); }
         if (kind === 'end') { es.close(); setTimeout(function () { location.reload(); }, 800); }
       });
     });

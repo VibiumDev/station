@@ -117,3 +117,33 @@ func TestJamVideoSwitch(t *testing.T) {
 		t.Errorf("turned back on: %+v, %v", saved, err)
 	}
 }
+
+func TestARunningJamCanBeStoppedFromEitherEndOfItsPage(t *testing.T) {
+	_, owner := teamsServer(t)
+	page := func(open bool) string {
+		t.Helper()
+		data := map[string]any{"Page": "jams", "Principal": owner, "CSRF": "c", "Name": "Station", "Named": true,
+			"Jam": station.Jam{ID: "jam_1", Prompt: "check the clock", Status: "running"}, "Open": open}
+		var out strings.Builder
+		if err := pages.ExecuteTemplate(&out, "jam", data); err != nil {
+			t.Fatal(err)
+		}
+		return out.String()
+	}
+
+	running := page(true)
+	head, rest, _ := strings.Cut(running, `id="transcript"`)
+	if !strings.Contains(head, `<form class="inline" id="stopjam" method="post" action="/jams/jam_1/stop">`) {
+		t.Error("the header has no Stop form")
+	}
+	// A long transcript puts the header far from where its reader is. The
+	// button by the prompt box sends the header's form.
+	_, bar, _ := strings.Cut(rest, `class="promptbar"`)
+	if !strings.Contains(bar, `<button class="small icon stop" type="submit" form="stopjam"`) {
+		t.Errorf("the prompt bar has no Stop button: %s", bar)
+	}
+
+	if ended := page(false); strings.Contains(ended, "stopjam") {
+		t.Error("a jam that ended still offers Stop")
+	}
+}
