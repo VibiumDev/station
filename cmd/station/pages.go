@@ -31,7 +31,7 @@ func platformName(p string) string {
 // shared stylesheet and theme switch come from the viewer package, so a
 // Roadie's pages are the same. The mark reads Vibium everywhere; a
 // station's own name, when set, is the small line under it.
-var pages = template.Must(template.New("").Funcs(template.FuncMap{"npub": npub, "dict": dict, "platform": platformName, "initial": initial}).Parse(`
+var pages = template.Must(template.New("").Funcs(template.FuncMap{"npub": npub, "dict": dict, "platform": platformName, "initial": initial, "brief": brief}).Parse(`
 {{define "head"}}<!DOCTYPE html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>{{.Title}} · {{if .Named}}{{.Name}}{{else}}Vibium Station{{end}}</title><link rel="icon" type="image/png" href="/favicon.png"><link rel="apple-touch-icon" href="/apple-touch-icon.png">
@@ -244,7 +244,7 @@ var pages = template.Must(template.New("").Funcs(template.FuncMap{"npub": npub, 
 <h2 class="h2">Jams {{template "help" "jams"}}</h2>
 <p class="helptext" id="help-jams" hidden>Every jam session on this station, newest first: the prompt, when and who asked, on which device and with which AI model, and the result. The prompt opens the session, with its transcript and the recording. A new one starts from the <a href="/">front page</a>.</p>
 {{if .Jams}}<div class="tablewrap"><table><thead><tr><th>Prompt</th><th>When</th><th>Who</th><th>Device</th><th>AI model</th><th>Result</th></tr></thead><tbody>
-{{range .Jams}}<tr><td data-l="Prompt" class="prompt"><a href="/jams/{{.ID}}">{{.Prompt}}</a></td><td data-l="When">{{.When}}</td><td data-l="Who">{{.Subject}}</td><td data-l="Device">{{.Label}}</td><td data-l="AI model">{{.Model}}</td>
+{{range .Jams}}<tr><td data-l="Prompt" class="prompt"><a href="/jams/{{.ID}}" title="{{.Prompt}}">{{brief .Prompt 120}}</a></td><td data-l="When">{{.When}}</td><td data-l="Who">{{.Subject}}</td><td data-l="Device">{{.Label}}</td><td data-l="AI model">{{.Model}}</td>
 <td data-l="Result">{{if .Open}}<span class="dot on"></span>running{{else if .Word}}<b class="verdict {{.Result}}">{{.Word}}</b>{{else}}<span class="muted">{{.Status}}</span>{{end}}</td></tr>{{end}}
 </tbody></table></div>{{else}}<p class="muted">No jams yet. <a href="/">Start one.</a></p>{{end}}
 </main>{{template "foot" .}}{{end}}
