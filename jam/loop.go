@@ -456,6 +456,12 @@ func (l *Loop) round(ctx context.Context, messages *[]Message, shots *[]int, too
 			l.opt.Emit(Event{Kind: "text", Text: text})
 		}
 		*messages = append(*messages, Message{Role: "assistant", ToolCalls: reply.Message.ToolCalls})
+		// A model takes the answers to its calls together, straight after
+		// the calls. What the station adds, each screenshot and any word
+		// of its own, waits for the last answer.
+		var after []Message
+		var isShot []bool
+		unrun := ""
 		for _, call := range reply.Message.ToolCalls {
 			if call.Type != "function" || call.ID == "" {
 				return nil, errors.New("the model asked for something other than a tool")
@@ -498,6 +504,10 @@ func (l *Loop) round(ctx context.Context, messages *[]Message, shots *[]int, too
 				force = l.forcedTool()
 				continue
 			}
+			if unrun != "" {
+				feedback(unrun)
+				continue
+			}
 			res.Actions++
 			l.opt.Emit(Event{Kind: "call", Tool: name, Args: json.RawMessage(call.Function.Arguments)})
 			cctx, cancel := context.WithTimeout(ctx, callTimeout)
@@ -517,14 +527,12 @@ func (l *Loop) round(ctx context.Context, messages *[]Message, shots *[]int, too
 			var screen []byte
 			if png, mime := r.Image(); png != nil {
 				msg, ev := shotMessage(png, mime, "after "+name)
-				*messages = append(*messages, msg)
-				*shots = append(*shots, len(*messages)-1)
+				after, isShot = append(after, msg), append(isShot, true)
 				l.opt.Emit(ev)
 				screen = png
 			} else if !r.IsError && name != "browser_screenshot" {
 				if msg, ev, ok := l.look(ctx, "after "+name); ok {
-					*messages = append(*messages, msg)
-					*shots = append(*shots, len(*messages)-1)
+					after, isShot = append(after, msg), append(isShot, true)
 					l.opt.Emit(ev)
 					screen = ev.PNG
 				}
@@ -536,17 +544,25 @@ func (l *Loop) round(ctx context.Context, messages *[]Message, shots *[]int, too
 			switch circle.note(name, args, outcomeOf(screen, failure)) {
 			case brakeWarns:
 				l.opt.Emit(Event{Kind: "brake", Text: "Going in circles: the same actions keep leading to the same screens. The model is told to try another way."})
-				*messages = append(*messages, Message{Role: "user", Content: "From the station, not the device: your last actions repeated earlier ones, and the screen came back the same each time. That way is not working. Look at the screen again and try something different. If nothing else can work, deliver the result with " + l.resultToolNames() + " and say what stopped you."})
+				after, isShot = append(after, Message{Role: "user", Content: "From the station, not the device: your last actions repeated earlier ones, and the screen came back the same each time. That way is not working. Look at the screen again and try something different. If nothing else can work, deliver the result with " + l.resultToolNames() + " and say what stopped you."}), append(isShot, false)
+				// The model reads that before it does any more.
+				unrun = "Error: not run. The station's message after these answers comes first."
 			case brakeStops:
 				l.opt.Emit(Event{Kind: "brake", Text: "Still going in circles. No more actions are taken, and the model must deliver its result."})
-				*messages = append(*messages, Message{Role: "user", Content: "From the station, not the device: the jam is going in circles. The same actions keep leading to the same screens, so no more actions are taken. Deliver the result now with " + l.resultToolNames() + ", and say what you tried and what stopped you."})
+				after, isShot = append(after, Message{Role: "user", Content: "From the station, not the device: the jam is going in circles. The same actions keep leading to the same screens, so no more actions are taken. Deliver the result now with " + l.resultToolNames() + ", and say what you tried and what stopped you."}), append(isShot, false)
 				force, ending = l.forcedTool(), "the jam went in circles"
 			}
-			for len(*shots) > KeptScreenshots {
-				at := (*shots)[0]
-				(*messages)[at].Content = "Screenshot superseded; only the " + fmt.Sprint(KeptScreenshots) + " most recent are kept."
-				*shots = (*shots)[1:]
+		}
+		for i, msg := range after {
+			*messages = append(*messages, msg)
+			if isShot[i] {
+				*shots = append(*shots, len(*messages)-1)
 			}
+		}
+		for len(*shots) > KeptScreenshots {
+			at := (*shots)[0]
+			(*messages)[at].Content = "Screenshot superseded; only the " + fmt.Sprint(KeptScreenshots) + " most recent are kept."
+			*shots = (*shots)[1:]
 		}
 		if ending != "" && force == "" {
 			return nil, errors.New(ending + " and the model delivered no result")

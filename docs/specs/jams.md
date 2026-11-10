@@ -114,7 +114,11 @@ A person types a prompt and sends it. The station:
    tools Vibium offers for this device; executes each tool call the
    model returns through Vibium; takes a screenshot after each action
    and sends it back as the observation; repeats until the model
-   delivers a verdict or a result, or a limit stops it.
+   delivers a verdict or a result, or a limit stops it. A model may ask
+   for several actions in one message. Each is answered first, in
+   order, and the screenshots follow the last answer: a provider
+   refuses a conversation with anything between a model's calls and
+   their answers.
 5. Shows each step on the page as it happens: the tool call and its
    arguments, the observation, the screenshot, the model's visible
    text, and at the end the verdict or the goal's completion, or an
@@ -394,7 +398,8 @@ each tap costs a full round of tokens. The loop has a brake for that.
 - A step in a circle goes one deeper. Any other step comes one out.
   Looking and waiting are not steps: a screenshot, a sleep, a listen.
 - At four deep the station tells the model to try another way. The
-  transcript shows a `brake` event.
+  transcript shows a `brake` event. Actions the model asked for in the
+  same message are not run: the model reads the station's word first.
 - At eight deep the station takes no more actions. The model must
   deliver its result, which is not completed or inconclusive.
 - The same button pressed many times is not a circle while the screen

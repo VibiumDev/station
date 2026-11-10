@@ -247,10 +247,8 @@ func TestLoopBrakesAJamGoingInCircles(t *testing.T) {
 	if told(model.requests[9], "no more actions are taken") || !told(model.requests[10], "no more actions are taken") {
 		t.Error("the word to finish did not come after the tenth tap")
 	}
-	// The conversation stays one a model accepts: each tool call answered.
-	raw, _ := json.Marshal(model.requests[10])
-	if n := strings.Count(string(raw), `"role":"tool"`); n != 10 {
-		t.Errorf("%d tool answers for 10 calls", n)
+	for _, request := range model.requests {
+		answered(t, request)
 	}
 }
 
@@ -276,5 +274,94 @@ func TestLoopLetsAJamThatMovesOnRun(t *testing.T) {
 		if f != "" {
 			t.Errorf("forced %v", model.forced)
 		}
+	}
+}
+
+// answered fails the test unless every message with tool calls is
+// followed at once by an answer to each call, in order: the only
+// conversation a model's API takes.
+func answered(t *testing.T, request []Message) {
+	t.Helper()
+	for i, m := range request {
+		for n, c := range m.ToolCalls {
+			at := i + 1 + n
+			if at >= len(request) || request[at].Role != "tool" || request[at].ToolCallID != c.ID {
+				t.Fatalf("call %s of message %d is not answered at message %d", c.ID, i, at)
+			}
+		}
+	}
+}
+
+func TestLoopAnswersEveryCallBeforeItsScreenshots(t *testing.T) {
+	// A model may ask for several things in one message.
+	phone := &menuPhone{}
+	model := &scripted{replies: []Reply{
+		toolReply(call("c1", "browser_tap", `{"x":343,"y":85}`), call("c2", "browser_tap", `{"x":403,"y":85}`)),
+		toolReply(call("c3", "return_result", `{"status":"completed","summary":"Done.","evidence":[{"type":"observation","summary":"The menu closed."}]}`)),
+	}}
+	l := New(model, phone, Options{Prompt: "Open and close the menu.", Mode: "run"})
+	if res := l.Run(context.Background()); res.Status != "done" || res.Last.Status != "completed" {
+		t.Fatalf("result %+v", res)
+	}
+	request := model.requests[1]
+	answered(t, request)
+	// Both screenshots follow the answers, the menu open and then closed.
+	tail := request[len(request)-4:]
+	if tail[0].Role != "tool" || tail[1].Role != "tool" {
+		t.Fatalf("the answers are not together: %s %s", tail[0].Role, tail[1].Role)
+	}
+	for i, want := range [][]byte{menuOpen, menuClosed} {
+		parts, _ := tail[2+i].Content.([]Part)
+		raw, _ := json.Marshal(parts)
+		if tail[2+i].Role != "user" || !strings.Contains(string(raw), base64.StdEncoding.EncodeToString(want)[:80]) {
+			t.Errorf("screenshot %d is not where it belongs", i+1)
+		}
+	}
+}
+
+func TestLoopBrakesInsideOneMessage(t *testing.T) {
+	// Twelve taps on one spot in one message, as a real model sent them.
+	var taps []ToolCall
+	for i := 0; i < 12; i++ {
+		taps = append(taps, call("t"+strings.Repeat("i", i+1), "browser_tap", `{"x":403,"y":85}`))
+	}
+	phone := &menuPhone{}
+	model := &scripted{replies: []Reply{
+		toolReply(taps...),
+		toolReply(call("r", "return_result", `{"status":"not_completed","summary":"Tapping there changes nothing."}`)),
+	}}
+	emit, events := collect()
+	l := New(model, phone, Options{Prompt: "Tap the heading 12 times.", Mode: "run", IdleWait: 50 * time.Millisecond, Emit: emit})
+	if res := l.Run(context.Background()); res.Status != "done" || res.Last == nil || res.Last.Status != "not_completed" {
+		t.Fatalf("result %+v", res)
+	}
+	// The first tap is new and four more go in the circle. The station
+	// then has a word, and the other seven wait for the model to read it.
+	if phone.taps != 5 {
+		t.Errorf("%d taps reached the phone, want 5", phone.taps)
+	}
+	request := model.requests[1]
+	answered(t, request)
+	unrun, word := 0, -1
+	for i, m := range request {
+		s, _ := m.Content.(string)
+		if m.Role == "tool" && strings.HasPrefix(s, "Error: not run") {
+			unrun++
+		}
+		if m.Role == "user" && strings.Contains(s, "try something different") {
+			word = i
+		}
+	}
+	if unrun != 7 {
+		t.Errorf("%d calls were answered as not run, want 7", unrun)
+	}
+	if word != len(request)-1 {
+		t.Errorf("the station's word is message %d of %d, want the last", word+1, len(request))
+	}
+	if n := strings.Count(kinds(events()), "brake"); n != 1 {
+		t.Errorf("%d brake events, want 1", n)
+	}
+	if model.forced[1] != "" {
+		t.Errorf("the result was forced: %v", model.forced)
 	}
 }
