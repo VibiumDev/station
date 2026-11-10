@@ -347,7 +347,8 @@ var pages = template.Must(template.New("").Funcs(template.FuncMap{"npub": npub, 
 <input class="primary" type="submit" value="Add model"></div></form>
 <div class="tablewrap"><table class="kv">
 <tr><th>Jams</th><td>{{if .JamsPossible}}<form class="inline" method="post" action="/settings/jams"><input type="hidden" name="csrf" value="{{.CSRF}}"><input type="hidden" name="on" value="{{if .JamsOn}}0{{else}}1{{end}}">{{if .JamsOn}}on <button class="link" type="submit">turn off</button>{{else}}off <button class="link" type="submit">turn on</button>{{end}}</form>{{else}}<span class="muted">off until an agent model is set</span>{{end}}</td></tr>
-<tr><th>Vibium</th><td>{{if .Vibium}}<code>{{.Vibium}}</code>{{else}}<span class="muted">not found ({{.VibiumMissing}}); jam sessions drive devices through <code>vibium mcp</code>, so put the binary on the station's PATH or pass <code>--vibium</code></span>{{end}}</td></tr>
+{{if .JamsPossible}}<tr><th>Jam video</th><td><form class="inline" method="post" action="/settings/jam-video"><input type="hidden" name="csrf" value="{{.CSRF}}"><input type="hidden" name="on" value="{{if .JamVideo}}0{{else}}1{{end}}">{{if .JamVideo}}on <button class="link" type="submit">turn off</button>{{else}}off <button class="link" type="submit">turn on</button>{{end}} <span class="muted">a jam's record holds video of the device's screen</span></form></td></tr>
+{{end}}<tr><th>Vibium</th><td>{{if .Vibium}}<code>{{.Vibium}}</code>{{else}}<span class="muted">not found ({{.VibiumMissing}}); jam sessions drive devices through <code>vibium mcp</code>, so put the binary on the station's PATH or pass <code>--vibium</code></span>{{end}}</td></tr>
 </table></div>
 
 <h2 class="h2">Enroll a rig {{template "help" "enroll"}}</h2>

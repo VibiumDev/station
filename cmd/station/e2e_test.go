@@ -399,6 +399,7 @@ func (f *fullStation) rows() []row {
 		{"POST", "/settings/models/default", "/settings/models/default", "name=none", ruleManage, false, false},
 		{"POST", "/settings/models/key", "/settings/models/key", "name=none&key=k", ruleManage, false, false},
 		{"POST", "/settings/jams", "/settings/jams", "on=1", ruleManage, false, false},
+		{"POST", "/settings/jam-video", "/settings/jam-video", "on=1", ruleManage, false, false},
 		{"POST", "/settings/users", "/settings/users", "login=new@example.com", ruleManage, false, false},
 		{"POST", "/settings/users/role", "/settings/users/role", "user=none&admin=1", ruleManage, false, false},
 		{"POST", "/settings/users/lock", "/settings/users/lock", "user=none&locked=1", ruleManage, false, false},

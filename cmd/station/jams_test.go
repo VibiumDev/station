@@ -1,6 +1,9 @@
 package main
 
 import (
+	"net/http"
+	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/VibiumDev/station"
@@ -59,5 +62,58 @@ func TestDeviceAbout(t *testing.T) {
 		if got := deviceAbout(c.d); got != c.want {
 			t.Errorf("%+v: got %q, want %q", c.d, got, c.want)
 		}
+	}
+}
+
+// The Jam video switch on Settings decides what a jam asks of Vibium's
+// recording. Video is on until it is turned off, and the choice is kept.
+func TestJamVideoSwitch(t *testing.T) {
+	s, owner := teamsServer(t)
+	s.dir, s.cfg = t.TempDir(), &Config{Name: "station"}
+	s.jams = &jams{s: s}
+	set := func(on string) {
+		t.Helper()
+		r := httptest.NewRequest("POST", "/settings/jam-video", strings.NewReader("on="+on))
+		r.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+		w := httptest.NewRecorder()
+		s.setJamVideo(w, r, owner)
+		if w.Code != http.StatusSeeOther {
+			t.Fatalf("on=%s: %d %s", on, w.Code, w.Body)
+		}
+	}
+	row := func() string {
+		t.Helper()
+		data := map[string]any{"Page": "settings", "Principal": owner, "CSRF": "c", "Name": "Station", "Named": true, "JamsPossible": true, "JamVideo": s.jams.video()}
+		var out strings.Builder
+		if err := pages.ExecuteTemplate(&out, "settings", data); err != nil {
+			t.Fatal(err)
+		}
+		_, rest, _ := strings.Cut(out.String(), `action="/settings/jam-video"`)
+		rest, _, _ = strings.Cut(rest, "</form>")
+		return rest
+	}
+
+	// Left alone, Vibium films the device whenever it can: nothing is said.
+	if args := jamRecordArgs("jam_1", "/r/jam_1.zip", s.jams.video()); len(args) != 2 || args["name"] != "jam_1" || args["path"] != "/r/jam_1.zip" {
+		t.Errorf("by default a jam asks for %v", args)
+	}
+	if html := row(); !strings.Contains(html, `name="on" value="0">on <button`) {
+		t.Errorf("the row when on: %s", html)
+	}
+
+	set("0")
+	if args := jamRecordArgs("jam_1", "/r/jam_1.zip", s.jams.video()); args["video"] != false {
+		t.Errorf("turned off, a jam asks for %v", args)
+	}
+	if html := row(); !strings.Contains(html, `name="on" value="1">off <button`) {
+		t.Errorf("the row when off: %s", html)
+	}
+	if saved, err := loadConfig(s.dir); err != nil || !saved.JamVideoOff {
+		t.Errorf("the choice was not saved: %+v, %v", saved, err)
+	}
+
+	set("1")
+	if saved, err := loadConfig(s.dir); err != nil || saved.JamVideoOff || !s.jams.video() {
+		t.Errorf("turned back on: %+v, %v", saved, err)
 	}
 }

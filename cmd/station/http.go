@@ -188,6 +188,7 @@ func (s *server) handler() http.Handler {
 	mux.Handle("POST /settings/models/default", s.page(station.ActionManage, s.defaultModel))
 	mux.Handle("POST /settings/models/key", s.page(station.ActionManage, s.modelKey))
 	mux.Handle("POST /settings/jams", s.page(station.ActionManage, s.setJams))
+	mux.Handle("POST /settings/jam-video", s.page(station.ActionManage, s.setJamVideo))
 	mux.Handle("POST /settings/users", s.page(station.ActionManage, s.addUserForm))
 	mux.Handle("POST /settings/users/role", s.page(station.ActionManage, s.userRoleForm))
 	mux.Handle("POST /settings/users/lock", s.page(station.ActionManage, s.userLockForm))

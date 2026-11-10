@@ -90,6 +90,13 @@ func (m *jams) on() bool {
 	return !off && len(m.models.OfRole(jam.RoleAgent)) > 0
 }
 
+// video says whether a jam's record holds video of the device.
+func (m *jams) video() bool {
+	m.s.nameMu.RLock()
+	defer m.s.nameMu.RUnlock()
+	return !m.s.cfg.JamVideoOff
+}
+
 // possible says whether an agent model exists, whatever the switch.
 func (m *jams) possible() bool { return m != nil && len(m.models.OfRole(jam.RoleAgent)) > 0 }
 
@@ -221,7 +228,7 @@ func (m *jams) recordJam(mcp *jam.MCP, id string, logf func(string, ...any)) fun
 	path := filepath.Join(m.s.dir, "vibium", "records", id+".zip")
 	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
 	defer cancel()
-	res, err := mcp.Call(ctx, "browser_record_start", map[string]any{"name": id, "path": path})
+	res, err := mcp.Call(ctx, "browser_record_start", jamRecordArgs(id, path, m.video()))
 	if err != nil || res.IsError {
 		logf("no record of this jam: %v %s", err, res.Text())
 		return func() {}
@@ -234,6 +241,16 @@ func (m *jams) recordJam(mcp *jam.MCP, id string, logf func(string, ...any)) fun
 		}
 		os.Remove(path)
 	}
+}
+
+// jamRecordArgs is what a jam asks of Vibium's recording. Left to itself
+// Vibium films the device's screen whenever it can, so only "no" is said.
+func jamRecordArgs(id, path string, video bool) map[string]any {
+	args := map[string]any{"name": id, "path": path}
+	if !video {
+		args["video"] = false
+	}
+	return args
 }
 
 // deviceAbout words what the device is for the model's instruction:

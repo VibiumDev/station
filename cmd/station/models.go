@@ -18,6 +18,7 @@ func (s *server) modelsData(data map[string]any) {
 	models, _ := s.jams.models.List()
 	data["Models"], data["Providers"], data["Roles"], data["Efforts"] = models, jam.Providers, jam.Roles, jam.Efforts
 	data["JamsOn"], data["JamsPossible"], data["Vibium"], data["VibiumMissing"] = s.jams.on(), s.jams.possible(), s.jams.vibium, s.jams.missing
+	data["JamVideo"] = s.jams.video()
 }
 
 // addModel is POST /settings/models: a new model, or the same name again
@@ -107,5 +108,25 @@ func (s *server) setJams(w http.ResponseWriter, r *http.Request, p station.Princ
 		state = "on"
 	}
 	s.db.Audit(r.Context(), station.AuditEntry{Subject: p.Subject, Action: "jams", Detail: "turned " + state})
+	http.Redirect(w, r, "/settings", http.StatusSeeOther)
+}
+
+// setJamVideo is POST /settings/jam-video: whether a jam's record holds
+// video of the device. It applies to jams started from then on.
+func (s *server) setJamVideo(w http.ResponseWriter, r *http.Request, p station.Principal) {
+	on := r.FormValue("on") == "1"
+	s.nameMu.Lock()
+	s.cfg.JamVideoOff = !on
+	err := saveConfig(s.dir, s.cfg)
+	s.nameMu.Unlock()
+	if err != nil {
+		s.render(w, "settings", s.settingsData(r, p, map[string]any{"Message": err.Error()}))
+		return
+	}
+	state := "off"
+	if on {
+		state = "on"
+	}
+	s.db.Audit(r.Context(), station.AuditEntry{Subject: p.Subject, Action: "jams", Detail: "video turned " + state})
 	http.Redirect(w, r, "/settings", http.StatusSeeOther)
 }

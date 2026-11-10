@@ -275,7 +275,8 @@ is seen once, as it is typed, and never again: the row says that one is
 set, offers Replace and Remove, and nothing a browser receives
 afterwards contains it. The section also holds the Jams switch, on by
 default once an agent model is set, which is what puts Jams in the top
-bar and the prompt on the front page.
+bar and the prompt on the front page. Beside it is the Jam video switch,
+on by default: whether a jam's record holds video of the device's screen.
 
 With one agent model the prompt has no picker and the person typing
 sees none of this. With two or more, a picker beside the prompt names
@@ -386,15 +387,27 @@ and per day is the hosted station's concern.
 
 ## Recordings
 
-A jam's recording is the rig's recording of its hold, which the Record
-Store already ties to the hold and the Records page already lists, so
-the jam's page links to it with nothing new. It is the stronger
-recording in any case: it shows what the phone showed and received, and
-the agent cannot alter it. The transcript, with the model's text, the
-tool calls and the token counts, stays in the station's database with
-the jam, and the jam's page shows the two side by side. A rig that does
-not record leaves a jam with its transcript alone, which is an open
-question below until the loop records for itself.
+A jam has up to two recordings of its hold.
+
+- The jam's own. The station starts a Vibium recording when the jam
+  starts and uploads it when the jam ends. It holds the steps, the
+  screenshots, what was said and heard with the sound, and video of the
+  device's screen. Vibium joins the device's stream as a viewer to get
+  the video. The Record Player plays the video in step with the steps.
+- The rig's, when the rig records. It shows what the device showed and
+  received, and the agent cannot alter it.
+
+The jam's page plays the jam's own recording, and the rig's when the jam
+made none. Both are tied to the hold, so the Records page lists both.
+
+Video is most of a record's size: about 3 to 8 MB a minute for a phone.
+The Jam video switch on Settings, on by default, leaves it out of jams
+started from then on. The steps, screenshots and sound are recorded
+either way.
+
+The transcript, with the model's text, the tool calls and the token
+counts, stays in the station's database with the jam, and the jam's page
+shows it beside the recording.
 
 ## Security
 
