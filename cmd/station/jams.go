@@ -198,7 +198,7 @@ func (m *jams) start(ctx context.Context, p station.Principal, prompt, deviceID,
 		return j, errors.New("starting Vibium: " + err.Error())
 	}
 	lj.loop = jam.New(model.Client(), mcp, jam.Options{Prompt: prompt, Mode: mode, DeviceKind: dev.Kind, MaxActions: jamMaxActions, TimeLimit: jamTimeLimit,
-		Grace: jamGrace, Watched: lj.watched, Shortcuts: jamShortcuts(dev.Shortcuts), About: deviceAbout(dev), Emit: func(ev jam.Event) { lj.emit(m, ev) }})
+		Grace: jamGrace, Watched: lj.watched, Shortcuts: jamShortcuts(dev.Shortcuts), About: deviceAbout(dev), Speaks: m.has(jam.RoleSay), Hears: m.has(jam.RoleListen), Emit: func(ev jam.Event) { lj.emit(m, ev) }})
 	m.s.db.Audit(ctx, station.AuditEntry{Subject: p.Subject, Action: "jam", DeviceID: dev.ID, Detail: "started " + j.ID + " with " + model.Name})
 	go m.watchHold(lj)
 	go func() {
@@ -314,6 +314,12 @@ func (m *jams) pickDevice(ctx context.Context, p station.Principal, want string)
 		return deviceView{}, errors.New("more than one device is online; name one")
 	}
 	return online[0], nil
+}
+
+// has says whether the owner set a default model for a role.
+func (m *jams) has(role string) bool {
+	_, ok := m.models.Default(role)
+	return ok
 }
 
 // env is the subprocess's environment: the station's own /session with

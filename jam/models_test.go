@@ -82,3 +82,20 @@ func TestStore(t *testing.T) {
 		t.Errorf("removed model found: %v", err)
 	}
 }
+
+// A listen or say model reaches Vibium under the names Vibium reads for
+// that role, so a jam's ears and voice never borrow the agent's settings.
+func TestEnvNamesFollowTheRole(t *testing.T) {
+	agent := ModelConfig{Role: RoleAgent, Provider: "openai", Model: "gpt-5.6-sol", ReasoningEffort: "none", APIKey: "sk-a"}
+	if got := strings.Join(agent.Env(), " "); got != "VIBIUM_AI_PROVIDER=openai VIBIUM_AI_MODEL=gpt-5.6-sol VIBIUM_AI_REASONING_EFFORT=none OPENAI_API_KEY=sk-a" {
+		t.Errorf("agent: %s", got)
+	}
+	listen := ModelConfig{Role: RoleListen, Provider: "openai", Model: "gpt-transcribe", ReasoningEffort: "none", BaseURL: "https://example.test/v1", APIKey: "sk-l"}
+	if got := strings.Join(listen.Env(), " "); got != "VIBIUM_LISTEN_PROVIDER=openai VIBIUM_LISTEN_MODEL=gpt-transcribe OPENAI_API_KEY=sk-l" {
+		t.Errorf("listen: %s", got)
+	}
+	say := ModelConfig{Role: RoleSay, Provider: "openai", Model: "gpt-4o-mini-tts", APIKey: "sk-s"}
+	if got := strings.Join(say.Env(), " "); got != "VIBIUM_SAY_PROVIDER=openai VIBIUM_SAY_MODEL=gpt-4o-mini-tts OPENAI_API_KEY=sk-s" {
+		t.Errorf("say: %s", got)
+	}
+}

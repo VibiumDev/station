@@ -443,8 +443,11 @@ question below until the loop records for itself.
   says which one did it, and the jam's recording plays from the jam's
   page and the Records page. The same on the Fly test station, with
   nothing changed but the address.
-- [ ] **R9 Jams can listen**: once Vibium has `listen` and Roadie
-  answers it. The listen role on Settings, its variables passed to the
+- [ ] **R9 Jams can listen**: Vibium has `listen` and Roadie answers
+  it. Built so far: a listen model's settings reach the subprocess as
+  `VIBIUM_LISTEN_PROVIDER` and `VIBIUM_LISTEN_MODEL`, and `vibium_listen`
+  is offered when a default listen model is set. Not yet run on a
+  device, so the gate is open. The listen role on Settings, its variables passed to the
   subprocess, the tool offered when a listen model is set and the
   device announces audio, an example prompt that uses it, and the
   transcript showing what was heard. Gate: "Open YouTube, play the
@@ -452,7 +455,10 @@ question below until the loop records for itself.
   on the page plays the video on the phone, the jam listens, and the
   result quotes what it heard; the same with a local whisper server as
   the listen model.
-- [ ] **R10 Jams can speak**: once Vibium has `say`. The say role, the
+- [ ] **R10 Jams can speak**: Vibium has `say`. Built so far: a say
+  model's settings reach the subprocess as `VIBIUM_SAY_PROVIDER` and
+  `VIBIUM_SAY_MODEL`, and `vibium_say` is offered when a default say
+  model is set. Not yet run on a device, so the gate is open. The say role, the
   tool, and an example prompt that talks to the phone. Gate: "Ask the
   phone's assistant what time it is and tell me what it answers" says
   the question into the phone's microphone, the assistant answers out
