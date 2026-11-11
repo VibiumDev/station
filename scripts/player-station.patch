@@ -12,10 +12,10 @@ index 41dfb8c..69b9c37 100644
            <Route path="/" element={<Index />} />
            <Route path="/compare" element={<Compare />} />
 diff --git a/src/components/RecordStudio.jsx b/src/components/RecordStudio.jsx
-index 659d0f8..7d37215 100644
+index 2745887..c52ce11 100644
 --- a/src/components/RecordStudio.jsx
 +++ b/src/components/RecordStudio.jsx
-@@ -429,6 +429,53 @@ const lightSurface = {
+@@ -577,6 +577,53 @@ const lightSurface = {
    overlayBg: "#f5f5f4ee",
  };
  
@@ -69,7 +69,7 @@ index 659d0f8..7d37215 100644
  // ─── Color helpers ──────────────────────────────────────────────────────────
  function elementSetAction(apiName) {
    // Match Vibium element setters specifically, not Cookies.set or Clock.set*.
-@@ -610,9 +657,12 @@ function parseUrlParams() {
+@@ -783,9 +830,12 @@ function parseUrlParams() {
        controls:
          controls === "visible" || controls === "v" ? true : controls === "hidden" || controls === "h" ? false : null,
        at: atMs,
@@ -83,7 +83,7 @@ index 659d0f8..7d37215 100644
    }
  }
  
-@@ -1134,6 +1184,12 @@ function LoadingRecord({ V, size = 96 }) {
+@@ -1445,6 +1495,12 @@ function LoadingRecord({ V, size = 96 }) {
  
  const RecordStudio = forwardRef(function RecordStudio({ initialFile, forceLayout, label, hideGlobalChrome, hideControls, overlayEnabledProp, compact: compactProp, controls, ...restProps } = {}, _ref) {
    const urlParams = useMemo(parseUrlParams, []);
@@ -96,7 +96,7 @@ index 659d0f8..7d37215 100644
    // A recording named by the caller or by the address is loading from the
    // first paint, so the page never shows its empty state on the way.
    const [loading, setLoading] = useState(
-@@ -1162,7 +1218,7 @@ const RecordStudio = forwardRef(function RecordStudio({ initialFile, forceLayout
+@@ -1473,7 +1529,7 @@ const RecordStudio = forwardRef(function RecordStudio({ initialFile, forceLayout
    const [collapsedGroups, setCollapsedGroups] = useState(new Set());
    const [hoveredThumb, setHoveredThumb] = useState(null);
    const [fileList, setFileList] = useState([]);
@@ -105,7 +105,7 @@ index 659d0f8..7d37215 100644
    const [overlayEnabledLocal, setOverlayEnabledLocal] = useState(true);
    const overlayEnabled = overlayEnabledProp != null ? overlayEnabledProp : overlayEnabledLocal;
    const setOverlayEnabled = setOverlayEnabledLocal;
-@@ -1302,8 +1358,31 @@ const RecordStudio = forwardRef(function RecordStudio({ initialFile, forceLayout
+@@ -1613,8 +1669,31 @@ const RecordStudio = forwardRef(function RecordStudio({ initialFile, forceLayout
      return () => window.removeEventListener("resize", check);
    }, [forceLayout]);
  
@@ -139,7 +139,7 @@ index 659d0f8..7d37215 100644
    const levelColors = useMemo(
      () => ({ log: V.textMid, info: brand.amber, warn: brand.sunset, error: "#f87171", warning: brand.sunset }),
      [V],
-@@ -1649,7 +1728,7 @@ const RecordStudio = forwardRef(function RecordStudio({ initialFile, forceLayout
+@@ -1960,7 +2039,7 @@ const RecordStudio = forwardRef(function RecordStudio({ initialFile, forceLayout
    }, [showHelp]);
    useEffect(() => {
      const onKey = (e) => {
@@ -148,7 +148,7 @@ index 659d0f8..7d37215 100644
          setDark((prev) => !prev);
        }
        if (e.key === "?") {
-@@ -1661,7 +1740,7 @@ const RecordStudio = forwardRef(function RecordStudio({ initialFile, forceLayout
+@@ -1972,7 +2051,7 @@ const RecordStudio = forwardRef(function RecordStudio({ initialFile, forceLayout
      };
      window.addEventListener("keydown", onKey);
      return () => window.removeEventListener("keydown", onKey);
@@ -157,7 +157,7 @@ index 659d0f8..7d37215 100644
  
    // ─── Navigation stops: start AND end of each visible action ─────────
    const navStops = useMemo(() => {
-@@ -1953,7 +2032,7 @@ const RecordStudio = forwardRef(function RecordStudio({ initialFile, forceLayout
+@@ -2301,7 +2380,7 @@ const RecordStudio = forwardRef(function RecordStudio({ initialFile, forceLayout
    }
  
    if (!traceData) {
@@ -166,7 +166,7 @@ index 659d0f8..7d37215 100644
        // Embedded mode — show compact loading/drop state
        return (
          <div
-@@ -1961,7 +2040,7 @@ const RecordStudio = forwardRef(function RecordStudio({ initialFile, forceLayout
+@@ -2309,7 +2388,7 @@ const RecordStudio = forwardRef(function RecordStudio({ initialFile, forceLayout
            onDragOver={handleDragOver}
            style={{
              width: "100%",
@@ -175,7 +175,7 @@ index 659d0f8..7d37215 100644
              background: V.bg,
              color: V.text,
              fontFamily: "'SF Mono', 'Fira Code', monospace",
-@@ -2015,24 +2094,26 @@ const RecordStudio = forwardRef(function RecordStudio({ initialFile, forceLayout
+@@ -2363,24 +2442,26 @@ const RecordStudio = forwardRef(function RecordStudio({ initialFile, forceLayout
          }}
        >
          {/* Theme toggle */}
@@ -220,7 +220,7 @@ index 659d0f8..7d37215 100644
          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
            <div
              onClick={() => { const next = !logoSpinning; setLogoSpinning(next); if (next || logoHovering) logoPlayAudio(); else logoPauseAudio(); }}
-@@ -2281,18 +2362,18 @@ const RecordStudio = forwardRef(function RecordStudio({ initialFile, forceLayout
+@@ -2629,18 +2710,18 @@ const RecordStudio = forwardRef(function RecordStudio({ initialFile, forceLayout
    const OVERFLOW_ORDER = ["theme", "layout", "highlight", "sound", "skip", "loop", "speed", "eject", "time"];
    const allowedCtl = (k) => {
      // Eject is the way out of a recording, not an option — never gated by `controls`.
@@ -242,7 +242,7 @@ index 659d0f8..7d37215 100644
    let needW = baseW + allowedList.reduce((sum, k) => sum + CTL_W[k], 0) + 24;
    const hiddenCtl = new Set();
    for (const k of allowedList) {
-@@ -2346,35 +2427,37 @@ const RecordStudio = forwardRef(function RecordStudio({ initialFile, forceLayout
+@@ -2694,35 +2775,37 @@ const RecordStudio = forwardRef(function RecordStudio({ initialFile, forceLayout
              position: "relative",
            }}
          >
@@ -306,7 +306,7 @@ index 659d0f8..7d37215 100644
            {label && <span style={{ fontWeight: 700, fontSize: 13, color: V.orange, textTransform: "uppercase", letterSpacing: "0.05em", background: V.orange + "18", padding: "2px 10px", borderRadius: 6, border: `1px solid ${V.orange}30` }}>{label}</span>}
            <div style={{ flex: 1 }} />
  
-@@ -3101,7 +3184,9 @@ const RecordStudio = forwardRef(function RecordStudio({ initialFile, forceLayout
+@@ -3440,7 +3523,9 @@ const RecordStudio = forwardRef(function RecordStudio({ initialFile, forceLayout
                      <div style={{ fontSize: 12, color: V.textDim, marginTop: 8 }}>
                        {mobile
                          ? "Swipe ← → to step through actions"
