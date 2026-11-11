@@ -8,16 +8,22 @@ player fetches the file from the station's own origin, with the browser's
 session, and nothing leaves the station. `VERSION` names the player commit
 the build came from.
 
-The build carries `scripts/player-station.patch`, three changes the
-station needs from the player's source: the router takes the build's base
-path as its basename, since the app assumes the site root otherwise;
-`?chrome=hidden` drops the player's own logo, title, Eject and theme
-switch, which the station's bar provides when it frames the player; and
-when a same-origin page frames the player, the player reads that page's
-color tokens (`--bg`, `--surface`, `--line-card`, `--text`, `--accent` and
-the rest) and paints with them, following the page's theme as it changes.
-The play page is such a page, so the framed player looks like part of the
-station.
+The build carries `scripts/player-station.patch`, four changes the
+station needs from the player's source:
+
+- The router takes the build's base path as its basename. The app assumes
+  the site root otherwise.
+- `?chrome=hidden` drops the player's own logo, title, Eject and theme
+  switch. The station's bar provides them when it frames the player.
+- With `?chrome=hidden` the timeline, with its strip of frames, starts at
+  about 28% of the frame's height. The player's own 212 px is close to half
+  of the play page's frame. The lanes are never shorter than the 112 px
+  they are drawn for, and a reader can still drag them.
+- When a same-origin page frames the player, the player reads that page's
+  color tokens (`--bg`, `--surface`, `--line-card`, `--text`, `--accent`
+  and the rest) and paints with them. It follows the page's theme as it
+  changes. The play page is such a page, so the framed player looks like
+  part of the station.
 
 To update, run `scripts/update-player.sh` from the repository root; it
 clones the player, applies the patch, builds it and copies the output

@@ -9,7 +9,8 @@
 #
 # Needs git, node and npm. Clones the player into a temporary directory,
 # applies scripts/player-station.patch (the router's base path, a
-# chrome=hidden switch and the station's colors read from the framing page),
+# chrome=hidden switch, a shorter timeline under it and the station's colors
+# read from the framing page),
 # builds it for the station's path, copies the output over viewer/player
 # (keeping README.md) and writes the commit to viewer/player/VERSION. When
 # the patch stops applying, refresh it against the new commit.

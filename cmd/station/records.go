@@ -569,9 +569,9 @@ func (s *server) playPage(w http.ResponseWriter, r *http.Request, p station.Prin
 }
 
 // playURL opens a blob in the embedded player, framed by a station page:
-// chrome=hidden drops the player's own logo, title and theme switch, and
-// the player takes the station's colors and theme from the framing page
-// by itself.
+// chrome=hidden drops the player's own logo, title and theme switch and
+// starts its timeline at about a quarter of the frame, and the player
+// takes the station's colors and theme from the framing page by itself.
 func playURL(b station.Blob) string {
 	return viewer.PlayerPath + "?record=" + url.QueryEscape(b.SHA256+blob.Extension(b.Type)) + "&chrome=hidden"
 }
