@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"net/http"
+	"slices"
 	"strings"
 	"time"
 
@@ -19,6 +20,9 @@ func (s *server) modelsData(data map[string]any) {
 	data["Models"], data["Providers"], data["Roles"], data["Efforts"] = models, jam.Providers, jam.Roles, jam.Efforts
 	data["JamsOn"], data["JamsPossible"], data["Vibium"], data["VibiumMissing"] = s.jams.on(), s.jams.possible(), s.jams.vibium, s.jams.missing
 	data["JamVideo"] = s.jams.video()
+	piper := s.piper.status()
+	piper.Voices = s.piper.Voices()
+	data["Piper"] = piper
 	data["JamNotes"], data["MaxNotes"] = s.stationNotes(), jam.MaxNotes
 }
 
@@ -54,6 +58,30 @@ func (s *server) addModel(w http.ResponseWriter, r *http.Request, p station.Prin
 		}
 	}
 	s.render(w, "settings", s.settingsData(r, p, map[string]any{"Message": msg}))
+}
+
+// piperVoice is POST /settings/piper/voice: the voice the station's own
+// Piper speaks with. The server loads it at once, so the first jam to
+// speak with it does not wait.
+func (s *server) piperVoice(w http.ResponseWriter, r *http.Request, p station.Principal) {
+	voice := r.FormValue("voice")
+	if !slices.Contains(s.piper.Voices(), voice) {
+		s.render(w, "settings", s.settingsData(r, p, map[string]any{"Message": "No such Piper voice: " + voice}))
+		return
+	}
+	c, err := s.jams.models.Get(piperModel)
+	if err != nil || !c.OwnPiper() {
+		s.render(w, "settings", s.settingsData(r, p, map[string]any{"Message": "The station's Piper is not running."}))
+		return
+	}
+	c.Model, c.Builtin = voice, false
+	if err := s.jams.models.Save(c); err != nil {
+		s.render(w, "settings", s.settingsData(r, p, map[string]any{"Message": err.Error()}))
+		return
+	}
+	s.db.Audit(r.Context(), station.AuditEntry{Subject: p.Subject, Action: "model", Detail: "piper speaks with " + voice})
+	go s.piper.warm(voice)
+	http.Redirect(w, r, "/settings#ai", http.StatusSeeOther)
 }
 
 // removeModel is POST /settings/models/remove.

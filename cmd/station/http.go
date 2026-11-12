@@ -31,6 +31,7 @@ import (
 
 // server is the single-player station's HTTP side.
 type server struct {
+	piper *piperRunner // the station's own Piper, found or not
 	// codeText is the text of the enrollment codes this run made, by
 	// their hash, for Settings to show while they are open.
 	codeMu     sync.Mutex
@@ -195,6 +196,7 @@ func (s *server) handler() http.Handler {
 	mux.Handle("POST /settings/tokens", s.page(station.ActionManage, s.createToken))
 	mux.Handle("POST /settings/tokens/revoke", s.page(station.ActionManage, s.revokeToken))
 	mux.Handle("POST /settings/codes", s.page(station.ActionManage, s.createCode))
+	mux.Handle("POST /settings/piper/voice", s.page(station.ActionManage, s.piperVoice))
 	mux.Handle("POST /settings/codes/cancel", s.page(station.ActionManage, s.cancelCode))
 	mux.Handle("POST /settings/rigs/remove", s.page(station.ActionManage, s.removeRig))
 	mux.Handle("POST /settings/models", s.page(station.ActionManage, s.addModel))

@@ -3,8 +3,7 @@
 A jam is a prompt on the station's front page that a model carries out on
 a device. This guide sets up the models a jam uses: the agent that drives
 the device, and the voices that listen and speak. Everything here is on
-**Settings**, under **AI models**, except the Vibium binary and a Piper
-server.
+**Settings**, under **AI models**, except installing Vibium and Piper.
 
 ## 1. Vibium
 
@@ -46,67 +45,69 @@ With an OpenAI key:
 
 Each needs the key typed again: models do not share keys.
 
-## 4. Say through a local Piper server
+## 4. Speak with Piper, on this machine
 
 [Piper](https://github.com/OHF-voice/piper1-gpl) speaks on the station's
-own machine, with no key and no network. Started for every phrase it is
-slow: about 10 to 15 seconds on a Raspberry Pi 4. Its server keeps a
-voice loaded, and then a phrase takes about a second.
+own machine, with no key and no network. It is the station's default
+voice when it is installed. The station runs Piper's server itself and
+keeps a voice loaded, so a phrase takes about a second, where starting
+Piper for every phrase takes 10 to 15 seconds on a Raspberry Pi 4.
 
-The station does not start Piper. You run the server next to the
-station, and the station tells Vibium where it is. This needs a Vibium
-that knows Piper servers: `vibium say --help` shows a
-`VIBIUM_PIPER_URL` example when it does.
+Piper is a separate program under its own license (GPL-3.0). The station
+does not include it: you install it once, and the station finds it.
 
-1. Install Piper with its server, and a voice:
-
-   ```bash
-   python3 -m venv ~/piper
-   ~/piper/bin/pip install "piper-tts[http]"
-   mkdir -p ~/piper/voices
-   ~/piper/bin/python -m piper.download_voices --download-dir ~/piper/voices en_US-lessac-medium
-   ```
-
-   The [Piper voices](https://huggingface.co/rhasspy/piper-voices) page
-   lists the others.
-
-2. Start the server on this machine only:
+1. Install Piper with its server, in a folder named `piper` in the data
+   directory. With the data directory at `/var/lib/station`:
 
    ```bash
-   ~/piper/bin/python -m piper.http_server \
-     -m ~/piper/voices/en_US-lessac-medium.onnx \
-     --data-dir ~/piper/voices --host 127.0.0.1 --port 5000
+   sudo -u station python3 -m venv /var/lib/station/piper/venv
+   sudo -u station /var/lib/station/piper/venv/bin/pip install "piper-tts[http]"
    ```
 
-   It asks for no password, so keep `--host 127.0.0.1`. To keep it
-   running, Vibium's guide
-   [Keep a Piper Voice Loaded](https://github.com/VibiumDev/vibium/blob/main/docs/how-to-guides/keep-a-piper-voice-loaded.md)
-   has a service file.
+   A Piper installed elsewhere is named with `--piper`, or
+   `STATION_PIPER` in `/etc/default/station`: the Python that has
+   `piper-tts[http]`. A `piper` program on the station's `PATH` is found
+   too.
 
-3. On **Settings**, under **AI models**, add a model:
+2. Put one or more voices in the same folder:
 
-   - **name**: such as `piper`.
-   - **role**: `say`.
-   - **provider**: Piper server (say).
-   - **model**: the voice's name, the file name without `.onnx`, such as
-     `en_US-lessac-medium`.
-   - **base URL**: the server's address. Empty means
-     `http://127.0.0.1:5000`.
-   - **API key**: none.
-   - Tick **default for its role** if another say model is set.
+   ```bash
+   sudo -u station /var/lib/station/piper/venv/bin/python -m piper.download_voices \
+     --download-dir /var/lib/station/piper en_US-lessac-medium
+   ```
 
-   A Piper server can only be a say model. Listening still needs a listen
-   model of its own.
+   A voice is two files, `NAME.onnx` and `NAME.onnx.json`. The
+   [Piper voices](https://huggingface.co/rhasspy/piper-voices) page lists
+   them.
 
-4. Check it from the station's machine. `curl http://127.0.0.1:5000/info`
-   names the loaded voice. A jam started after this speaks with Piper.
+3. Restart the station: `sudo systemctl restart station`.
+
+The station starts Piper's server on a free port of `127.0.0.1`, loads a
+voice, and restarts the server if it stops. On **Settings**, under **AI
+models**:
+
+- A say model named `piper` is listed without adding it. It is the say
+  default unless another say model is marked default.
+- With more than one voice installed, the `piper` row has a list of
+  them. **Use** switches the voice, and the server loads it at once.
+- The **Piper** row says which voice is speaking and where, or why Piper
+  is not running. The server's own output is in `piper/server.log`.
+
+A cloud voice is still a say model of its own, as in step 3. Marking it
+default makes jams speak with it instead.
+
+A Piper server on another machine is a say model with provider
+**Piper (say)**, the voice's name as its model and the server's address
+as its base URL.
 
 ## When something is off
 
 - No prompt on the front page: no agent model is set, or Jams are off on
   Settings.
 - **Vibium** on Settings says not found: see step 1.
+- No `piper` model on Settings: the **Piper** row says why. Piper's
+  server takes some seconds to load a voice after a restart.
 - A jam's say fails with `engine_failed: no Piper server answered`: the
-  server is not running, or the base URL names another address.
+  server stopped, or a base URL names another address.
 - A jam's say fails with `unknown say provider "piper-server"`: the
   station's Vibium is older than Piper server support.

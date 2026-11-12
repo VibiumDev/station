@@ -32,7 +32,12 @@ type ModelConfig struct {
 	APIKey          string
 	Default         bool
 	Host            bool // from the station's environment; the page cannot edit it
+	Builtin         bool // offered by the station itself until the owner changes it
 }
+
+// OwnPiper says the model speaks through the Piper server the station
+// runs: a Piper model with no address of its own.
+func (c ModelConfig) OwnPiper() bool { return c.Provider == "piper-server" && c.BaseURL == "" }
 
 // HasKey says whether a key is set.
 func (c ModelConfig) HasKey() bool { return c.APIKey != "" }
@@ -56,11 +61,11 @@ func (c ModelConfig) Env() []string {
 		prefix = "VIBIUM_SAY_"
 	}
 	if c.Provider == "piper-server" {
-		url := c.BaseURL
-		if url == "" {
-			url = "http://127.0.0.1:5000"
+		env := []string{"VIBIUM_SAY_PROVIDER=piper-server", "VIBIUM_SAY_VOICE=" + c.Model}
+		if c.BaseURL != "" {
+			env = append(env, "VIBIUM_PIPER_URL="+c.BaseURL)
 		}
-		return []string{"VIBIUM_SAY_PROVIDER=piper-server", "VIBIUM_SAY_VOICE=" + c.Model, "VIBIUM_PIPER_URL=" + url}
+		return env
 	}
 	env := []string{prefix + "PROVIDER=" + c.Provider, prefix + "MODEL=" + c.Model}
 	if prefix == "VIBIUM_AI_" {
@@ -89,6 +94,9 @@ const (
 type Store struct {
 	Dir    string
 	Getenv func(string) string // the station host's environment; nil for os.Getenv
+	// Builtin lists the models the station offers by itself, such as the
+	// Piper it runs. A file of the same name takes a builtin's place.
+	Builtin func() []ModelConfig
 }
 
 var nameRe = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]{0,39}$`)
@@ -124,18 +132,31 @@ func (s *Store) List() ([]ModelConfig, error) {
 		}
 		out = append(out, c)
 	}
+	if s.Builtin != nil {
+		for _, b := range s.Builtin() {
+			taken := false
+			for _, c := range out {
+				taken = taken || c.Name == b.Name
+			}
+			if !taken {
+				b.Builtin = true
+				out = append(out, b)
+			}
+		}
+	}
 	sort.Slice(out, func(i, j int) bool { return out[i].Name < out[j].Name })
 	if h, ok := s.host(); ok {
 		out = append(out, h)
 	}
-	// One default per role: the one marked, else the only one, else the first.
+	// One default per role: the one marked, else one that runs on this
+	// machine, else the first.
 	for _, role := range Roles {
 		first, marked := -1, false
 		for i := range out {
 			if out[i].Role != role {
 				continue
 			}
-			if first < 0 {
+			if first < 0 || out[i].OwnPiper() && !out[first].OwnPiper() {
 				first = i
 			}
 			if out[i].Default {
@@ -230,7 +251,7 @@ func (c ModelConfig) Validate() error {
 		}
 		return errors.New("the model needs the provider's name for it")
 	}
-	if p.BaseURL == "" && c.BaseURL == "" {
+	if p.BaseURL == "" && c.BaseURL == "" && p.ID != "piper-server" {
 		return errors.New("this provider needs a base URL")
 	}
 	if c.BaseURL != "" && !strings.HasPrefix(c.BaseURL, "http://") && !strings.HasPrefix(c.BaseURL, "https://") {

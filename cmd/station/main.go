@@ -308,6 +308,7 @@ func serve(args []string) int {
 	recordsMaxTotal := fs.String("records-max-total", "2G", "how much the Record Store keeps before the oldest files go (0: no limit)")
 	recordsMaxAge := fs.Duration("records-max-age", 30*24*time.Hour, "how long the Record Store keeps a file (0: for ever)")
 	vibiumPath := fs.String("vibium", "", "the Vibium binary jams drive devices with (default: $STATION_VIBIUM, or vibium on PATH)")
+	piperPath := fs.String("piper", "", "the Python that has piper-tts[http], whose server the station runs for jams to speak (default: $STATION_PIPER, piper/venv/bin/python in the data directory, or piper on PATH)")
 	fs.Usage = func() { usage(); fmt.Println(); fs.PrintDefaults() }
 	fs.Parse(args)
 
@@ -577,6 +578,24 @@ func serve(args []string) int {
 		s.jams.vibium = path
 	}
 	s.jams.closeLeftovers(context.Background())
+	// The station's own Piper, when it is installed: a say voice kept
+	// loaded, listed on Settings without adding it.
+	s.piper = &piperRunner{voicesDir: filepath.Join(dir, "piper"), logPath: filepath.Join(dir, "piper", "server.log"), ready: 2 * time.Minute,
+		logf: func(f string, a ...any) { fmt.Printf(f+"\n", a...) }, done: make(chan struct{})}
+	s.piper.preferred = func() string {
+		if c, err := s.jams.models.Get(piperModel); err == nil && c.OwnPiper() {
+			return c.Model
+		}
+		return ""
+	}
+	if python, err := findPiper(*piperPath, dir); err != nil {
+		s.piper.missing = err.Error()
+		close(s.piper.done)
+	} else {
+		s.piper.python = python
+		s.jams.models.Builtin = s.piper.builtin
+		go s.piper.run(ctx)
+	}
 	if mode == "lan" && !*noMDNS {
 		_, port, _ := net.SplitHostPort(ln.Addr().String())
 		var p int
@@ -670,7 +689,10 @@ func serve(args []string) int {
 		fmt.Println("   no password yet: run `station passwd` to sign in by password")
 	}
 	sdnotify.Ready()
-	if err := srv.Serve(ln); err != nil && !errors.Is(err, http.ErrServerClosed) {
+	err = srv.Serve(ln)
+	stop() // a station that could not serve ends Piper's server too
+	<-s.piper.done
+	if err != nil && !errors.Is(err, http.ErrServerClosed) {
 		fmt.Fprintln(os.Stderr, err)
 		return 1
 	}
