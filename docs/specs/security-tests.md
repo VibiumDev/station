@@ -147,7 +147,7 @@ it, so the history is readable later.
 | 6 | Roadie's `auth_routes_test.go`, `allowlist_test.go`, `auth_test.go`, with `rig/rig_test.go` for the gate |
 | 7 | `cmd/station/fuzz_test.go`, `records/fuzz_test.go` |
 | 8 | `.github/workflows/ci.yml` runs the station's tests under `-race`; the matrix's completeness check |
-| Review | `TestStoredFilesCannotActAsPages` in `cmd/station/records_e2e_test.go`, `TestServedFilesAreSandboxed` in `records/records_test.go`, `TestHiddenArgumentsNeverReachVibium` in `jam/loop_test.go`, `TestUnpackLimitHoldsForAnyDeclaredSize` and `TestThumbnailStaysInsideItsRecording` in `records/thumb_test.go`, `TestRightPasswordDoesNotForgetWrongCodes` in `cmd/station/signin_test.go` |
+| Review | `TestStoredFilesCannotActAsPages` in `cmd/station/records_e2e_test.go`, `TestServedFilesAreSandboxed` in `records/records_test.go`, `TestHiddenArgumentsNeverReachVibium` in `jam/loop_test.go`, `TestUnpackLimitHoldsForAnyDeclaredSize` and `TestThumbnailStaysInsideItsRecording` in `records/thumb_test.go`, `TestRightPasswordDoesNotForgetWrongCodes`, `TestGuessesSentTogetherAreCountedFirst` and `TestPasswordChecksTakeTurns` in `cmd/station/signin_test.go` |
 
 ## Found and fixed
 
@@ -240,3 +240,10 @@ A review of the whole station by a second reader, after the phases:
   guess at the code twice, type the password again, and go on without
   a wait or a lock. Only a sign-in that passes both steps forgets the
   misses now.
+- A wrong password was counted after it was checked. Guesses sent
+  together were all checked before the first was counted, so the lock
+  of five held nobody who sent twelve at once. Each check takes 64 MiB
+  with no limit on how many ran, which a small machine does not have
+  for a dozen. A try is counted before it is checked now, and two
+  checks run at a time. A login nobody has was refused without a
+  hash, faster than a real one; it is hashed against a decoy now.

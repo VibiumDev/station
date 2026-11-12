@@ -72,6 +72,12 @@ lock on the account:
 Wrong passwords and wrong codes count alike. Every wrong answer waits
 half a second before it is refused.
 
+A try at a password is counted before the password is looked at, so
+tries sent together cannot get past the count. Two password checks run
+at a time and the rest wait their turn, since each takes 64 MiB. A login
+nobody has is checked against a hash all the same, so the time an answer
+takes does not say whether the login exists.
+
 ## Admins
 
 On Settings, each user's row says how they sign in: by a setup link

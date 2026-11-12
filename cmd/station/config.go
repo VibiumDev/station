@@ -101,11 +101,18 @@ const (
 	argonKeyLen  = 32
 )
 
+// hashSlots is how many argon2 runs go at once. Each takes 64 MiB and
+// the sign-in page is open to anyone, so the rest wait their turn rather
+// than take the machine's memory together.
+var hashSlots = make(chan struct{}, 2)
+
 func hashPassword(password string) (string, error) {
 	salt := make([]byte, 16)
 	if _, err := rand.Read(salt); err != nil {
 		return "", err
 	}
+	hashSlots <- struct{}{}
+	defer func() { <-hashSlots }()
 	key := argon2.IDKey([]byte(password), salt, argonTime, argonMemory, argonThreads, argonKeyLen)
 	return fmt.Sprintf("$argon2id$v=19$m=%d,t=%d,p=%d$%s$%s", argonMemory, argonTime, argonThreads,
 		base64.RawStdEncoding.EncodeToString(salt), base64.RawStdEncoding.EncodeToString(key)), nil
@@ -129,6 +136,8 @@ func checkPassword(hash, password string) bool {
 	if err != nil {
 		return false
 	}
+	hashSlots <- struct{}{}
+	defer func() { <-hashSlots }()
 	got := argon2.IDKey([]byte(password), salt, t, m, p, uint32(len(want)))
 	return subtle.ConstantTimeCompare(got, want) == 1
 }

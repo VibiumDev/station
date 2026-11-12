@@ -9,6 +9,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -338,6 +339,87 @@ func TestRightPasswordDoesNotForgetWrongCodes(t *testing.T) {
 	}
 	if m := a.logins["owner"]; m == nil || m.n != maxFailures {
 		t.Errorf("the login's misses: %+v, want %d", m, maxFailures)
+	}
+}
+
+// Guesses sent together are each counted before any is checked. No more
+// of them reach the hash than the lock on an address allows, or than a
+// login's wait allows from any number of addresses.
+func TestGuessesSentTogetherAreCountedFirst(t *testing.T) {
+	s, _ := signinServer(t)
+	a := s.auth
+	together := func(n int, try func(i int)) {
+		var wg sync.WaitGroup
+		for i := 0; i < n; i++ {
+			wg.Add(1)
+			go func() { defer wg.Done(); try(i) }()
+		}
+		wg.Wait()
+	}
+	// Twelve logins from one address: five are looked at.
+	together(12, func(i int) {
+		a.login(httptest.NewRecorder(), httptest.NewRequest("POST", "/login", nil), "guess-"+strconv.Itoa(i), "wrong-password-"+strconv.Itoa(i), "/")
+	})
+	a.mu.Lock()
+	counted, logins := len(a.failures["addr:192.0.2.1"]), len(a.logins)
+	a.mu.Unlock()
+	if counted != maxFailures || logins != maxFailures {
+		t.Errorf("12 guesses from one address: %d counted against it, %d logins looked at, want %d", counted, logins, maxFailures)
+	}
+	// Twelve addresses at one login: the two free tries and one more,
+	// then the login waits.
+	together(12, func(i int) {
+		r := httptest.NewRequest("POST", "/login", nil)
+		r.RemoteAddr = "203.0.113." + strconv.Itoa(i+1) + ":5000"
+		a.login(httptest.NewRecorder(), r, "owner", "wrong-password-"+strconv.Itoa(i), "/")
+	})
+	a.mu.Lock()
+	m := a.logins["owner"]
+	a.mu.Unlock()
+	if m == nil || m.n != backoffAfter+1 {
+		t.Errorf("12 guesses at one login from 12 addresses: %+v looked at, want %d", m, backoffAfter+1)
+	}
+}
+
+// A password check waits for one of the few slots, so checks asked for
+// together cannot take the machine's memory together. A login nobody has
+// is checked against a hash all the same, and waits like any other.
+func TestPasswordChecksTakeTurns(t *testing.T) {
+	s, _ := signinServer(t)
+	a := s.auth
+	for i := 0; i < cap(hashSlots); i++ {
+		hashSlots <- struct{}{}
+	}
+	try := func(login, addr string) chan bool {
+		done := make(chan bool, 1)
+		go func() {
+			r := httptest.NewRequest("POST", "/login", nil)
+			r.RemoteAddr = addr
+			_, ok := a.login(httptest.NewRecorder(), r, login, "owner-secret-123", "/")
+			done <- ok
+		}()
+		return done
+	}
+	known, unknown := try("owner", "203.0.113.1:5000"), try("nobody", "203.0.113.2:5000")
+	early := ""
+	select {
+	case <-known:
+		early = "a password was checked with every slot taken"
+	case <-unknown:
+		early = "an unknown login was refused without a hash"
+	case <-time.After(300 * time.Millisecond):
+	}
+	for i := 0; i < cap(hashSlots); i++ {
+		<-hashSlots
+	}
+	if early != "" {
+		t.Fatal(early)
+	}
+	if !<-known {
+		t.Error("the right password was refused after its turn")
+	}
+	if <-unknown {
+		t.Error("an unknown login signed in")
 	}
 }
 
