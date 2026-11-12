@@ -53,10 +53,10 @@
         q.setAttribute('aria-expanded', open ? 'true' : 'false');
       });
     });
-    // A destructive button is held, not clicked: a bar fills across it
-    // over a moment and the form goes only when it is full; letting go,
-    // or sliding off, cancels. Space or Enter held down does the same
-    // from the keyboard.
+    // A button that deletes, or opens a file to the world, is held, not
+    // clicked: a bar fills across it over a moment and the form goes
+    // only when it is full; letting go, or sliding off, cancels. Space
+    // or Enter held down does the same from the keyboard.
     Array.prototype.forEach.call(document.querySelectorAll('button[data-hold]'), function (btn) {
       var fill = document.createElement('span');
       fill.className = 'fill';

@@ -284,6 +284,9 @@ button.hold.fired { opacity: 0.6; }
 td .sub.tags, .card.rec .meta .tags { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 5px; font: inherit; }
 .star.on { color: var(--link); }
 .star.on svg path { fill: currentColor; }
+.share.on { color: var(--link); }
+.share.on svg circle { fill: currentColor; }
+button.hold.share .fill { background: color-mix(in srgb, var(--accent) 45%, transparent); }
 .thumbcell { width: 36px; padding-right: 0; }
 .minithumb { display: flex; align-items: center; justify-content: center; width: 36px; height: 48px; border-radius: 5px; overflow: hidden; background: #000; margin: -4px 0; }
 .minithumb img { display: block; max-width: 100%; max-height: 100%; width: auto; height: auto; }
