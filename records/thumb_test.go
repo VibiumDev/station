@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	"github.com/VibiumDev/station"
+	"github.com/VibiumDev/station/blob"
 )
 
 // a small JPEG: the SOI marker and enough for content sniffing.
@@ -122,6 +123,90 @@ func TestUnpackStaysInside(t *testing.T) {
 		if _, err := os.Stat(outside); err == nil {
 			t.Errorf("%s landed outside", outside)
 		}
+	}
+}
+
+// A recording's thumbnail is one of its own frames. The frame's name
+// comes from the uploaded trace, so a name with a path in it must not
+// lead to another person's file in the store, to a file elsewhere on the
+// host, or to anything that is not a plain file of a picture's size.
+func TestThumbnailStaysInsideItsRecording(t *testing.T) {
+	f := setup(t)
+	ctx := context.Background()
+	dir := f.store.Blobs.(blob.Disk).Dir
+	f.store.UnpackDir = filepath.Join(dir, "unpacked") // as the station lays it out: blobs/unpacked
+	f.mux.HandleFunc("GET /records/{sha}/thumb.jpg", func(w http.ResponseWriter, r *http.Request) {
+		f.store.ServeThumbnail(w, r, r.PathValue("sha"), principal(r))
+	})
+	// The owner's private screenshot, and a picture outside the store.
+	secret := append(append([]byte{}, tinyJPEG...), []byte("OWNER-PRIVATE")...)
+	ev, err := f.store.UploadAuth(ctx, station.Principal{Subject: "owner", Admin: true}, UploadRequest{SHA256: hashOf(secret), Size: int64(len(secret)), Type: "image/jpeg", Name: "private.jpg"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if w := f.do("PUT", "/upload", secret, "Authorization", Header(ev), "Content-Type", "image/jpeg"); w.Code != 200 {
+		t.Fatalf("the owner's upload: %d %s", w.Code, w.Body)
+	}
+	outside := filepath.Join(filepath.Dir(dir), "elsewhere.jpg")
+	if err := os.WriteFile(outside, append(append([]byte{}, tinyJPEG...), []byte("HOST-FILE")...), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	defer os.Remove(outside)
+	trace := func(frame string) []byte {
+		var buf bytes.Buffer
+		zw := zip.NewWriter(&buf)
+		tr, _ := zw.Create("trace.trace")
+		tr.Write([]byte(`{"type":"screencast-frame","sha1":"` + frame + `","timestamp":1}` + "\n"))
+		zw.Close()
+		return buf.Bytes()
+	}
+	sha := hashOf(secret)
+	for _, frame := range []string{"../../../" + sha[:2] + "/" + sha, "../../../../elsewhere.jpg", "..", `..\\x`} {
+		d, w := f.upload("token:ci", trace(frame), "r.zip", "hld_1")
+		if w.Code != 200 {
+			t.Fatalf("%s: upload: %d %s", frame, w.Code, w.Body)
+		}
+		if b, _ := f.store.Index.Blob(ctx, d.SHA256); b.Thumb != "" || b.Frames != 1 {
+			t.Errorf("%s: kept as the frame %q of %d", frame, b.Thumb, b.Frames)
+		}
+		if w := f.do("GET", "/records/"+d.SHA256+"/thumb.jpg", nil, "X-Test-Subject", "token:ci"); w.Code != 404 {
+			t.Errorf("%s: thumbnail %d, %d bytes", frame, w.Code, w.Body.Len())
+		}
+		// A row from before the name was checked holds the path still.
+		b, _ := f.store.Index.Blob(ctx, d.SHA256)
+		b.Thumb = frame
+		if err := f.store.Index.PutBlob(ctx, b); err != nil {
+			t.Fatal(err)
+		}
+		if w := f.do("GET", "/records/"+d.SHA256+"/thumb.jpg", nil, "X-Test-Subject", "token:ci"); w.Code != 404 {
+			t.Errorf("%s, as an old row: thumbnail %d, %d bytes", frame, w.Code, w.Body.Len())
+		}
+	}
+	// A frame of the recording's own shows; a link in its place, or a
+	// file too large for a picture, does not.
+	d, w := f.upload("token:ci", recordingZip(t, "frame.jpeg"), "ok.zip", "hld_1")
+	if w.Code != 200 {
+		t.Fatalf("upload: %d %s", w.Code, w.Body)
+	}
+	thumb := func() int {
+		return f.do("GET", "/records/"+d.SHA256+"/thumb.jpg", nil, "X-Test-Subject", "token:ci").Code
+	}
+	frame := filepath.Join(f.store.unpackDir(d.SHA256), "resources", "frame.jpeg")
+	if code := thumb(); code != 200 {
+		t.Fatalf("the recording's own frame: %d", code)
+	}
+	if err := os.Truncate(frame, maxThumbnail+1); err != nil {
+		t.Fatal(err)
+	}
+	if code := thumb(); code != 404 {
+		t.Errorf("a frame past the size limit: %d", code)
+	}
+	os.Remove(frame)
+	if err := os.Symlink(outside, frame); err != nil {
+		t.Fatal(err)
+	}
+	if code := thumb(); code != 404 {
+		t.Errorf("a link for a frame: %d", code)
 	}
 }
 

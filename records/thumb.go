@@ -201,7 +201,9 @@ func readTrace(file string, stats *recordingStats) error {
 			end = max(end, e.EndTime)
 		case "screencast-frame":
 			stats.frames++
-			stats.last = e.SHA1
+			if plainName(e.SHA1) {
+				stats.last = e.SHA1
+			}
 			end = max(end, e.Timestamp)
 		}
 	}
@@ -209,6 +211,16 @@ func readTrace(file string, stats *recordingStats) error {
 		stats.duration = time.Duration(end) * time.Millisecond
 	}
 	return sc.Err()
+}
+
+// maxThumbnail is the largest picture a thumbnail is read from.
+const maxThumbnail = 8 << 20
+
+// plainName says whether a frame's name is a file name and nothing more.
+// The name comes from the uploaded trace, and one with a path in it would
+// lead out of the recording to any file the station can read.
+func plainName(name string) bool {
+	return name != "" && name != "." && name != ".." && !strings.ContainsAny(name, "/\\\x00")
 }
 
 // Thumbnail is a picture for a blob with its media type: a screenshot is
@@ -221,7 +233,7 @@ func (s *Store) Thumbnail(ctx context.Context, b station.Blob) ([]byte, string, 
 			return nil, "", err
 		}
 		defer f.Close()
-		data, err := io.ReadAll(io.LimitReader(f, 8<<20))
+		data, err := io.ReadAll(io.LimitReader(f, maxThumbnail))
 		return data, b.Type, err
 	case b.Type != "application/zip":
 		return nil, "", ErrNoThumbnail
@@ -230,11 +242,28 @@ func (s *Store) Thumbnail(ctx context.Context, b station.Blob) ([]byte, string, 
 	if err != nil {
 		return nil, "", err
 	}
-	if b.Thumb == "" {
+	// A row from before names were checked may still hold a path.
+	if !plainName(b.Thumb) {
 		return nil, "", ErrNoThumbnail
 	}
+	dir := s.unpackDir(b.SHA256)
 	for _, rel := range []string{"resources/" + b.Thumb, b.Thumb} {
-		data, err := os.ReadFile(filepath.Join(s.unpackDir(b.SHA256), filepath.FromSlash(rel)))
+		full := filepath.Join(dir, filepath.FromSlash(rel))
+		if !strings.HasPrefix(full, dir+string(os.PathSeparator)) {
+			continue
+		}
+		// A frame is a file of the recording's own, of a picture's size:
+		// never a link, a device or a pipe, which would read without end.
+		st, err := os.Lstat(full)
+		if err != nil || !st.Mode().IsRegular() || st.Size() > maxThumbnail {
+			continue
+		}
+		f, err := os.Open(full)
+		if err != nil {
+			continue
+		}
+		data, err := io.ReadAll(io.LimitReader(f, maxThumbnail))
+		f.Close()
 		if err != nil {
 			continue
 		}
