@@ -147,7 +147,7 @@ it, so the history is readable later.
 | 6 | Roadie's `auth_routes_test.go`, `allowlist_test.go`, `auth_test.go`, with `rig/rig_test.go` for the gate |
 | 7 | `cmd/station/fuzz_test.go`, `records/fuzz_test.go` |
 | 8 | `.github/workflows/ci.yml` runs the station's tests under `-race`; the matrix's completeness check |
-| Review | `TestStoredFilesCannotActAsPages` in `cmd/station/records_e2e_test.go`, `TestServedFilesAreSandboxed` in `records/records_test.go`, `TestHiddenArgumentsNeverReachVibium` in `jam/loop_test.go`, `TestThumbnailStaysInsideItsRecording` in `records/thumb_test.go` |
+| Review | `TestStoredFilesCannotActAsPages` in `cmd/station/records_e2e_test.go`, `TestServedFilesAreSandboxed` in `records/records_test.go`, `TestHiddenArgumentsNeverReachVibium` in `jam/loop_test.go`, `TestUnpackLimitHoldsForAnyDeclaredSize` and `TestThumbnailStaysInsideItsRecording` in `records/thumb_test.go` |
 
 ## Found and fixed
 
@@ -230,3 +230,8 @@ A review of the whole station by a second reader, after the phases:
   the host, and get it back as their own thumbnail. A name that led to
   a device file would have read without end. A frame is a plain file
   name inside the recording now, a regular file, and at most 8 MiB.
+- A zip is unpacked up to twice the largest file the store takes. The
+  count was signed, and a first entry that declared 2^63 bytes turned
+  it negative, so the entries after it unpacked without limit. A
+  kilobyte of upload could put any amount on the disk. The size is
+  compared unsigned now, before it is counted.

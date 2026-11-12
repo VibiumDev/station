@@ -126,6 +126,49 @@ func TestUnpackStaysInside(t *testing.T) {
 	}
 }
 
+// A zip unpacks to at most twice the largest file the store takes. An
+// entry that declares more bytes than the count can hold is over the
+// limit like any other, and does not let the entries after it through.
+func TestUnpackLimitHoldsForAnyDeclaredSize(t *testing.T) {
+	f := setup(t)
+	f.store.UnpackDir = filepath.Join(t.TempDir(), "unpacked")
+	f.store.MaxFile = 64 << 10 // so a zip unpacks to 128 KiB at most
+	build := func(lead uint64, files int) []byte {
+		var buf bytes.Buffer
+		zw := zip.NewWriter(&buf)
+		if lead > 0 {
+			if _, err := zw.CreateRaw(&zip.FileHeader{Name: "lead", Method: zip.Store, UncompressedSize64: lead}); err != nil {
+				t.Fatal(err)
+			}
+		}
+		for i := 0; i < files; i++ {
+			w, _ := zw.Create("zeros-" + string(rune('a'+i)))
+			w.Write(make([]byte, 100<<10))
+		}
+		zw.Close()
+		return buf.Bytes()
+	}
+	unpacked := func(body []byte) bool {
+		d, w := f.upload("token:ci", body, "r.zip", "hld_1")
+		if w.Code != 200 {
+			t.Fatalf("upload: %d %s", w.Code, w.Body)
+		}
+		_, err := os.Stat(f.store.unpackDir(d.SHA256))
+		return err == nil
+	}
+	if !unpacked(build(0, 1)) {
+		t.Error("100 KiB within the limit was not unpacked")
+	}
+	if unpacked(build(0, 4)) {
+		t.Error("400 KiB was unpacked past the limit")
+	}
+	for _, lead := range []uint64{1 << 63, 1<<64 - 1, 1<<63 + 200<<10} {
+		if unpacked(build(lead, 4)) {
+			t.Errorf("400 KiB was unpacked behind an entry declaring %d bytes", lead)
+		}
+	}
+}
+
 // A recording's thumbnail is one of its own frames. The frame's name
 // comes from the uploaded trace, so a name with a path in it must not
 // lead to another person's file in the store, to a file elsewhere on the

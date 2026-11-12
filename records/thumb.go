@@ -133,9 +133,13 @@ func (s *Store) unpack(sha string) (recordingStats, error) {
 		if !strings.HasPrefix(dst, tmp+string(os.PathSeparator)) {
 			return stats, fmt.Errorf("refusing %q", zf.Name)
 		}
-		if total += int64(zf.UncompressedSize64); total > limit {
+		// The size is the zip's own word and 64 bits wide. It is compared
+		// before it is added: one past the range of the total would turn
+		// the total negative and let everything after it through.
+		if zf.UncompressedSize64 > uint64(limit-total) {
 			return stats, fmt.Errorf("more than %d bytes unpacked", limit)
 		}
+		total += int64(zf.UncompressedSize64)
 		if err := os.MkdirAll(filepath.Dir(dst), 0o700); err != nil {
 			return stats, err
 		}
