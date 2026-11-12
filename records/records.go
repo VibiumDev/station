@@ -602,6 +602,38 @@ func (s *Store) mayDelete(b station.Blob, p *station.Principal, auth *nostr.Even
 	return false
 }
 
+// inert are the media types a browser shows without running anything in
+// them: pictures, video, sound, archives and plain text.
+var inert = map[string]bool{
+	"image/jpeg": true, "image/png": true, "image/webp": true, "image/gif": true,
+	"video/mp4": true, "video/webm": true, "audio/wav": true, "audio/x-wav": true, "audio/mpeg": true,
+	"application/zip": true, "application/json": true, "text/plain": true,
+}
+
+func inertType(mediaType string) bool {
+	t, _, _ := strings.Cut(mediaType, ";")
+	return inert[strings.ToLower(strings.TrimSpace(t))]
+}
+
+// contain keeps a stored file from acting as a page of the station. Its
+// type is the uploader's word, and a file inside a recording has the name
+// the zip gave it, so an HTML or SVG file would run script under the
+// station's own origin. The sandbox directive takes that origin away,
+// beside whatever policy the response already carries. A type a browser
+// would render as a document goes out as a download.
+func contain(w http.ResponseWriter, mediaType string) {
+	h := w.Header()
+	policy := "sandbox"
+	if page := h.Get("Content-Security-Policy"); page != "" {
+		policy = page + "; sandbox"
+	}
+	h.Set("Content-Security-Policy", policy)
+	h.Set("X-Content-Type-Options", "nosniff")
+	if !inertType(mediaType) && h.Get("Content-Disposition") == "" {
+		h.Set("Content-Disposition", "attachment")
+	}
+}
+
 // ServeBlob is GET, HEAD and DELETE /<sha256>[.ext] (BUD-01, BUD-02). p
 // is the station's own idea of the caller, when it has one.
 func (s *Store) ServeBlob(w http.ResponseWriter, r *http.Request, sha string, p *station.Principal) {
@@ -652,10 +684,10 @@ func (s *Store) ServeBlob(w http.ResponseWriter, r *http.Request, sha string, p 
 		w.Header().Set("Content-Type", b.Type)
 		w.Header().Set("ETag", `"`+sha+`"`)
 		w.Header().Set("Cache-Control", "private, max-age=3600")
-		w.Header().Set("X-Content-Type-Options", "nosniff")
-		if r.URL.Query().Has("download") {
+		if r.URL.Query().Has("download") || !inertType(b.Type) {
 			w.Header().Set("Content-Disposition", "attachment; filename=\""+strings.ReplaceAll(name, `"`, "")+"\"")
 		}
+		contain(w, b.Type)
 		http.ServeContent(w, r, name, b.CreatedAt, f)
 	case http.MethodDelete:
 		if !s.mayDelete(b, p, auth) {

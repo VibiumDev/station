@@ -274,7 +274,7 @@ func (s *Store) ServeThumbnail(w http.ResponseWriter, r *http.Request, sha strin
 	w.Header().Set("Content-Type", ctype)
 	w.Header().Set("ETag", `"`+sha+`"`)
 	w.Header().Set("Cache-Control", "private, max-age=86400")
-	w.Header().Set("X-Content-Type-Options", "nosniff")
+	contain(w, ctype)
 	http.ServeContent(w, r, "", b.CreatedAt, bytes.NewReader(data))
 }
 
@@ -321,7 +321,7 @@ func (s *Store) ServeFile(w http.ResponseWriter, r *http.Request, sha, rel strin
 	}
 	w.Header().Set("Content-Type", ctype)
 	w.Header().Set("Cache-Control", "private, max-age=86400")
-	w.Header().Set("X-Content-Type-Options", "nosniff")
+	contain(w, ctype)
 	http.ServeContent(w, r, name, b.CreatedAt, f)
 }
 

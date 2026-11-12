@@ -235,6 +235,13 @@ without a station credential of its own; it lasts five minutes and, as a
 bearer, travels in a header and never in a URL. `?download` adds a
 `Content-Disposition` with the file's name.
 
+A stored file never acts as one of the station's pages. Every file,
+thumbnail and unpacked file is sent with `Content-Security-Policy:
+sandbox` and `X-Content-Type-Options: nosniff`. Pictures (JPEG, PNG,
+WebP, GIF), video (MP4, WebM), sound (WAV, MPEG), zip, JSON and plain
+text open in place. A file of any other type, such as HTML or SVG, is
+sent as a download, with or without `?download`.
+
 `GET /v1/records` lists what the caller may read, newest first, narrowed
 by `?device=<rig>/<name>`, `?hold=<id>`, `?q=<words and #tags>` (every
 word against the name, type, uploader, hold, device, rig, hash and

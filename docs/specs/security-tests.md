@@ -147,6 +147,7 @@ it, so the history is readable later.
 | 6 | Roadie's `auth_routes_test.go`, `allowlist_test.go`, `auth_test.go`, with `rig/rig_test.go` for the gate |
 | 7 | `cmd/station/fuzz_test.go`, `records/fuzz_test.go` |
 | 8 | `.github/workflows/ci.yml` runs the station's tests under `-race`; the matrix's completeness check |
+| Review | `TestStoredFilesCannotActAsPages` in `cmd/station/records_e2e_test.go`, `TestServedFilesAreSandboxed` in `records/records_test.go` |
 
 ## Found and fixed
 
@@ -207,3 +208,13 @@ Phases 2 to 5, on their first runs:
   it could not delete or share it. Records now carry the uploading
   user's id and `owns` matches by it; a watch token still changes
   nothing (`mayChange`).
+
+A review of the whole station by a second reader, after the phases:
+
+- A stored file was served in place under the media type its uploader
+  named, from the station's own address. A person at watch level could
+  upload an HTML page and a script, and the browser of an admin who
+  opened the link ran them as the admin. A file inside a recording did
+  the same by its name, and an SVG screenshot by its thumbnail. Every
+  stored file, thumbnail and unpacked file is sandboxed now. One a
+  browser would render as a document is sent as a download.

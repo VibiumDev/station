@@ -1,6 +1,7 @@
 package main
 
 import (
+	"archive/zip"
 	"bytes"
 	"crypto/sha256"
 	"encoding/hex"
@@ -8,6 +9,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strconv"
+	"strings"
 	"testing"
 	"time"
 
@@ -19,16 +21,22 @@ import (
 // and returns its hash.
 func (f *fullStation) uploadAs(p station.Principal, body []byte, name, hold string) string {
 	f.t.Helper()
+	return f.uploadTyped(p, body, "application/zip", name, hold)
+}
+
+// uploadTyped is uploadAs under the media type the uploader names.
+func (f *fullStation) uploadTyped(p station.Principal, body []byte, mediaType, name, hold string) string {
+	f.t.Helper()
 	sum := sha256.Sum256(body)
 	sha := hex.EncodeToString(sum[:])
-	ev, err := f.s.records.UploadAuth(f.ctx, p, records.UploadRequest{SHA256: sha, Size: int64(len(body)), Type: "application/zip", Name: name, HoldID: hold})
+	ev, err := f.s.records.UploadAuth(f.ctx, p, records.UploadRequest{SHA256: sha, Size: int64(len(body)), Type: mediaType, Name: name, HoldID: hold})
 	if err != nil {
 		f.t.Fatalf("upload auth for %s: %v", name, err)
 	}
 	r := httptest.NewRequest("PUT", "/upload", bytes.NewReader(body))
 	r.ContentLength = int64(len(body))
 	r.Header.Set("Authorization", records.Header(ev))
-	r.Header.Set("Content-Type", "application/zip")
+	r.Header.Set("Content-Type", mediaType)
 	w := httptest.NewRecorder()
 	f.h.ServeHTTP(w, r)
 	if w.Code != 200 {
@@ -167,4 +175,78 @@ func TestRecordsPublicAndPrivate(t *testing.T) {
 		t.Error("the driver's record is still there")
 	}
 	_ = strconv.Itoa
+}
+
+// Stored files reach a browser from the station's own address, under the
+// types and names their uploaders chose. None may act as a page of the
+// station: every one is sandboxed, and one a browser would render as a
+// document is a download. What the pages use stays as it was: the zip
+// the player fetches, pictures, thumbnails and ?download.
+func TestStoredFilesCannotActAsPages(t *testing.T) {
+	f := newFullStation(t)
+	ck, _ := f.session(f.users["admin"].ID, stageSignedIn)
+	admin := caller{name: "admin", decor: withCookie(ck)}
+	jpeg := append([]byte{0xFF, 0xD8, 0xFF, 0xE0, 0x00, 0x10, 'J', 'F', 'I', 'F', 0x00}, bytes.Repeat([]byte{1}, 40)...)
+	var zbuf bytes.Buffer
+	zw := zip.NewWriter(&zbuf)
+	for _, e := range []struct {
+		name string
+		data []byte
+	}{
+		{"trace.trace", []byte(`{"type":"screencast-frame","sha1":"frame.jpeg","timestamp":1}` + "\n")},
+		{"resources/frame.jpeg", jpeg},
+		{"x.html", []byte(`<!doctype html><script src="x.js"></script>`)},
+		{"x.js", []byte(`alert(document.domain)`)},
+	} {
+		w, _ := zw.Create(e.name)
+		w.Write(e.data)
+	}
+	zw.Close()
+	script := f.uploadTyped(f.admin, []byte(`alert(document.domain)`), "text/javascript", "a.js", "hld_a")
+	page := f.uploadTyped(f.admin, []byte(`<!doctype html><script src="/`+script+`"></script>`), "text/html", "notes.html", "hld_a")
+	drawing := f.uploadTyped(f.admin, []byte(`<svg xmlns="http://www.w3.org/2000/svg"><script href="/`+script+`"/></svg>`), "image/svg+xml", "shot.svg", "hld_a")
+	picture := f.uploadTyped(f.admin, jpeg, "image/jpeg", "shot.jpg", "hld_a")
+	recording := f.uploadTyped(f.admin, zbuf.Bytes(), "application/zip", "rec.zip", "hld_a")
+	for _, c := range []struct {
+		path, mediaType string
+		download        bool
+	}{
+		{"/" + page, "text/html", true},
+		{"/" + script, "text/javascript", true},
+		{"/" + drawing, "image/svg+xml", true},
+		{"/records/" + drawing + "/thumb.jpg", "image/svg+xml", true},
+		{"/records/" + recording + "/files/x.html", "text/html", true},
+		{"/records/" + recording + "/files/x.js", "javascript", true},
+		{"/" + picture, "image/jpeg", false},
+		{"/records/" + picture + "/thumb.jpg", "image/jpeg", false},
+		{"/" + recording + ".zip", "application/zip", false},
+		{"/records/" + recording + "/thumb.jpg", "image/jpeg", false},
+		{"/records/" + recording + "/files/resources/frame.jpeg", "image/jpeg", false},
+	} {
+		w := f.do(admin, "GET", c.path, "", false)
+		h := w.Header()
+		if w.Code != 200 || !strings.Contains(h.Get("Content-Type"), c.mediaType) {
+			t.Errorf("%s: %d %s", c.path, w.Code, h.Get("Content-Type"))
+			continue
+		}
+		if csp := h.Get("Content-Security-Policy"); csp != pageCSP+"; sandbox" {
+			t.Errorf("%s: not sandboxed beside the page policy: %q", c.path, csp)
+		}
+		if h.Get("X-Content-Type-Options") != "nosniff" {
+			t.Errorf("%s: no nosniff", c.path)
+		}
+		if got := strings.HasPrefix(h.Get("Content-Disposition"), "attachment"); got != c.download {
+			t.Errorf("%s: Content-Disposition %q (want a download: %v)", c.path, h.Get("Content-Disposition"), c.download)
+		}
+	}
+	// The player fetches the zip whole, and ?download names any file.
+	if w := f.do(admin, "GET", "/"+recording+".zip", "", false); !bytes.Equal(w.Body.Bytes(), zbuf.Bytes()) {
+		t.Errorf("the recording came back changed: %d bytes of %d", w.Body.Len(), zbuf.Len())
+	}
+	if w := f.do(admin, "GET", "/"+picture+"?download", "", false); w.Header().Get("Content-Disposition") != `attachment; filename="shot.jpg"` {
+		t.Errorf("?download: %q", w.Header().Get("Content-Disposition"))
+	}
+	if w := f.do(admin, "GET", "/"+page, "", false); w.Header().Get("Content-Disposition") != `attachment; filename="notes.html"` {
+		t.Errorf("a page's download: %q", w.Header().Get("Content-Disposition"))
+	}
 }

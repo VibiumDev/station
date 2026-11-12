@@ -487,3 +487,23 @@ func TestGoldenAndTags(t *testing.T) {
 		t.Fatal("golden on nothing")
 	}
 }
+
+// A store with no page policy around it sandboxes what it serves all the
+// same, and sends a file a browser would render as a download.
+func TestServedFilesAreSandboxed(t *testing.T) {
+	f := setup(t)
+	body := []byte(`<!doctype html><script src="/x"></script>`)
+	ev, err := f.store.UploadAuth(context.Background(), station.Principal{Subject: "token:ci"},
+		UploadRequest{SHA256: hashOf(body), Size: int64(len(body)), Type: "text/html", Name: "p.html", HoldID: "hld_1"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if w := f.do("PUT", "/upload", body, "Authorization", Header(ev), "Content-Type", "text/html"); w.Code != 200 {
+		t.Fatalf("upload: %d %s", w.Code, w.Body)
+	}
+	h := f.do("GET", "/"+hashOf(body), nil, "X-Test-Subject", "token:ci").Header()
+	if h.Get("Content-Type") != "text/html" || h.Get("Content-Security-Policy") != "sandbox" || h.Get("X-Content-Type-Options") != "nosniff" ||
+		h.Get("Content-Disposition") != `attachment; filename="p.html"` {
+		t.Fatalf("a stored page: %v", h)
+	}
+}
