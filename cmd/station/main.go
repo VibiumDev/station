@@ -54,7 +54,7 @@ func usage() {
        station passwd [--reset] [login]  set a user's password, the owner's by default;
                                        --reset also forgets their authenticator and backup codes
        station enroll                  make a one-time enrollment code for a rig
-       station token create NAME [--read-only]
+       station token create NAME [--level watch|drive|admin]
        station token list | revoke NAME
        station key                     show the station's key
        station version                 show the build's version`)
@@ -73,6 +73,7 @@ func runCommand(name string, args []string) int {
 	dirFlag := fs.String("data-dir", "", "where the station keeps its files (default $STATION_DIR or the user config dir)")
 	readOnly := fs.Bool("read-only", false, "token create: the token may only watch (the same as --level watch)")
 	levelFlag := fs.String("level", "drive", "token create: watch, drive or admin")
+	reset := fs.Bool("reset", false, "passwd: also forget the user's authenticator and backup codes")
 	// Flags may come before or after the words.
 	var words []string
 	for len(args) > 0 {
@@ -108,7 +109,7 @@ func runCommand(name string, args []string) int {
 		fmt.Printf("npub        %s\nhex         %s\nfingerprint %s\n", npub(sk.Public()), sk.Public().Hex(), enroll.Fingerprint(sk.Public()))
 		return 0
 	case "passwd":
-		return passwd(dir, words)
+		return passwd(dir, words, *reset)
 	case "enroll":
 		sk, err := loadKey(dir)
 		if err != nil {
@@ -170,7 +171,7 @@ func runCommand(name string, args []string) int {
 			}
 			return 0
 		}
-		fmt.Fprintln(os.Stderr, "usage: station token create NAME [--read-only] | list | revoke NAME")
+		fmt.Fprintln(os.Stderr, "usage: station token create NAME [--level watch|drive|admin] | list | revoke NAME")
 		return 2
 	}
 	fmt.Fprintf(os.Stderr, "station: unknown command %q (try station help)\n", name)
@@ -192,15 +193,19 @@ func ensureOwner(ctx context.Context, db *sqlite.DB, cfg *Config) (station.User,
 	return u, err
 }
 
+// ownerHasPassword says whether the owner can sign in by password: the
+// database holds the hash, wherever it came from, and the config file's
+// own field is only what a station from before users is seeded from.
+func ownerHasPassword(ctx context.Context, db *sqlite.DB) bool {
+	u, err := db.UserByLogin(ctx, station.OwnerLogin)
+	return err == nil && u.HasPassword
+}
+
 // passwd asks for a password twice and stores its hash for a user: the
 // owner, or the login given. With --reset the user's authenticator and
 // backup codes are forgotten too, so their next sign-in sets up a new
 // one: the way back in for an owner who lost both phone and codes.
-func passwd(dir string, words []string) int {
-	reset := false
-	if len(words) > 0 && words[0] == "--reset" {
-		reset, words = true, words[1:]
-	}
+func passwd(dir string, words []string, reset bool) int {
 	cfg, err := loadConfig(dir)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
@@ -661,7 +666,7 @@ func serve(args []string) int {
 	if turnInfo != "" {
 		fmt.Println("   TURN " + turnInfo)
 	}
-	if cfg.PasswordHash == "" {
+	if !ownerHasPassword(context.Background(), db) {
 		fmt.Println("   no password yet: run `station passwd` to sign in by password")
 	}
 	sdnotify.Ready()
