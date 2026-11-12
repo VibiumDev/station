@@ -54,7 +54,7 @@ func usage() {
        station passwd [--reset] [login]  set a user's password, the owner's by default;
                                        --reset also forgets their authenticator and backup codes
        station enroll                  make a one-time enrollment code for a rig
-       station token create NAME [--read-only]
+       station token create NAME [--level watch|drive|admin]
        station token list | revoke NAME
        station key                     show the station's key
        station version                 show the build's version`)
@@ -171,7 +171,7 @@ func runCommand(name string, args []string) int {
 			}
 			return 0
 		}
-		fmt.Fprintln(os.Stderr, "usage: station token create NAME [--read-only] | list | revoke NAME")
+		fmt.Fprintln(os.Stderr, "usage: station token create NAME [--level watch|drive|admin] | list | revoke NAME")
 		return 2
 	}
 	fmt.Fprintf(os.Stderr, "station: unknown command %q (try station help)\n", name)
