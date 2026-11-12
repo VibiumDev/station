@@ -395,6 +395,7 @@ func (f *fullStation) rows() []row {
 		{"POST", "/settings/tokens", "/settings/tokens", "name=t&level=watch", ruleManage, false, false},
 		{"POST", "/settings/tokens/revoke", "/settings/tokens/revoke", "name=none", ruleManage, false, false},
 		{"POST", "/settings/codes", "/settings/codes", "", ruleManage, false, false},
+		{"POST", "/settings/codes/cancel", "/settings/codes/cancel", "id=1", ruleManage, false, false},
 		{"POST", "/settings/rigs/remove", "/settings/rigs/remove", "rig=rig_none", ruleManage, false, false},
 		{"POST", "/settings/models", "/settings/models", "", ruleManage, false, false},
 		{"POST", "/settings/models/remove", "/settings/models/remove", "name=none", ruleManage, false, false},

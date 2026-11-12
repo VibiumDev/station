@@ -107,6 +107,9 @@ main > .lead:first-child { margin-top: 0; }
 /* Cards, notes and the one-time secrets. */
 .card { background: var(--surface); border: 1px solid var(--line-card); border-radius: 14px; padding: 22px 24px; margin: 16px 0; }
 .card.featured { border: 1.5px solid var(--accent); }
+.card.code { padding: 16px 20px; margin: 12px 0; }
+.card.code .codehead { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.card.code .secret { margin: 10px 0 0; }
 .card h3 { margin: 0 0 6px; font: 700 19px/1.3 var(--sans); }
 .card p { margin: 6px 0 0; }
 .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(300px, 100%), 1fr)); gap: 16px; margin: 20px 0; }

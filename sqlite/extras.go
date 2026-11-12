@@ -8,6 +8,7 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"errors"
+	"strconv"
 	"strings"
 	"time"
 
@@ -191,9 +192,52 @@ func (d *DB) UseCode(ctx context.Context, code string, now time.Time) error {
 	return nil
 }
 
-// OpenCodes counts the codes still usable.
-func (d *DB) OpenCodes(ctx context.Context, now time.Time) (int, error) {
-	var n int
-	err := d.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM enroll_codes WHERE used_at = 0 AND expires_at > ?`, now.UnixNano()).Scan(&n)
-	return n, err
+// OpenCode is an enrollment code still usable, as far as the database
+// knows it: the code itself is hashed at rest.
+type OpenCode struct {
+	ID      string // names the code to CancelCode; not the code, and not its hash
+	Hash    string // CodeHash of the code
+	Created time.Time
+	Expires time.Time
+}
+
+// CodeHash is what a code is stored as.
+func CodeHash(code string) string { return hashSecret(code) }
+
+// OpenCodes lists the codes still usable, newest first.
+func (d *DB) OpenCodes(ctx context.Context, now time.Time) ([]OpenCode, error) {
+	rows, err := d.db.QueryContext(ctx, `SELECT hash, created_at, expires_at FROM enroll_codes WHERE used_at = 0 AND expires_at > ? ORDER BY created_at DESC`, now.UnixNano())
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []OpenCode
+	for rows.Next() {
+		var c OpenCode
+		var created, expires int64
+		if err := rows.Scan(&c.Hash, &created, &expires); err != nil {
+			return nil, err
+		}
+		c.ID, c.Created, c.Expires = strconv.FormatInt(created, 10), time.Unix(0, created), time.Unix(0, expires)
+		out = append(out, c)
+	}
+	return out, rows.Err()
+}
+
+// CancelCode ends an unused code before its time, by the id OpenCodes
+// gave it. A code that is used, expired or unknown is ErrCode.
+func (d *DB) CancelCode(ctx context.Context, id string, now time.Time) error {
+	created, err := strconv.ParseInt(id, 10, 64)
+	if err != nil {
+		return ErrCode
+	}
+	res, err := d.db.ExecContext(ctx, `UPDATE enroll_codes SET used_at = ? WHERE created_at = ? AND used_at = 0 AND expires_at > ?`,
+		now.UnixNano(), created, now.UnixNano())
+	if err != nil {
+		return err
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return ErrCode
+	}
+	return nil
 }

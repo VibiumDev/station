@@ -293,3 +293,45 @@ func TestTokensAndCodes(t *testing.T) {
 		t.Errorf("audit: %+v", entries)
 	}
 }
+
+// Open enrollment codes are listed newest first, and one is cancelled by
+// the id the list gave it, once.
+func TestOpenCodesAndCancel(t *testing.T) {
+	d, err := Open(":memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer d.Close()
+	ctx, now := context.Background(), time.Now()
+	for _, c := range []string{"AAAA", "BBBB", "CCCC"} {
+		if err := d.SaveCode(ctx, c, now.Add(time.Minute)); err != nil {
+			t.Fatal(err)
+		}
+		time.Sleep(time.Millisecond)
+	}
+	d.SaveCode(ctx, "GONE", now.Add(-time.Second))
+	if err := d.UseCode(ctx, "BBBB", now); err != nil {
+		t.Fatal(err)
+	}
+	open, err := d.OpenCodes(ctx, now)
+	if err != nil || len(open) != 2 || open[0].Hash != CodeHash("CCCC") || open[1].Hash != CodeHash("AAAA") || !open[0].Created.After(open[1].Created) {
+		t.Fatalf("open codes: %+v %v", open, err)
+	}
+	if open[0].ID == open[0].Hash || open[0].ID == "CCCC" {
+		t.Error("the id gives the code or its hash away")
+	}
+	if err := d.CancelCode(ctx, open[0].ID, now); err != nil {
+		t.Fatal(err)
+	}
+	if err := d.UseCode(ctx, "CCCC", now); !errors.Is(err, ErrCode) {
+		t.Errorf("a cancelled code: %v", err)
+	}
+	for _, id := range []string{open[0].ID, "", "nope", "7"} {
+		if err := d.CancelCode(ctx, id, now); !errors.Is(err, ErrCode) {
+			t.Errorf("cancel %q: %v", id, err)
+		}
+	}
+	if left, _ := d.OpenCodes(ctx, now); len(left) != 1 || left[0].Hash != CodeHash("AAAA") {
+		t.Errorf("after the cancel: %+v", left)
+	}
+}
