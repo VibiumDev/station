@@ -259,6 +259,10 @@ and twenty per record; a leading `#` is dropped.
 `GET /list/<pubkey hex>` is Blossom's listing of what a key uploaded, for
 the owner or for a `t=list` event signed by that key.
 
+A rig's signature counts while the rig is enrolled. Once a rig is
+removed, its key no longer reads, lists or deletes what it uploaded;
+the records stay for the people who could read them.
+
 `DELETE /<sha256>` removes the bytes and the index entry, while the file
 event stays, for the owner, the uploader, or a `t=delete` event signed
 by the station or the uploading rig. The Records page does the same, and

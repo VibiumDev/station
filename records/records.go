@@ -569,9 +569,24 @@ func (s *Store) mayRead(ctx context.Context, b station.Blob, p *station.Principa
 		}
 	}
 	if auth != nil && verb(auth) == "get" && tagValue(auth, "x") == b.SHA256 {
-		return auth.PubKey == s.Signer.PubKey() || auth.PubKey.Hex() == b.PubKey
+		return s.signedFor(ctx, auth, b.PubKey)
 	}
 	return false
+}
+
+// signedFor says whether an authorization speaks for what a key uploaded:
+// the station's own does, and the uploading rig's does while that rig is
+// enrolled. Removing a rig refuses its key from then on, here as on the
+// tunnel.
+func (s *Store) signedFor(ctx context.Context, auth *nostr.Event, pubkey string) bool {
+	if auth.PubKey == s.Signer.PubKey() {
+		return true
+	}
+	if auth.PubKey.Hex() != pubkey {
+		return false
+	}
+	_, err := s.Devices.RigByKey(ctx, auth.PubKey)
+	return err == nil
 }
 
 // owns says whether a blob is the principal's own: uploaded under their
@@ -596,12 +611,12 @@ func (s *Store) MayRead(ctx context.Context, b station.Blob, p station.Principal
 // mayDelete says who may remove a blob: an admin, the uploader, or a
 // t=delete authorization for it signed by the station or the uploading
 // rig.
-func (s *Store) mayDelete(b station.Blob, p *station.Principal, auth *nostr.Event) bool {
+func (s *Store) mayDelete(ctx context.Context, b station.Blob, p *station.Principal, auth *nostr.Event) bool {
 	if p != nil && mayChange(p, b) {
 		return true
 	}
 	if auth != nil && verb(auth) == "delete" && tagValue(auth, "x") == b.SHA256 {
-		return auth.PubKey == s.Signer.PubKey() || auth.PubKey.Hex() == b.PubKey
+		return s.signedFor(ctx, auth, b.PubKey)
 	}
 	return false
 }
@@ -694,7 +709,7 @@ func (s *Store) ServeBlob(w http.ResponseWriter, r *http.Request, sha string, p 
 		contain(w, b.Type)
 		http.ServeContent(w, r, name, b.CreatedAt, f)
 	case http.MethodDelete:
-		if !s.mayDelete(b, p, auth) {
+		if !s.mayDelete(ctx, b, p, auth) {
 			writeError(w, refuse(http.StatusForbidden, "not yours to delete"))
 			return
 		}
@@ -739,7 +754,7 @@ func (s *Store) Delete(ctx context.Context, p station.Principal, sha string) err
 	if err != nil {
 		return err
 	}
-	if !s.mayDelete(b, &p, nil) {
+	if !s.mayDelete(ctx, b, &p, nil) {
 		return refuse(http.StatusForbidden, "not yours to delete")
 	}
 	return s.remove(ctx, b, p.Subject, "delete")
@@ -875,7 +890,7 @@ func (s *Store) ServeList(w http.ResponseWriter, r *http.Request, pubkey string,
 		return
 	}
 	allowed := p != nil && p.Admin && p.Device == "" // a token bound to a device lists nothing by key
-	if auth != nil && verb(auth) == "list" && auth.PubKey.Hex() == pubkey {
+	if auth != nil && verb(auth) == "list" && auth.PubKey.Hex() == pubkey && s.signedFor(r.Context(), auth, pubkey) {
 		allowed = true
 	}
 	if !allowed {

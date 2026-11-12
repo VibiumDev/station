@@ -314,6 +314,50 @@ func TestRigUploads(t *testing.T) {
 	}
 }
 
+// Removing a rig refuses its key from then on. Its signature no longer
+// reads, lists or deletes what it uploaded while it was enrolled, and the
+// records stay for the people who could read them.
+func TestRemovedRigKeyIsRefused(t *testing.T) {
+	f := setup(t)
+	body := []byte("a recording the rig made")
+	signed := func(verb string) string {
+		ev := nostr.Event{Kind: KindAuth, CreatedAt: nostr.Timestamp(f.now.Unix()), Tags: nostr.Tags{{"t", verb}, {"x", hashOf(body)},
+			{"expiration", strconv.FormatInt(f.now.Add(time.Minute).Unix(), 10)}, {"dev", "rig_1/phone"}, {"hold", "hld_1"}}}
+		ev.Sign(f.rigKey)
+		return Header(ev)
+	}
+	list := "/list/" + f.rigKey.Public().Hex()
+	if w := f.do("PUT", "/upload", body, "Authorization", signed("upload"), "Content-Type", "text/plain"); w.Code != 200 {
+		t.Fatalf("the rig's upload: %d %s", w.Code, w.Body)
+	}
+	if get, ls := f.do("GET", "/"+hashOf(body), nil, "Authorization", signed("get")), f.do("GET", list, nil, "Authorization", signed("list")); get.Code != 200 || ls.Code != 200 {
+		t.Fatalf("while enrolled: get %d, list %d", get.Code, ls.Code)
+	}
+	if err := f.db.RemoveRig(context.Background(), "rig_1"); err != nil {
+		t.Fatal(err)
+	}
+	for _, c := range []struct {
+		method, path, verb string
+		want               int
+	}{
+		{"GET", "/" + hashOf(body), "get", 403},
+		{"GET", list, "list", 401},
+		{"DELETE", "/" + hashOf(body), "delete", 403},
+		{"PUT", "/upload", "upload", 403},
+	} {
+		var sent []byte
+		if c.method == "PUT" {
+			sent = body
+		}
+		if w := f.do(c.method, c.path, sent, "Authorization", signed(c.verb)); w.Code != c.want {
+			t.Errorf("the removed rig's %s: %d, want %d", c.verb, w.Code, c.want)
+		}
+	}
+	if w := f.do("GET", "/"+hashOf(body), nil, "X-Test-Subject", "token:ci"); w.Code != 200 {
+		t.Errorf("the hold's subject reading the record after the rig went: %d", w.Code)
+	}
+}
+
 func TestHoldResolution(t *testing.T) {
 	f := setup(t)
 	ctx := context.Background()
