@@ -404,8 +404,12 @@ the caller may see.
 The viewer's files are at `/viewer/shell.js`, `/viewer/shell.css`,
 `/viewer/webrtc.js` and the audio worklets; a Roadie serves the same
 files from this module, so its `/view` and the station's page are one.
+The viewer and the pages take their colors and fonts from one file,
+`/viewer/tokens.css`.
 A device's extras (`GET /v1/devices/{rig}/{name}/extras.js`, relayed from
 the path the device announced) add its own buttons and settings rows.
+The rows use the viewer's classes (`qrow`, `qlabel`, `seg`, `btn2`,
+`danger`, `qhelp`, `qval`) and carry no styling of their own.
 The viewer takes `?ice=relay` (media through TURN only) and
 `?transport=mjpeg` (the MJPEG fallback through the station from the
 start, with input over the relayed HID WebSocket); the fallback also

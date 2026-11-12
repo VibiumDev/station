@@ -1497,10 +1497,9 @@
     var b = document.createElement('button');
     b.id = o.id || '';
     b.className = 'tbtn';
-    b.style.cssText = 'width:36px; height:36px; border-radius:6px; cursor:pointer; padding:0; display:flex; align-items:center; justify-content:center;';
     if (o.title) b.title = o.title;
     if (o.svg) b.innerHTML = o.svg;
-    else if (o.label) { b.textContent = o.label; b.style.fontSize = '10px'; b.style.fontFamily = 'monospace'; }
+    else if (o.label) b.textContent = o.label;
     if (o.onClick) b.onclick = o.onClick;
     var where = $('deviceButtons');
     if (o.before && $(o.before)) toolbarEl.insertBefore(b, $(o.before)); else where.appendChild(b);
