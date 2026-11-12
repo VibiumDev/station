@@ -297,6 +297,12 @@ func (d *DB) migrate() error {
 			}
 		}
 	}
+	// A rig's record of a hold was named after the hold, hld_<hex>.zip,
+	// until rigs called it rec_<hex>.zip: the ones kept from before take
+	// the new name. A record under any other name is left alone.
+	if _, err := d.db.Exec(`UPDATE blobs SET name = 'rec_' || substr(name, 5) WHERE hold_id LIKE 'hld\_%' ESCAPE '\' AND name = hold_id || '.zip'`); err != nil {
+		return fmt.Errorf("schema: record names: %w", err)
+	}
 	// Tokens from before levels were read-only or control: watch or drive.
 	if _, err := d.db.Exec(`UPDATE api_tokens SET level = CASE WHEN read_only = 1 THEN 'watch' ELSE 'drive' END WHERE level = ''`); err != nil {
 		return fmt.Errorf("schema: token levels: %w", err)
