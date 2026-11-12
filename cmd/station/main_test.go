@@ -26,6 +26,35 @@ func typed(t *testing.T, lines string) {
 	t.Cleanup(func() { os.Stdin = old; r.Close() })
 }
 
+// The start-up line about a missing password asks the database, where
+// `station passwd` puts the hash while the config file's field stays
+// empty.
+func TestOwnerHasPassword(t *testing.T) {
+	dir, ctx := t.TempDir(), context.Background()
+	has := func() bool {
+		t.Helper()
+		db, err := openDB(dir)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer db.Close()
+		return ownerHasPassword(ctx, db)
+	}
+	if has() {
+		t.Error("a new station's owner has a password")
+	}
+	typed(t, "a-first-pass-phrase\na-first-pass-phrase\n")
+	if code := runCommand("passwd", []string{"--data-dir", dir}); code != 0 {
+		t.Fatalf("passwd: exit %d", code)
+	}
+	if cfg, err := loadConfig(dir); err != nil || cfg.PasswordHash != "" {
+		t.Fatalf("the config file took the hash: %v", err)
+	}
+	if !has() {
+		t.Error("the owner has no password after station passwd")
+	}
+}
+
 // `station passwd` sets a password and leaves the authenticator alone;
 // with --reset it forgets the authenticator and the backup codes too, so
 // an owner who lost both gets back in.

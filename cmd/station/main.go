@@ -193,6 +193,14 @@ func ensureOwner(ctx context.Context, db *sqlite.DB, cfg *Config) (station.User,
 	return u, err
 }
 
+// ownerHasPassword says whether the owner can sign in by password: the
+// database holds the hash, wherever it came from, and the config file's
+// own field is only what a station from before users is seeded from.
+func ownerHasPassword(ctx context.Context, db *sqlite.DB) bool {
+	u, err := db.UserByLogin(ctx, station.OwnerLogin)
+	return err == nil && u.HasPassword
+}
+
 // passwd asks for a password twice and stores its hash for a user: the
 // owner, or the login given. With --reset the user's authenticator and
 // backup codes are forgotten too, so their next sign-in sets up a new
@@ -658,7 +666,7 @@ func serve(args []string) int {
 	if turnInfo != "" {
 		fmt.Println("   TURN " + turnInfo)
 	}
-	if cfg.PasswordHash == "" {
+	if !ownerHasPassword(context.Background(), db) {
 		fmt.Println("   no password yet: run `station passwd` to sign in by password")
 	}
 	sdnotify.Ready()
