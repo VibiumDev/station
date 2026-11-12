@@ -82,6 +82,18 @@
       btn.addEventListener('keyup', function (e) { if ((e.key === ' ' || e.key === 'Enter') && !btn.disabled) stop(); });
       btn.addEventListener('click', function (e) { e.preventDefault(); });  // a click alone does nothing
     });
+    // A filmstrip row scrolls sideways through all its frames, and only
+    // those in sight are fetched. The first to load tells the row the
+    // frames' shape, so the ones not yet fetched take the right room.
+    Array.prototype.forEach.call(document.querySelectorAll('.strip[data-strip]'), function (strip) {
+      var first = strip.querySelector('img');
+      function shape() {
+        if (first.naturalWidth && first.naturalHeight) strip.style.setProperty('--frame', first.naturalWidth + ' / ' + first.naturalHeight);
+      }
+      if (first) { first.addEventListener('load', shape); shape(); }
+      // A frame the station cannot give leaves the row to the others.
+      strip.addEventListener('error', function (e) { if (e.target.tagName === 'IMG') e.target.remove(); }, true);
+    });
     // A select that files its form as soon as it changes, such as how
     // many records a page shows.
     Array.prototype.forEach.call(document.querySelectorAll('select[data-submit]'), function (sel) {
@@ -90,20 +102,21 @@
         if (sel.form.requestSubmit) sel.form.requestSubmit(); else sel.form.submit();
       });
     });
-    // The Records grid: a slider sets the card size, kept per browser.
-    var size = document.getElementById('cardSize');
-    var cards = document.querySelector('.cards');
-    if (size && cards) {
-      var apply = function (px) { cards.style.setProperty('--card', px + 'px'); };
+    // The Records grid and filmstrips: a slider sets the size of a card,
+    // or the height of a strip, kept per browser.
+    [['cardSize', '.cards', '--card', 'station-card-size'], ['stripSize', '.strips', '--strip', 'station-strip-size']].forEach(function (s) {
+      var size = document.getElementById(s[0]), box = document.querySelector(s[1]);
+      if (!size || !box) return;
+      var apply = function (px) { box.style.setProperty(s[2], px + 'px'); };
       var kept = null;
-      try { kept = localStorage.getItem('station-card-size'); } catch (e) {}
+      try { kept = localStorage.getItem(s[3]); } catch (e) {}
       if (kept && +kept >= +size.min && +kept <= +size.max) { size.value = kept; }
       apply(size.value);
       size.addEventListener('input', function () {
         apply(size.value);
-        try { localStorage.setItem('station-card-size', size.value); } catch (e) {}
+        try { localStorage.setItem(s[3], size.value); } catch (e) {}
       });
-    }
+    });
     // A framed Record Player gets the keyboard once it has loaded, so the
     // arrow keys step through the recording without a click first.
     var player = document.querySelector('iframe.player');

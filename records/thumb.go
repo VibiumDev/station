@@ -251,6 +251,7 @@ func (s *Store) removeUnpacked(sha string) {
 	if s.UnpackDir != "" {
 		os.RemoveAll(s.unpackDir(sha))
 		os.RemoveAll(s.unpackDir(sha) + ".tmp")
+		os.RemoveAll(s.stripDir(sha))
 	}
 }
 

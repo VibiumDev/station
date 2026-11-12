@@ -138,6 +138,22 @@ func TestRecordsPublicAndPrivate(t *testing.T) {
 	if !strings.Contains(list, " · shared</span>") {
 		t.Error("a shared record is not marked in the list")
 	}
+	// Filmstrip is the third view: a row a record, the same actions under
+	// it, and the choice remembered like the others.
+	w := f.do(admin, "GET", "/records?view=strip&n=100", "", true)
+	strips := w.Body.String()
+	if !strings.Contains(strips, `<a href="/records?n=100&amp;view=strip" aria-current="page">Filmstrip</a>`) || !strings.Contains(strips, `<article class="striprow">`) || strings.Contains(strips, `<table class="records">`) {
+		t.Error("view=strip is not the filmstrip view")
+	}
+	if !strings.Contains(strips, `<span class="act"><form class="inline" method="post" action="/records/golden">`) || !strings.Contains(strips, `class="small icon hold share on" type="button" data-hold`) {
+		t.Error("a filmstrip row lacks the list's actions")
+	}
+	if c := w.Header().Get("Set-Cookie"); !strings.Contains(c, "station-records-view=strip") {
+		t.Errorf("the view is not remembered: %q", c)
+	}
+	if strings.Contains(list, "striprow") || !strings.Contains(list, `aria-current="page">List</a>`) {
+		t.Error("the list view changed")
+	}
 	if w := f.do(admin, "POST", "/records/public", "sha256="+public+"&public=0", true); w.Code != http.StatusSeeOther {
 		t.Fatalf("making private: %d %s", w.Code, w.Body)
 	}

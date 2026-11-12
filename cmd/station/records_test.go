@@ -40,8 +40,13 @@ func TestBackToRecordsKeepsView(t *testing.T) {
 func TestParseRecordsQuery(t *testing.T) {
 	r := httptest.NewRequest(http.MethodGet, "/records?q=%23Flaky+checkout+%23release-1.2+%23bad%3F&n=50&page=2&golden=1&view=list&device=rig_a%2Fphone", nil)
 	q := parseRecordsQuery(r)
-	if strings.Join(q.Tags, " ") != "flaky release-1.2" || q.Text != "checkout #bad?" || q.Per != 50 || q.Page != 2 || !q.Golden || !q.List || q.Device != "rig_a/phone" {
+	if strings.Join(q.Tags, " ") != "flaky release-1.2" || q.Text != "checkout #bad?" || q.Per != 50 || q.Page != 2 || !q.Golden || q.View != "list" || q.Device != "rig_a/phone" {
 		t.Errorf("query: %+v", q)
+	}
+	for view, want := range map[string]string{"strip": "strip", "grid": "grid", "list": "list", "film": "", "": ""} {
+		if got := parseRecordsQuery(httptest.NewRequest(http.MethodGet, "/records?view="+view, nil)).View; got != want {
+			t.Errorf("view=%s: %q, want %q", view, got, want)
+		}
 	}
 	if got := q.Link("page", "3"); got != "/records?device=rig_a%2Fphone&golden=1&n=50&page=3&q=%23Flaky+checkout+%23release-1.2+%23bad%3F&view=list" {
 		t.Errorf("page link: %s", got)
@@ -73,12 +78,12 @@ func TestParseRecordsQuery(t *testing.T) {
 	back := httptest.NewRequest(http.MethodGet, "/records", nil)
 	back.AddCookie(&http.Cookie{Name: viewCookie, Value: "list"})
 	back.AddCookie(&http.Cookie{Name: perCookie, Value: "50"})
-	if got := parseRecordsQuery(back); !got.List || got.View != "list" || got.Per != 50 || got.Link() != "/records?n=50&view=list" {
+	if got := parseRecordsQuery(back); got.View != "list" || got.Per != 50 || got.Link() != "/records?n=50&view=list" {
 		t.Errorf("remembered: %+v %s", got, got.Link())
 	}
 	grid := httptest.NewRequest(http.MethodGet, "/records?view=grid", nil)
 	grid.AddCookie(&http.Cookie{Name: viewCookie, Value: "list"})
-	if got := parseRecordsQuery(grid); got.List || got.View != "grid" {
+	if got := parseRecordsQuery(grid); got.View != "grid" {
 		t.Errorf("the address should win: %+v", got)
 	}
 }
@@ -119,7 +124,7 @@ func TestRecordsTemplatesRender(t *testing.T) {
 		for k, v := range base {
 			data[k] = v
 		}
-		data["Grid"] = grid
+		data["Grid"], data["List"] = grid, !grid
 		data["Records"] = []recordView{rec(true, true), rec(false, true), rec(false, false)}
 		var out strings.Builder
 		if err := pages.ExecuteTemplate(&out, "records", data); err != nil {
