@@ -197,6 +197,7 @@ func (s *server) handler() http.Handler {
 	mux.Handle("POST /settings/tokens/revoke", s.page(station.ActionManage, s.revokeToken))
 	mux.Handle("POST /settings/codes", s.page(station.ActionManage, s.createCode))
 	mux.Handle("POST /settings/piper/voice", s.page(station.ActionManage, s.piperVoice))
+	mux.Handle("POST /settings/say/preview", s.page(station.ActionManage, s.sayPreview))
 	mux.Handle("POST /settings/codes/cancel", s.page(station.ActionManage, s.cancelCode))
 	mux.Handle("POST /settings/rigs/remove", s.page(station.ActionManage, s.removeRig))
 	mux.Handle("POST /settings/models", s.page(station.ActionManage, s.addModel))

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
+	"net/http/httptest"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -185,5 +186,71 @@ func TestAIPartsOnSettings(t *testing.T) {
 	}
 	if strings.Contains(say, `value="anthropic"`) || strings.Contains(listen, `value="piper-server"`) {
 		t.Error("a part offers a provider its role cannot use")
+	}
+}
+
+// A voice's preview asks its own server or API and answers the WAV.
+func TestSayPreview(t *testing.T) {
+	wav := []byte("RIFF....WAVEfmt the rest of a sound file")
+	var got []map[string]any
+	var auth []string
+	fake := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var body map[string]any
+		json.NewDecoder(r.Body).Decode(&body)
+		body["path"] = r.URL.Path
+		got, auth = append(got, body), append(auth, r.Header.Get("Authorization"))
+		if body["input"] == "fail" {
+			http.Error(w, `{"error":{"message":"bad key"}}`, http.StatusUnauthorized)
+			return
+		}
+		w.Write(wav)
+	}))
+	defer fake.Close()
+	f := newFullStation(t)
+	for _, c := range []jam.ModelConfig{
+		{Name: "lessac", Role: jam.RoleSay, Provider: "piper-server", Model: "en_US-lessac-medium", BaseURL: fake.URL},
+		{Name: "tts", Role: jam.RoleSay, Provider: "openai", Model: "gpt-4o-mini-tts", BaseURL: fake.URL, APIKey: "sk-tts"},
+	} {
+		if err := f.s.jams.models.Save(c); err != nil {
+			t.Fatal(err)
+		}
+	}
+	ck, csrf := f.session(f.users["admin"].ID, stageSignedIn)
+	admin := caller{name: "admin", decor: withCookie(ck), csrf: csrf, signed: true, admin: true, person: true}
+	hear := func(name, text string) *httptest.ResponseRecorder {
+		return f.do(admin, "POST", "/settings/say/preview", "name="+name+"&text="+text, true)
+	}
+	if w := hear("lessac", "Come+here%2C+Watson."); w.Code != 200 || w.Header().Get("Content-Type") != "audio/wav" || w.Body.String() != string(wav) {
+		t.Fatalf("Piper: %d %s %q", w.Code, w.Header().Get("Content-Type"), w.Body)
+	}
+	if g := got[0]; g["path"] != "/synthesize" || g["text"] != "Come here, Watson." || g["voice"] != "en_US-lessac-medium" || auth[0] != "" {
+		t.Errorf("Piper was asked %v with %q", g, auth[0])
+	}
+	if w := hear("tts", "hello"); w.Code != 200 {
+		t.Fatalf("OpenAI: %d %s", w.Code, w.Body)
+	}
+	if g := got[1]; g["path"] != "/audio/speech" || g["input"] != "hello" || g["voice"] != "cedar" || g["model"] != "gpt-4o-mini-tts" || g["response_format"] != "wav" || auth[1] != "Bearer sk-tts" {
+		t.Errorf("OpenAI was asked %v with %q", g, auth[1])
+	}
+	if w := hear("tts", "fail"); w.Code != http.StatusBadGateway || !strings.Contains(w.Body.String(), "HTTP 401") || strings.Contains(w.Body.String(), "sk-tts") {
+		t.Errorf("an API's refusal: %d %s", w.Code, w.Body)
+	}
+	for _, c := range []struct {
+		name, text string
+		code       int
+	}{
+		{"tts", "", http.StatusBadRequest},
+		{"tts", strings.Repeat("x", 51), http.StatusBadRequest},
+		{"nobody", "hi", http.StatusNotFound},
+		{"test", "hi", http.StatusNotFound}, // an agent model is no voice
+	} {
+		if w := hear(c.name, c.text); w.Code != c.code {
+			t.Errorf("%s %q: %d, want %d", c.name, c.text, w.Code, c.code)
+		}
+	}
+	// The page offers ▶ on each voice and the words to say.
+	html := f.do(admin, "GET", "/settings", "", true).Body.String()
+	if !strings.Contains(html, `data-preview="lessac"`) || !strings.Contains(html, `data-preview="tts"`) || !strings.Contains(html, `name="text" value="Come here, Watson." maxlength="50"`) {
+		t.Error("no preview on the page")
 	}
 }

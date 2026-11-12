@@ -1,11 +1,17 @@
 package main
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"io"
 	"net/http"
 	"slices"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/VibiumDev/station"
 	"github.com/VibiumDev/station/jam"
@@ -76,6 +82,90 @@ func (s *server) addModel(w http.ResponseWriter, r *http.Request, p station.Prin
 		}
 	}
 	s.render(w, "settings", s.settingsData(r, p, map[string]any{"Message": msg}))
+}
+
+// previewMax is the most a voice preview says, in characters.
+const previewMax = 50
+
+// sayPreview is POST /settings/say/preview: name and text. It says the
+// text with that voice, through its real server or API, and answers the
+// WAV for the page to play. So a voice is heard working before a jam
+// needs it.
+func (s *server) sayPreview(w http.ResponseWriter, r *http.Request, p station.Principal) {
+	text := strings.TrimSpace(r.FormValue("text"))
+	if text == "" || utf8.RuneCountInString(text) > previewMax {
+		http.Error(w, fmt.Sprintf("Type up to %d characters to hear.", previewMax), http.StatusBadRequest)
+		return
+	}
+	c, err := s.jams.models.Get(r.FormValue("name"))
+	if err != nil || c.Role != jam.RoleSay {
+		http.Error(w, "No such voice.", http.StatusNotFound)
+		return
+	}
+	if c.OwnPiper() {
+		if c.BaseURL = s.piper.URL(); c.BaseURL == "" {
+			http.Error(w, "Piper is not running on this station.", http.StatusServiceUnavailable)
+			return
+		}
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), 90*time.Second)
+	defer cancel()
+	wav, err := previewSpeech(ctx, c, text)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadGateway)
+		return
+	}
+	w.Header().Set("Content-Type", "audio/wav")
+	w.Header().Set("Cache-Control", "no-store")
+	w.Write(wav)
+}
+
+// previewSpeech asks a say model's server or API for text as a WAV.
+// OpenAI is asked for cedar, the voice Vibium speaks with by default.
+func previewSpeech(ctx context.Context, c jam.ModelConfig, text string) ([]byte, error) {
+	var url string
+	var body map[string]any
+	header := http.Header{"Content-Type": {"application/json"}}
+	switch c.Provider {
+	case "piper-server":
+		url, body = strings.TrimRight(c.BaseURL, "/")+"/synthesize", map[string]any{"text": text, "voice": c.Model}
+	case "openai":
+		base := c.BaseURL
+		if base == "" {
+			p, _ := jam.ProviderByID("openai")
+			base = p.BaseURL
+		}
+		if c.APIKey == "" {
+			return nil, errors.New("this voice has no API key")
+		}
+		url, body = strings.TrimRight(base, "/")+"/audio/speech", map[string]any{"model": c.Model, "voice": "cedar", "input": text, "response_format": "wav"}
+		header.Set("Authorization", "Bearer "+c.APIKey)
+	default:
+		return nil, fmt.Errorf("%s voices have no preview", c.Provider)
+	}
+	raw, _ := json.Marshal(body)
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(raw))
+	if err != nil {
+		return nil, err
+	}
+	req.Header = header
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("%s did not answer: %v", c.Provider, err)
+	}
+	defer resp.Body.Close()
+	data, _ := io.ReadAll(io.LimitReader(resp.Body, 16<<20))
+	if resp.StatusCode != http.StatusOK {
+		msg := strings.TrimSpace(string(data))
+		if len(msg) > 200 {
+			msg = msg[:200]
+		}
+		return nil, fmt.Errorf("%s answered HTTP %d: %s", c.Provider, resp.StatusCode, msg)
+	}
+	if !bytes.HasPrefix(data, []byte("RIFF")) {
+		return nil, fmt.Errorf("%s sent no WAV", c.Provider)
+	}
+	return data, nil
 }
 
 // aiPart is one part of the AI section: the models of one role.

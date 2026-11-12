@@ -100,6 +100,9 @@ voice, and restarts the server if it stops. On **Settings**, under
 - The **Piper** line under the list says where Piper's server runs and
   how many voices it has, or why it is not running. The server's own
   output is in `piper/server.log`.
+- **Hear** at the top of **Say** takes up to 50 characters. ▶ on a voice
+  says them with that voice, through its real server or API, and plays
+  them in the browser, so a voice is heard working before a jam needs it.
 
 A cloud voice is a model of its own, as in step 3. **Use** on its row
 makes jams speak with it instead.

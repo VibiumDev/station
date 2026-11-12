@@ -434,6 +434,9 @@ main.home { padding-top: clamp(44px, 30vh, 320px); }
 .aipart tr.inuse td { background: color-mix(in srgb, var(--accent) 7%, transparent); }
 .pill.inuse { color: var(--accent); border-color: color-mix(in srgb, var(--accent) 45%, transparent); padding: 1px 8px; font-size: 12px; vertical-align: 1px; }
 .piperline { margin: 10px 0 0; font-size: 14px; }
+.sayprobe { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; margin: 0 0 10px; font-size: 14px; }
+.sayprobe input[type=text] { width: min(60vw, 320px); }
+.sayprobe .status { color: var(--text-2); }
 .addmodel { margin: 10px 0 0; }
 .addmodel summary { list-style: none; display: inline-flex; cursor: pointer; }
 .addmodel summary::-webkit-details-marker { display: none; }
