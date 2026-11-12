@@ -82,42 +82,17 @@
       btn.addEventListener('keyup', function (e) { if ((e.key === ' ' || e.key === 'Enter') && !btn.disabled) stop(); });
       btn.addEventListener('click', function (e) { e.preventDefault(); });  // a click alone does nothing
     });
-    // A filmstrip shows as many of a recording's frames as its row has
-    // room for, spread evenly from the first to the last. The first
-    // frame's shape says how wide each one is. Only the frames shown are
-    // fetched.
+    // A filmstrip row scrolls sideways through all its frames, and only
+    // those in sight are fetched. The first to load tells the row the
+    // frames' shape, so the ones not yet fetched take the right room.
     Array.prototype.forEach.call(document.querySelectorAll('.strip[data-strip]'), function (strip) {
-      var imgs = Array.prototype.slice.call(strip.querySelectorAll('img')), shown = 0;
-      function lay() {
-        var first = imgs[0];
-        if (!first || !first.naturalWidth || !first.naturalHeight) return;
-        var gap = 3, w = strip.clientHeight * first.naturalWidth / first.naturalHeight;
-        var fit = Math.max(1, Math.floor((strip.clientWidth + gap) / (w + gap)));
-        var n = Math.min(imgs.length, fit);
-        strip.classList.toggle('full', fit <= imgs.length && n > 1);
-        if (n === shown) return;
-        shown = n;
-        var show = {};
-        for (var j = 0; j < n; j++) show[n === 1 ? 0 : Math.round(j * (imgs.length - 1) / (n - 1))] = true;
-        imgs.forEach(function (img, i) {
-          img.hidden = !show[i];
-          if (show[i] && !img.getAttribute('src')) { img.loading = 'lazy'; img.src = img.getAttribute('data-src'); }
-        });
+      var first = strip.querySelector('img');
+      function shape() {
+        if (first.naturalWidth && first.naturalHeight) strip.style.setProperty('--frame', first.naturalWidth + ' / ' + first.naturalHeight);
       }
-      imgs.forEach(function (img) {
-        // A frame the station cannot give leaves the strip to the others.
-        img.addEventListener('error', function () {
-          var i = imgs.indexOf(img);
-          if (i < 0) return;
-          imgs.splice(i, 1);
-          img.remove();
-          shown = 0;
-          lay();
-        });
-      });
-      if (imgs[0]) imgs[0].addEventListener('load', lay);
-      if (window.ResizeObserver) new ResizeObserver(lay).observe(strip); else window.addEventListener('resize', lay);
-      lay();
+      if (first) { first.addEventListener('load', shape); shape(); }
+      // A frame the station cannot give leaves the row to the others.
+      strip.addEventListener('error', function (e) { if (e.target.tagName === 'IMG') e.target.remove(); }, true);
     });
     // A select that files its form as soon as it changes, such as how
     // many records a page shows.
@@ -128,8 +103,7 @@
       });
     });
     // The Records grid and filmstrips: a slider sets the size of a card,
-    // or the height of a strip, kept per browser. A strip that changes
-    // height lays its frames out again by itself.
+    // or the height of a strip, kept per browser.
     [['cardSize', '.cards', '--card', 'station-card-size'], ['stripSize', '.strips', '--strip', 'station-strip-size']].forEach(function (s) {
       var size = document.getElementById(s[0]), box = document.querySelector(s[1]);
       if (!size || !box) return;

@@ -377,7 +377,7 @@ func (f *fullStation) rows() []row {
 		{"GET", "/records", "/records", "", ruleSigned, false, false},
 		{"GET", "/records/{sha}/play", "/records/" + f.sha + "/play", "", ruleReadA, false, false},
 		{"GET", "/records/{sha}/thumb.jpg", "/records/" + f.sha + "/thumb.jpg", "", ruleReadA, true, false},
-		{"GET", "/records/{sha}/strip/{frame}", "/records/" + f.sha + "/strip/0.jpg", "", ruleReadA, true, false},
+		{"GET", "/records/{sha}/frames/{frame}", "/records/" + f.sha + "/frames/0.jpg", "", ruleReadA, true, false},
 		{"GET", "/records/{sha}/files/{path...}", "/records/" + f.sha + "/files/x.txt", "", ruleReadA, false, false},
 		{"POST", "/records/public", "/records/public", "sha256=" + f.sha + "&public=1", ruleOwnRecord, false, false},
 		{"POST", "/records/delete", "/records/delete", "sha256=" + f.sha, ruleOwnRecord, false, false},

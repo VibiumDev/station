@@ -24,13 +24,16 @@ import (
 	"github.com/VibiumDev/station"
 )
 
-// The Filmstrip view shows a recording as a row of its frames, spread
-// evenly from the first to the last. A frame there is small, so each is
-// scaled down once and kept beside the unpacked recording.
+// The Filmstrip view shows a recording as a row of its frames, first to
+// last, that scrolls sideways. A frame there is small, so each is scaled
+// down once and kept beside the unpacked recording.
+
+// stripFrames is the most frames a strip offers of one recording. A
+// rig's recording has at most as many, so its strip is every frame; a
+// longer one is that many spread evenly from the first to the last.
+var stripFrames = 600
 
 const (
-	// StripFrames is the most frames a strip offers of one recording.
-	StripFrames = 24
 	// stripHeight is twice the height the page shows, for dense screens.
 	stripHeight = 224
 	// A file past these is no screen's picture, and is not decoded.
@@ -57,7 +60,7 @@ func StripCount(b station.Blob) int {
 	if b.Type != "application/zip" {
 		return 0
 	}
-	return min(b.Frames, StripFrames)
+	return min(b.Frames, stripFrames)
 }
 
 // stripIndex is which of n frames the i-th of a strip of k is: the first
@@ -70,11 +73,11 @@ func stripIndex(n, k, i int) int {
 	return (i*(n-1) + (k-1)/2) / (k - 1)
 }
 
-func (s *Store) stripDir(sha string) string { return s.unpackDir(sha) + ".strip" }
+func (s *Store) stripDir(sha string) string { return s.unpackDir(sha) + ".frames" }
 
 // StripFrame is the i-th frame of a recording's strip as a small JPEG.
 func (s *Store) StripFrame(ctx context.Context, b station.Blob, i int) ([]byte, error) {
-	if b.Type != "application/zip" || s.UnpackDir == "" || i < 0 || i >= StripFrames {
+	if b.Type != "application/zip" || s.UnpackDir == "" || i < 0 || i >= stripFrames {
 		return nil, ErrNoThumbnail
 	}
 	kept := filepath.Join(s.stripDir(b.SHA256), strconv.Itoa(i)+".jpg")
@@ -89,7 +92,7 @@ func (s *Store) StripFrame(ctx context.Context, b station.Blob, i int) ([]byte, 
 	if err != nil {
 		return nil, err
 	}
-	k := min(len(names), StripFrames)
+	k := min(len(names), stripFrames)
 	if i >= k {
 		return nil, ErrNoThumbnail
 	}

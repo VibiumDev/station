@@ -94,10 +94,13 @@ func TestStripOfARecording(t *testing.T) {
 	}
 	ctx := context.Background()
 	b, _ := f.store.Index.Blob(ctx, d.SHA256)
-	if StripCount(b) != StripFrames {
+	// Every frame is in the strip, in the order they were taken. The
+	// count is the trace's, so the two that are no frames are counted and
+	// then answer that there is no such frame.
+	if StripCount(b) != 32 {
 		t.Fatalf("a strip of %d from %d frames", StripCount(b), b.Frames)
 	}
-	for i, want := range map[int]int{0: 0, 12: 15, 23: 29} {
+	for i, want := range map[int]int{0: 0, 12: 12, 29: 29} {
 		data, err := f.store.StripFrame(ctx, b, i)
 		if err != nil {
 			t.Fatalf("frame %d: %v", i, err)
@@ -106,7 +109,7 @@ func TestStripOfARecording(t *testing.T) {
 			t.Errorf("frame %d: recording's frame %d at %dx%d, want %d at 90x%d", i, frame, w, h, want, stripHeight)
 		}
 	}
-	for _, i := range []int{-1, 24, 1000} {
+	for _, i := range []int{-1, 30, 31, 1000} {
 		if _, err := f.store.StripFrame(ctx, b, i); !errors.Is(err, ErrNoThumbnail) {
 			t.Errorf("frame %d: %v", i, err)
 		}
@@ -119,19 +122,19 @@ func TestStripOfARecording(t *testing.T) {
 
 	// Served to a reader, refused to a stranger, gone with the blob.
 	mux := http.NewServeMux()
-	mux.HandleFunc("GET /records/{sha}/strip/{i}", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("GET /records/{sha}/frames/{i}", func(w http.ResponseWriter, r *http.Request) {
 		var i int
 		fmt.Sscanf(r.PathValue("i"), "%d.jpg", &i)
 		f.store.ServeStrip(w, r, r.PathValue("sha"), i, principal(r))
 	})
 	f.mux = mux
-	if w := f.do("GET", "/records/"+d.SHA256+"/strip/0.jpg", nil, "X-Test-Subject", "token:ci"); w.Code != 200 || w.Header().Get("Content-Type") != "image/jpeg" || w.Header().Get("X-Content-Type-Options") != "nosniff" {
+	if w := f.do("GET", "/records/"+d.SHA256+"/frames/0.jpg", nil, "X-Test-Subject", "token:ci"); w.Code != 200 || w.Header().Get("Content-Type") != "image/jpeg" || w.Header().Get("X-Content-Type-Options") != "nosniff" {
 		t.Errorf("serve: %d %s", w.Code, w.Header().Get("Content-Type"))
 	}
-	if w := f.do("GET", "/records/"+d.SHA256+"/strip/0.jpg", nil, "X-Test-Subject", "token:other"); w.Code != 403 {
+	if w := f.do("GET", "/records/"+d.SHA256+"/frames/0.jpg", nil, "X-Test-Subject", "token:other"); w.Code != 403 {
 		t.Errorf("a stranger: %d", w.Code)
 	}
-	if w := f.do("GET", "/records/"+d.SHA256+"/strip/24.jpg", nil, "X-Test-Subject", "token:ci"); w.Code != 404 {
+	if w := f.do("GET", "/records/"+d.SHA256+"/frames/30.jpg", nil, "X-Test-Subject", "token:ci"); w.Code != 404 {
 		t.Errorf("past the last: %d", w.Code)
 	}
 	if err := f.store.Delete(ctx, station.Principal{Subject: "owner", Admin: true}, d.SHA256); err != nil {
@@ -139,6 +142,37 @@ func TestStripOfARecording(t *testing.T) {
 	}
 	if _, err := os.Stat(f.store.stripDir(d.SHA256)); err == nil {
 		t.Error("the strip should go with the blob")
+	}
+}
+
+// A recording longer than a strip may be gives that many frames, spread
+// evenly from its first to its last.
+func TestStripOfALongRecording(t *testing.T) {
+	was := stripFrames
+	stripFrames = 24
+	t.Cleanup(func() { stripFrames = was })
+	f := setup(t)
+	f.store.UnpackDir = filepath.Join(t.TempDir(), "unpacked")
+	d, w := f.upload("token:ci", filmZip(t, 30, 40, 80), "r.zip", "hld_1")
+	if w.Code != 200 {
+		t.Fatalf("upload: %d %s", w.Code, w.Body)
+	}
+	ctx := context.Background()
+	b, _ := f.store.Index.Blob(ctx, d.SHA256)
+	if StripCount(b) != 24 {
+		t.Fatalf("a strip of %d from %d frames", StripCount(b), b.Frames)
+	}
+	for i, want := range map[int]int{0: 0, 12: 15, 23: 29} {
+		data, err := f.store.StripFrame(ctx, b, i)
+		if err != nil {
+			t.Fatalf("frame %d: %v", i, err)
+		}
+		if frame, _, _ := frameOf(t, data); frame != want {
+			t.Errorf("frame %d: recording's frame %d, want %d", i, frame, want)
+		}
+	}
+	if _, err := f.store.StripFrame(ctx, b, 24); !errors.Is(err, ErrNoThumbnail) {
+		t.Errorf("past the last: %v", err)
 	}
 }
 
