@@ -459,17 +459,18 @@ func NewID(prefix string) string {
 // docs/specs/jams.md.
 type Jam struct {
 	ID        string    `json:"id"`
-	Subject   string    `json:"subject"` // who started it
-	DeviceID  string    `json:"device"`  // "<rig id>/<name>"
-	Model     string    `json:"model"`   // the agent model's name on Settings
-	Prompt    string    `json:"prompt"`  // the first prompt
-	Mode      string    `json:"mode"`    // "check", "run", or "" when the model picks
-	Status    string    `json:"status"`  // running, done, stopped, failed
-	Took      string    `json:"took"`    // "check" or "run", once the model has chosen
-	Result    string    `json:"result"`  // passed, failed, inconclusive, completed, not_completed
-	Summary   string    `json:"summary"` // the model's explanation of the result
-	HoldID    string    `json:"hold"`    // the hold the jam drove the device on
-	Actions   int       `json:"actions"` // tool calls made
+	Subject   string    `json:"subject"`         // who started it
+	DeviceID  string    `json:"device"`          // "<rig id>/<name>"
+	Model     string    `json:"model"`           // the agent model's name on Settings
+	Prompt    string    `json:"prompt"`          // the first prompt
+	Title     string    `json:"title,omitempty"` // a few words for the prompt, from the model; empty until it answers
+	Mode      string    `json:"mode"`            // "check", "run", or "" when the model picks
+	Status    string    `json:"status"`          // running, done, stopped, failed
+	Took      string    `json:"took"`            // "check" or "run", once the model has chosen
+	Result    string    `json:"result"`          // passed, failed, inconclusive, completed, not_completed
+	Summary   string    `json:"summary"`         // the model's explanation of the result
+	HoldID    string    `json:"hold"`            // the hold the jam drove the device on
+	Actions   int       `json:"actions"`         // tool calls made
 	TokensIn  int       `json:"tokens_in"`
 	TokensOut int       `json:"tokens_out"`
 	Error     string    `json:"error,omitempty"`

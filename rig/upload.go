@@ -22,7 +22,7 @@ type Recording struct {
 	Body     io.Reader
 	Size     int64
 	SHA256   string // lowercase hex
-	Name     string // a file name hint, such as hold.zip
+	Name     string // a file name hint, such as rec_9f3c0a11.zip
 	Type     string // the media type; application/octet-stream when empty
 	DeviceID string // the device, under this station's rig id
 	HoldID   string // the hold it records, when it records one

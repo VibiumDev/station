@@ -205,6 +205,48 @@ func TestLoginAndLevels(t *testing.T) {
 	}
 }
 
+// A write that stands on a tailnet identity must come from the station's
+// own pages: the identity rides along whichever site's page sent it. A
+// token is in a header another site cannot set.
+func TestIdentityWritesAreSameOrigin(t *testing.T) {
+	db, err := sqlite.Open(":memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	who := func(ctx context.Context, remoteAddr string) (string, string, []string, error) {
+		return "root@example.com", "Root", nil, nil
+	}
+	a := newAuth(&Config{Allow: []string{"root@example.com"}}, db, who, false, false)
+	for _, c := range []struct {
+		name   string
+		method string
+		header [2]string
+		bearer bool
+		ok     bool
+	}{
+		{"a client that is no browser", "POST", [2]string{}, false, true},
+		{"the station's own page", "POST", [2]string{"Origin", "https://example.com"}, false, true},
+		{"its own page, by the browser's word", "POST", [2]string{"Sec-Fetch-Site", "same-origin"}, false, true},
+		{"another site's form", "POST", [2]string{"Origin", "https://evil.example"}, false, false},
+		{"another site, by the browser's word", "POST", [2]string{"Sec-Fetch-Site", "cross-site"}, false, false},
+		{"another host on the same site", "DELETE", [2]string{"Sec-Fetch-Site", "same-site"}, false, false},
+		{"a token from anywhere", "POST", [2]string{"Origin", "https://evil.example"}, true, true},
+		{"a read from anywhere", "GET", [2]string{"Sec-Fetch-Site", "cross-site"}, false, true},
+	} {
+		r := httptest.NewRequest(c.method, "https://example.com/jams", nil)
+		if c.header[0] != "" {
+			r.Header.Set(c.header[0], c.header[1])
+		}
+		if c.bearer {
+			r.Header.Set("Authorization", "Bearer anything")
+		}
+		if got := a.csrfOK(r); got != c.ok {
+			t.Errorf("%s: allowed %v, want %v", c.name, got, c.ok)
+		}
+	}
+}
+
 // A tailnet identity on --allow is an admin and becomes a user; one an
 // admin added signs in as that user; a stranger is nobody.
 func TestTailnetIdentitiesAreUsers(t *testing.T) {

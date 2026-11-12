@@ -1,14 +1,24 @@
-/* The viewer's look: Roadie's, in three themes. Served by the station
-   and by a Roadie host alike. */
-  :root { --page-bg:#1a1a1a; --kbd-bg:#222; --kbd-key:rgba(255,255,255,0.12); --kbd-key-active:rgba(255,255,255,0.25); --kbd-text:#fff; --kbd-border:transparent; }
-  :root[data-theme="light"] { --page-bg:#e7e5e4; --kbd-bg:#d6d3d1; --kbd-key:rgba(255,255,255,0.85); --kbd-key-active:rgba(255,255,255,0.55); --kbd-text:#1c1917; --kbd-border:rgba(0,0,0,0.08); }
-  @media (prefers-color-scheme:light) { :root:not([data-theme="dark"]) { --page-bg:#e7e5e4; --kbd-bg:#d6d3d1; --kbd-key:rgba(255,255,255,0.85); --kbd-key-active:rgba(255,255,255,0.55); --kbd-text:#1c1917; --kbd-border:rgba(0,0,0,0.08); } }
-  /* The toolbar and its menu, in the same three themes. */
-  :root { --ui-btn:rgba(50,50,50,0.9); --ui-btn-border:rgba(255,255,255,0.15); --ui-icon:#ccc; --ui-panel:rgba(50,50,50,0.95); --ui-text:#fff; --ui-muted:#aaa; --ui-ctl:#333; --ui-ctl-text:#888; --ui-ctl-border:#555; --ui-ctl-on:#444; --ui-ctl-on-text:#fff; --ui-accent:#6af; --ui-btn2:#444; --ui-btn2-border:#666; --ui-danger:#633; --ui-danger-border:#955; --ui-danger-text:#fff; --ui-divider:rgba(255,255,255,0.1); --ui-error:#f99; color-scheme:dark; }
-  :root[data-theme="light"] { --ui-btn:rgba(255,255,255,0.9); --ui-btn-border:rgba(0,0,0,0.15); --ui-icon:#444; --ui-panel:rgba(255,255,255,0.97); --ui-text:#1c1917; --ui-muted:#78716c; --ui-ctl:#f5f5f4; --ui-ctl-text:#777; --ui-ctl-border:#c8c4bf; --ui-ctl-on:#fff; --ui-ctl-on-text:#0c0a09; --ui-accent:#2f7fe0; --ui-btn2:#fff; --ui-btn2-border:#c8c4bf; --ui-danger:#fbe3e3; --ui-danger-border:#e0a0a0; --ui-danger-text:#8b1e1e; --ui-divider:rgba(0,0,0,0.1); --ui-error:#c0392b; color-scheme:light; }
-  @media (prefers-color-scheme:light) { :root:not([data-theme="dark"]) { --ui-btn:rgba(255,255,255,0.9); --ui-btn-border:rgba(0,0,0,0.15); --ui-icon:#444; --ui-panel:rgba(255,255,255,0.97); --ui-text:#1c1917; --ui-muted:#78716c; --ui-ctl:#f5f5f4; --ui-ctl-text:#777; --ui-ctl-border:#c8c4bf; --ui-ctl-on:#fff; --ui-ctl-on-text:#0c0a09; --ui-accent:#2f7fe0; --ui-btn2:#fff; --ui-btn2-border:#c8c4bf; --ui-danger:#fbe3e3; --ui-danger-border:#e0a0a0; --ui-danger-text:#8b1e1e; --ui-divider:rgba(0,0,0,0.1); --ui-error:#c0392b; color-scheme:light; } }
-  .tbtn { background:var(--ui-btn); border:1px solid var(--ui-btn-border); color:var(--ui-icon); }
-  .tbtn.live { background:rgba(180,40,40,0.95); color:#fff; }
+/* The device viewer's look: the colors and type of Vibium's pages
+   (tokens.css) on a full-screen page with a toolbar and a menu. Served by
+   the station and by a Roadie host alike. */
+
+@import url("tokens.css");
+
+  /* The on-screen keyboard: keys a step lighter than their tray on dark,
+     white on a grey tray on light. */
+  :root { --kbd-bg:var(--surface); --kbd-key:var(--line-card); --kbd-key-active:var(--line-strong); --kbd-text:var(--text); --kbd-border:transparent; --live:#C53030; }
+  :root[data-theme="light"] { --kbd-bg:var(--surface-2); --kbd-key:var(--bg-band); --kbd-key-active:var(--line-strong); --kbd-border:var(--line); }
+  @media (prefers-color-scheme:light) { :root:not([data-theme="dark"]) { --kbd-bg:var(--surface-2); --kbd-key:var(--bg-band); --kbd-key-active:var(--line-strong); --kbd-border:var(--line); } }
+
+  :focus-visible { outline:2px solid var(--accent); outline-offset:2px; }
+
+  /* The toolbar's buttons, as the pages' icon buttons are. */
+  .tbtn { box-sizing:border-box; display:flex; align-items:center; justify-content:center; width:36px; height:36px; padding:0;
+    border-radius:8px; cursor:pointer; text-decoration:none; background:var(--surface); border:1px solid var(--line-strong);
+    color:var(--text-2); font:500 11px var(--mono); }
+  .tbtn:hover { border-color:var(--text-3); color:var(--text); }
+  .tbtn.live { background:var(--live); border-color:var(--live); color:#fff; }
+  .tbtn.held { border-color:var(--accent); color:var(--accent); }
   .tbtn.busy { animation:tbbusy 1.2s ease-in-out infinite; cursor:progress; }
   /* While Roadie turns the screen: the picture greyed, a note at its top
      (the menu Roadie clicks is in the middle), and input held back (see
@@ -17,29 +27,74 @@
   #feed.turning { cursor:progress !important; filter:grayscale(0.7) brightness(0.7); }
   #turnNote { position:absolute; display:none; justify-content:center; align-items:flex-start;
     pointer-events:none; z-index:9; }
-  #turnNote span { margin-top:16px; padding:8px 14px; border-radius:6px; background:rgba(0,0,0,0.75); color:#fff;
-    font-family:monospace; font-size:0.85em; }
+  #turnNote span { margin-top:16px; padding:8px 14px; border-radius:8px; background:rgba(0,0,0,0.75); color:#fff;
+    font:13px var(--mono); }
   @keyframes tbbusy { 50% { opacity:0.35; } }
-  #qslider { background:var(--ui-panel); border:1px solid var(--ui-btn-border); color:var(--ui-text); }
-  #qslider select { background:var(--ui-ctl); color:var(--ui-text); border:1px solid var(--ui-ctl-border); }
-  .seg button { background:var(--ui-ctl); color:var(--ui-ctl-text); border:1px solid var(--ui-ctl-border); }
-  .seg button.on { background:var(--ui-ctl-on); color:var(--ui-ctl-on-text); border-color:var(--ui-accent); }
-  .btn2 { background:var(--ui-btn2); color:var(--ui-ctl-on-text); border:1px solid var(--ui-btn2-border); }
-  .danger { background:var(--ui-danger); color:var(--ui-danger-text); border:1px solid var(--ui-danger-border); }
-  .qhelp { background:var(--ui-ctl); color:var(--ui-icon); border:1px solid var(--ui-btn2-border); }
-  .qhelp[aria-expanded="true"] { background:var(--ui-ctl-on); color:var(--ui-ctl-on-text); }
-  .hint { color:var(--ui-muted); }
-  .err { color:var(--ui-error); }
-  .divider { border-top:1px solid var(--ui-divider); }
-  #overlay { position:absolute; inset:0; background:rgba(0,0,0,0.85); color:#fff; font-family:monospace; font-size:1.2em;
+
+  /* The menu: a panel like the pages' menus, with one setting to a row.
+     Where it sits is the script's to say (positionPanel): it sets and
+     clears top, bottom, left and right on the element, so none of them
+     may be set here. */
+  #qslider { box-sizing:border-box; position:absolute; z-index:21; padding:12px 14px 4px; border-radius:12px;
+    background:var(--surface); border:1px solid var(--line-card); box-shadow:0 8px 24px rgba(0,0,0,0.25);
+    color:var(--text-2); font:13px/1.3 var(--sans); white-space:nowrap; -webkit-font-smoothing:antialiased; }
+  .qrow { display:flex; align-items:center; gap:10px; margin:0 0 8px; }
+  .qrow.divider { border-top:1px solid var(--line); padding-top:10px; margin-top:2px; }
+  /* A second line of a setting, and a note under one, start where the
+     controls do: past the label and the gap. */
+  .qrow.sub { margin:-2px 0 8px 86px; }
+  .qnote { margin:-2px 0 8px 86px; max-width:260px; white-space:normal; }
+  .qlabel { min-width:76px; font:600 13px var(--sans); color:var(--text); }
+  .qcheck { display:flex; align-items:center; gap:6px; cursor:pointer; }
+  .qval { min-width:3em; text-align:right; font:12px var(--mono); color:var(--text-3); }
+  #qslider input[type=range] { width:130px; margin:0; vertical-align:middle; accent-color:var(--accent); }
+  #qslider input[type=range].short { width:100px; }
+  #qslider input[type=checkbox], #qslider input[type=radio] { width:15px; height:15px; margin:0; accent-color:var(--accent); }
+  #qslider select { box-sizing:border-box; min-height:26px; padding:2px 8px; border-radius:8px; border:1px solid var(--line-strong);
+    background:var(--bg); color:var(--text); font:13px var(--sans); }
+  /* One choice of a few: the chosen one takes the accent, as the pages'
+     theme picker does. */
+  .seg { display:flex; gap:0; }
+  .seg button { box-sizing:border-box; min-height:26px; margin:0 0 0 -1px; border:1px solid var(--line-strong); background:transparent;
+    color:var(--text-muted); font:500 13px var(--sans); cursor:pointer; }
+  .seg button:first-child { margin-left:0; }
+  .seg button:hover { color:var(--text); }
+  .seg button.on { position:relative; z-index:1; border-color:var(--accent); color:var(--text);
+    background:color-mix(in srgb, var(--accent) 14%, transparent); }
+  .btn2 { box-sizing:border-box; min-height:26px; border:1px solid var(--line-strong); background:transparent; color:var(--text);
+    font:500 13px var(--sans); cursor:pointer; }
+  .btn2:hover { border-color:var(--text-3); }
+  .danger { box-sizing:border-box; min-height:26px; border:1px solid color-mix(in srgb, var(--error-text) 50%, transparent);
+    background:var(--error-bg); color:var(--error-text); font:500 13px var(--sans); cursor:pointer; position:relative; overflow:hidden; }
+  /* The shape of the menu's buttons is the menu's. A Roadie older than
+     this look sends its rows with corners, padding and a typeface of
+     their own written on each button, which only !important overrules. */
+  #qslider button, #qslider select { font-family:var(--sans) !important; }
+  #qslider .seg button { padding:3px 11px !important; border-radius:0 !important; }
+  #qslider .seg button:first-child { border-radius:8px 0 0 8px !important; }
+  #qslider .seg button:last-child { border-radius:0 8px 8px 0 !important; }
+  #qslider .seg button:only-child { border-radius:8px !important; }
+  #qslider .btn2, #qslider .danger { padding:3px 12px !important; border-radius:8px !important; }
+  #qslider .qhelp { box-sizing:border-box; display:inline-flex; align-items:center; justify-content:center; width:22px !important; height:22px !important;
+    padding:0 !important; border-radius:50% !important; border:1px solid var(--line-strong); background:transparent; color:var(--text-muted);
+    font:500 13px/1 var(--mono) !important; cursor:pointer; }
+  #qslider .qhelp:hover { color:var(--text); border-color:var(--text-3); }
+  #qslider .qhelp[aria-expanded="true"] { background:var(--accent); border-color:var(--accent); color:var(--on-accent); }
+  .hint { color:var(--text-muted); font:13px/1.45 var(--sans); }
+  .err { color:var(--error-text); }
+  .divider { border-top:1px solid var(--line); }
+
+  #overlay { position:absolute; inset:0; background:rgba(0,0,0,0.85); color:#fff; font:15px var(--mono);
     justify-content:center; align-items:center; text-align:center; z-index:10; }
   /* No signal: a message over the picture, which stays visible (dark, in
      the target's outline) instead of being covered. */
   #overlay.notice { background:transparent; align-items:flex-start; pointer-events:none; }
-  #overlay.notice span { margin-top:16px; padding:8px 14px; border-radius:6px; background:rgba(0,0,0,0.75);
-    font-size:0.85em; max-width:80%; }
-  #toolbarNote { position:fixed; right:12px; bottom:12px; z-index:30; max-width:260px; padding:8px 12px; border-radius:6px;
-    background:var(--ui-panel); color:var(--ui-text); border:1px solid var(--ui-btn-border); font-family:monospace; font-size:0.85em;
+  #overlay.notice span { margin-top:16px; padding:8px 14px; border-radius:8px; background:rgba(0,0,0,0.75);
+    font-size:13px; max-width:80%; }
+  #rtcStats { position:absolute; left:8px; bottom:8px; z-index:11; padding:4px 7px; border-radius:6px; background:rgba(0,0,0,0.6);
+    color:#fff; font:12px var(--mono); pointer-events:none; white-space:pre; }
+  #toolbarNote { position:fixed; right:12px; bottom:12px; z-index:30; max-width:260px; padding:8px 12px; border-radius:10px;
+    background:var(--surface); color:var(--text); border:1px solid var(--line-card); font:13px var(--sans);
     transition:opacity 0.4s; }
   /* Auto-hide: the toolbar tucks off the right edge when not wanted, and
      floats over the picture when the picture needs its column. */
@@ -63,12 +118,12 @@
      overflow is set so the body's value applies to the body. Phones
      ignore a hidden overflow on the page and pan to the content, so the
      content must not be there. */
-  html { overflow:hidden; }
-  body { background:var(--page-bg); overflow:hidden; overflow:clip; }
+  html { overflow:hidden; background:var(--bg); }
+  body { background:var(--bg); color:var(--text-2); font:14px/1.4 var(--sans); overflow:hidden; overflow:clip; }
   /* The grip: where a tucked toolbar is, and a tap brings it back. On
      its side's edge, in the middle, with a hit area bigger than it. */
   #tbHandle { position:fixed; display:none; z-index:19; cursor:pointer; -webkit-tap-highlight-color:transparent; touch-action:none; }
-  #tbHandle::after { content:''; position:absolute; background:var(--ui-icon); opacity:0.55; border-radius:3px; }
+  #tbHandle::after { content:''; position:absolute; background:var(--text-3); opacity:0.55; border-radius:3px; }
   #toolbar.tucked ~ #tbHandle { display:block; }
   body.tb-right #tbHandle, body.tb-left #tbHandle { top:50%; width:28px; height:88px; margin-top:-44px; }
   body.tb-right #tbHandle { right:0; }
@@ -85,9 +140,9 @@
   @keyframes spin { to { transform:rotate(360deg); } }
   #onscreen-kbd .kr { display:flex; gap:3px; margin-bottom:3px; justify-content:center; }
   #onscreen-kbd .kr:last-child { margin-bottom:0; }
-  #onscreen-kbd .kk { width:40px; height:40px; flex-shrink:0; background:var(--kbd-key); color:var(--kbd-text); border:1px solid var(--kbd-border); border-radius:5px; font-family:-apple-system,BlinkMacSystemFont,sans-serif; font-size:12px; font-weight:400; cursor:pointer; display:flex; align-items:center; justify-content:center; padding:0; }
+  #onscreen-kbd .kk { width:40px; height:40px; flex-shrink:0; background:var(--kbd-key); color:var(--kbd-text); border:1px solid var(--kbd-border); border-radius:6px; font:400 12px var(--sans); cursor:pointer; display:flex; align-items:center; justify-content:center; padding:0; }
   #onscreen-kbd .kk:active, #onscreen-kbd .kk.pressed { background:var(--kbd-key-active); }
-  #onscreen-kbd .kk.mod-active { background:var(--kbd-key-active); box-shadow:0 0 0 1.5px rgba(255,255,255,0.5); }
+  #onscreen-kbd .kk.mod-active { background:var(--kbd-key-active); box-shadow:0 0 0 1.5px var(--accent); }
   #onscreen-kbd .kk.blank { visibility:hidden; }
   #onscreen-kbd .kk.space { width:255px; }
   #onscreen-kbd .kgap { width:12px; flex-shrink:0; }
@@ -95,15 +150,14 @@
   @media (min-width:1200px) { .numpad { display:flex; } }
 
   /* The station's hold: who has the device, shown by the settings button. */
-  #holdStatus { color:var(--ui-muted); font-family:monospace; font-size:0.8em; padding:2px 6px; max-width:36px; overflow:hidden;
+  #holdStatus { color:var(--text-muted); font:12px var(--mono); padding:2px 6px; max-width:36px; overflow:hidden;
     text-overflow:ellipsis; white-space:nowrap; text-align:center; }
   body.tb-top #holdStatus, body.tb-bottom #holdStatus { max-width:none; }
   #holdStatus:empty { display:none; }
   /* The note that the host records holds, beside the hold status: the
      word along a top or bottom bar, REC in a side bar's width. */
-  #recNote { color:#e05a4e; font-family:monospace; font-size:0.8em; padding:2px 0; width:36px; text-align:center; white-space:nowrap; cursor:help; }
+  #recNote { color:var(--error-text); font:500 12px var(--mono); padding:2px 0; width:36px; text-align:center; white-space:nowrap; cursor:help; }
   #recNote .long { display:none; }
   body.tb-top #recNote, body.tb-bottom #recNote { width:auto; padding:2px 6px; }
   body.tb-top #recNote .long, body.tb-bottom #recNote .long { display:inline; }
   body.tb-top #recNote .short, body.tb-bottom #recNote .short { display:none; }
-  .tbtn.held { color:var(--ui-accent); }

@@ -41,7 +41,9 @@ that device and 403 or 404 on device B; a watch token never gets a 2xx
 from anything that changes state, pages included; a device-bound token
 gets 403 off its device. CSRF: every POST page and every state-changing
 API call from a session without the token is 403, and the same call
-with it is not. Cookies: HttpOnly, SameSite=Lax, Secure under TLS. A
+with it is not. A tailnet identity's change sent by another site's page
+is 403, and the same change from the station's own page or from a client
+that is no browser is not. Cookies: HttpOnly, SameSite=Lax, Secure under TLS. A
 cross-origin WebSocket upgrade is 403.
 
 The matrix is the backbone: a new route added without an entry fails
@@ -137,7 +139,7 @@ it, so the history is readable later.
 
 | Phase | Tests |
 |---|---|
-| 1 | `cmd/station/e2e_test.go`: `TestAuthorizationMatrix`, `TestMatrixIsComplete`, `TestCSRFOnEveryChange`, `TestCookieFlagsAndOrigin` |
+| 1 | `cmd/station/e2e_test.go`: `TestAuthorizationMatrix`, `TestMatrixIsComplete`, `TestCSRFOnEveryChange`, `TestIdentityChangesComeFromThisStation`, `TestCookieFlagsAndOrigin` |
 | 2 | `cmd/station/records_e2e_test.go`, with `records/records_test.go` for the store's own rules |
 | 3 | `cmd/station/holds_e2e_test.go`, with `hold/hold_test.go` for the manager |
 | 4 | `cmd/station/signin_test.go`, `auth_test.go`, `tokens_test.go`, `TestNoSecretsLeakAndLockBites` in `e2e_test.go` |

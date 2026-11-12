@@ -3,7 +3,10 @@
 All calls need a signed-in session (the pages), a tailnet identity in
 tailnet mode, or `Authorization: Bearer <token>` with a token from the
 Settings page. Browser sessions send the CSRF token the page carries in
-`X-CSRF-Token` on anything but GET. Errors are `{"error": "..."}`.
+`X-CSRF-Token` on anything but GET. A tailnet identity has no such token:
+its changes are taken from the station's own pages and from clients that
+are no browser, and a request another site's page sent is 403. A token is
+taken from anywhere. Errors are `{"error": "..."}`.
 
 A device id is `<rig id>/<name>`, such as `rig_3f9a1c02/phone`, and
 appears in paths as two segments.
@@ -291,9 +294,10 @@ characters. A jam's `notes` event holds what it was given.
 | Method and path | What it does |
 |---|---|
 | `GET /v1/models` | The models on Settings, each with `name`, `role` (`agent`, `listen` or `say`), `provider`, `model` and `default`; never a key |
-| `POST /v1/jams` | Starts a jam: `{"prompt": ..., "device": "<rig>/<name>", "model": "<name>", "mode": "check" or "run"}`; the device may be left out when one is online, the model when one agent model is set, and the mode when the model should decide from the prompt. Needs control. Returns the jam, 201 |
-| `GET /v1/jams` | The caller's jams, newest first; every jam for the owner |
+| `POST /v1/jams` | Starts a jam: `{"prompt": ..., "device": "<rig>/<name>", "model": "<name>", "mode": "check" or "run", "title": ...}`; the device may be left out when one is online, the model when one agent model is set, the mode when the model should decide from the prompt, and the title when the model should write it. Needs control. Returns the jam, 201 |
+| `GET /v1/jams` | The caller's jams, newest first; every jam for the owner. A jam has a `title`, a few words its model gave the prompt, once the model has answered; a prompt of 48 characters or fewer is its own title |
 | `GET /v1/jams/{id}` | `{"jam": ..., "events": [...], "recording": "<sha256>"}`: the jam, its transcript, and its recording when there is one |
+| `POST /v1/jams/{id}/title` | `{"title": ...}`: names the jam, while it runs or after, in at most 120 characters. An empty title takes it away. For whoever may steer the jam: its starter, an admin, or someone at jam level on its device. Returns the jam |
 | `POST /v1/jams/{id}/turns` | `{"prompt": ...}`: a follow-up on an open jam, one still running or whose last result was `inconclusive` or `not_completed`, taken up once the current prompt has its result, and answered in words when it asks nothing of the device; 409 when the jam has ended or a prompt is already waiting |
 | `GET /v1/jams/{id}/events` | The transcript as server-sent events, each with `id` (the sequence number), `event` (the kind) and `data` (the event), from the start or after `?after=<seq>` or `Last-Event-ID`; a running jam streams on until its `end`, a finished one replays and closes |
 | `POST /v1/jams/{id}/stop` | Ends the jam, which releases the device |
@@ -389,12 +393,12 @@ the caller may see.
 | `/setup/{token}` | A new or reset user's setup link, single-use and good for 24 hours: choose a password, add an authenticator from a QR code, keep ten backup codes |
 | `/account/setup` | Adding the authenticator, for a user who signed in by password without one yet, or replacing it |
 | `/` | The prompt box once an agent model is set and Jams is on, with a device picker when more than one device is online and a model picker when more than one agent model is set, and example prompts for the device's kind; sends to `/devices` otherwise |
-| `/jams` | The jams so far, newest first: the prompt, which opens the jam, when, who, the device, the model, and the result |
-| `/jams/{id}` | One jam: its transcript as it happens, the viewer watching the device beside it while it runs with Stop and Drive on top of the picture, a box for a follow-up prompt, and Play for its recording when it ends. The page follows the transcript only while its end is on screen |
+| `/jams` | The jams so far, newest first: the jam's title, which opens the jam and shows the whole prompt under the pointer, when, who, the device, the model, and the result. A jam with no title shows the start of its prompt |
+| `/jams/{id}` | One jam: its transcript as it happens, the viewer watching the device beside it while it runs with Stop and Drive on top of the picture, a box for a follow-up prompt, and Play for its recording when it ends. For someone who may steer the jam the heading is the title's field: click it and type, Enter or leaving it saves, Escape puts it back, and an empty one gives the title up. The page follows the transcript only while its end is on screen |
 | `/devices` | The devices: rig, kind, online, who controls it, Drive, Watch, Records |
 | `/devices/{rig}/{name}/drive` | The viewer: Roadie's shell with the WebRTC picture, sound, touch and keyboard, the mic, the settings panel, the on-screen keyboard, stats, the device's own buttons and panels from its extras, and Hold and Release. One link for driving and watching: a free device is taken, a held one is watched, and Hold takes it; Release ends the hold and returns to the device list. `?watch=1` watches only; on a touchscreen two fingers moving together turn the wheel and a pinch becomes Apple Maps' one-finger zoom on a device whose pointer stands in for touch (see Roadie's `/view`); `?minimal=1`, `?input=`, `?transport=`, `?ice=relay`, `?toolbar=`, `?align=`, `?zoom=` (a percentage, or `fit` for the room the picture has, the default on a phone or tablet) and `?stats=1` as on a Roadie |
 | `/devices/{rig}/{name}/view` | The same viewer looking only: it never takes the device and sends no input, for following someone else's session or a jam; a wheel in its toolbar leads to Drive, and the driving page's eye leads here; `?minimal=1` for a frame |
-| `/records` | The Record Store: every recording, screenshot and log the caller may read, newest first, or one device's with `?device=`, as cards showing each recording's last frame, or with `?view=list` as a list with a tiny thumbnail that opens the record; searched with `?q=` (words and `#tags`), `?golden=1` for golden records alone, in pages of `?n=` 10, 25, 50 or 100 (`?page=`), the view and page size last chosen remembered by the browser in cookies; the tags in use as chips; Play, Download, a star that makes a record golden or plain, make a file public or private, and Delete, which is held for a moment rather than clicked |
+| `/records` | The Record Store: every recording, screenshot and log the caller may read, newest first, or one device's with `?device=`, as cards showing each recording's last frame, or with `?view=list` as a list with a tiny thumbnail that opens the record; searched with `?q=` (words and `#tags`), `?golden=1` for golden records alone, in pages of `?n=` 10, 25, 50 or 100 (`?page=`), the view and page size last chosen remembered by the browser in cookies; the tags in use as chips; Play, Download, a star that makes a record golden or plain, and in the list Share, which makes a file public and is lit while it is, and Delete; Share and Delete are held for a moment rather than clicked |
 | `/records/{sha256}/thumb.jpg` | A recording's last frame, from its unpacked copy, or a screenshot itself; the same readers as the file |
 | `/records/{sha256}/files/{path}` | One file out of a recording's unpacked copy, such as `trace.trace` or `resources/<frame>`; the same readers as the file |
 | `/records/{sha256}/play` | A recording in the embedded [Record Player](https://github.com/VibiumDev/record-player), framed under the station's own bar with the golden star, the record's tags to edit, Download and a full-page link; the player is served by the station at `/viewer/player/app/?record=<sha256>.zip` and fetches the file with the browser's own session. In the frame it runs with `chrome=hidden`, without its own logo, title and theme switch, and paints with the station's colors and theme, which it reads from the framing page; `?full` is the same frame filling the window, without the bar |
@@ -404,8 +408,12 @@ the caller may see.
 The viewer's files are at `/viewer/shell.js`, `/viewer/shell.css`,
 `/viewer/webrtc.js` and the audio worklets; a Roadie serves the same
 files from this module, so its `/view` and the station's page are one.
+The viewer and the pages take their colors and fonts from one file,
+`/viewer/tokens.css`.
 A device's extras (`GET /v1/devices/{rig}/{name}/extras.js`, relayed from
 the path the device announced) add its own buttons and settings rows.
+The rows use the viewer's classes (`qrow`, `qlabel`, `seg`, `btn2`,
+`danger`, `qhelp`, `qval`) and carry no styling of their own.
 The viewer takes `?ice=relay` (media through TURN only) and
 `?transport=mjpeg` (the MJPEG fallback through the station from the
 start, with input over the relayed HID WebSocket); the fallback also

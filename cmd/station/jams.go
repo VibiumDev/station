@@ -16,6 +16,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode/utf8"
 
 	"github.com/VibiumDev/station"
 	"github.com/VibiumDev/station/hold"
@@ -46,6 +47,10 @@ type liveJam struct {
 	subs    map[chan station.JamEvent]struct{}
 	unwatch func()
 	grace   int64 // when the jam ends after a settled result, Unix milliseconds, while a watcher may still keep it open
+	// A title is written by one hand at a time, and once a person has
+	// written it the model's answer is not wanted.
+	titleMu sync.Mutex
+	titled  bool
 }
 
 // watched says whether anyone follows the jam's events right now, which
@@ -139,7 +144,7 @@ func examplesFor(kind string) []string {
 // start begins a jam for a principal: the record, the token, the
 // subprocess and the loop. Empty device or model mean the only online
 // device and the default agent model.
-func (m *jams) start(ctx context.Context, p station.Principal, prompt, deviceID, modelName, mode string) (station.Jam, error) {
+func (m *jams) start(ctx context.Context, p station.Principal, prompt, deviceID, modelName, mode, title string) (station.Jam, error) {
 	prompt = strings.TrimSpace(prompt)
 	if prompt == "" || len(prompt) > jamMaxPrompt {
 		return station.Jam{}, fmt.Errorf("a prompt is a sentence or a few, up to %d characters", jamMaxPrompt)
@@ -182,7 +187,11 @@ func (m *jams) start(ctx context.Context, p station.Principal, prompt, deviceID,
 	if problem := jam.ChatToolsProblem(model.Provider, model.Model); problem != "" {
 		return station.Jam{}, errors.New(problem)
 	}
-	j := station.Jam{ID: station.NewID("jam"), Subject: p.Subject, DeviceID: dev.ID, Model: model.Name, Prompt: prompt, Mode: mode, Status: "running", CreatedAt: time.Now()}
+	title, terr := cleanTitle(title)
+	if terr != nil {
+		return station.Jam{}, terr
+	}
+	j := station.Jam{ID: station.NewID("jam"), Subject: p.Subject, DeviceID: dev.ID, Model: model.Name, Prompt: prompt, Title: title, Mode: mode, Status: "running", CreatedAt: time.Now()}
 	if err := m.s.db.CreateJam(ctx, j); err != nil {
 		return station.Jam{}, err
 	}
@@ -190,11 +199,14 @@ func (m *jams) start(ctx context.Context, p station.Principal, prompt, deviceID,
 	if err != nil {
 		return station.Jam{}, err
 	}
-	lj := &liveJam{j: j, subs: map[chan station.JamEvent]struct{}{}}
+	lj := &liveJam{j: j, subs: map[chan station.JamEvent]struct{}{}, titled: title != ""}
 	m.mu.Lock()
 	m.live[j.ID] = lj
 	m.mu.Unlock()
 	lj.emit(m, jam.Event{Kind: "start", Text: dev.ID + " with " + model.Name})
+	if title == "" {
+		go m.title(lj, model.Client(), prompt)
+	}
 	stationNotes, personNotes := m.s.jamNotes(ctx, p)
 	if ev, ok := jam.NotesEvent(stationNotes, personNotes); ok {
 		lj.emit(m, ev)
@@ -223,6 +235,72 @@ func (m *jams) start(ctx context.Context, p station.Principal, prompt, deviceID,
 		m.finish(lj, res, nil)
 	}()
 	return j, nil
+}
+
+// title gives a jam the few words the Jams list shows for it, from the
+// jam's own model. A jam runs the same without one, so a failure is
+// logged and nothing more. The request's tokens count toward the jam's
+// while it runs.
+func (m *jams) title(lj *liveJam, model *jam.Model, prompt string) {
+	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+	defer cancel()
+	title, usage, err := model.Title(ctx, prompt)
+	if err != nil {
+		fmt.Printf("jam %s: no title: %v\n", lj.j.ID, err)
+		return
+	}
+	lj.titleMu.Lock()
+	if lj.titled {
+		lj.titleMu.Unlock()
+		return
+	}
+	lj.mu.Lock()
+	lj.j.Title = title
+	running := lj.j.Status == "running"
+	lj.mu.Unlock()
+	err = m.s.db.SetJamTitle(ctx, lj.j.ID, title)
+	lj.titleMu.Unlock()
+	if err != nil {
+		fmt.Printf("jam %s: title: %v\n", lj.j.ID, err)
+	}
+	if running && usage.Prompt+usage.Completion > 0 {
+		lj.emit(m, jam.Event{Kind: "usage", In: usage.Prompt, Out: usage.Completion})
+	}
+}
+
+// jamMaxTitle is how long a title a person writes may be.
+const jamMaxTitle = 120
+
+// cleanTitle makes what a person typed a title: one line, within the limit.
+func cleanTitle(title string) (string, error) {
+	title = strings.Join(strings.Fields(title), " ")
+	if utf8.RuneCountInString(title) > jamMaxTitle {
+		return "", fmt.Errorf("a title is at most %d characters", jamMaxTitle)
+	}
+	return title, nil
+}
+
+// retitle writes a jam's title on a person's word, running or ended. An
+// empty title takes it away, and the list shows the start of the prompt
+// again. The model's own answer no longer counts after this.
+func (m *jams) retitle(ctx context.Context, id, title string) (string, error) {
+	title, err := cleanTitle(title)
+	if err != nil {
+		return "", err
+	}
+	m.mu.Lock()
+	lj := m.live[id]
+	m.mu.Unlock()
+	if lj == nil {
+		return title, m.s.db.SetJamTitle(ctx, id, title)
+	}
+	lj.titleMu.Lock()
+	defer lj.titleMu.Unlock()
+	lj.titled = true
+	lj.mu.Lock()
+	lj.j.Title = title
+	lj.mu.Unlock()
+	return title, m.s.db.SetJamTitle(ctx, id, title)
 }
 
 // recordJam starts Vibium's recording of a jam and returns what ends it
@@ -832,7 +910,7 @@ func (s *server) startJamForm(w http.ResponseWriter, r *http.Request, p station.
 		s.render(w, "home", s.homeData(r, p, map[string]any{"Message": "A read-only sign-in can watch jams, not start them.", "Prompt": r.FormValue("prompt")}))
 		return
 	}
-	j, err := s.jams.start(r.Context(), p, r.FormValue("prompt"), r.FormValue("device"), r.FormValue("model"), r.FormValue("mode"))
+	j, err := s.jams.start(r.Context(), p, r.FormValue("prompt"), r.FormValue("device"), r.FormValue("model"), r.FormValue("mode"), "")
 	if err != nil {
 		s.render(w, "home", s.homeData(r, p, map[string]any{"Message": err.Error(), "Prompt": r.FormValue("prompt")}))
 		return
@@ -866,6 +944,9 @@ func (s *server) jamPage(w http.ResponseWriter, r *http.Request, p station.Princ
 		"DeviceLabel": label, "When": j.CreatedAt.Local().Format("Jan 2, 2006 15:04"), "Took": j.Took, "Message": r.URL.Query().Get("msg")}
 	if j.Result != "" {
 		data["Word"] = (jam.Verdict{Status: j.Result}).Word()
+	}
+	if _, _, err := s.jams.act(ctx, p, j.ID); err == nil && !p.ReadOnly {
+		data["CanAct"], data["MaxTitle"] = true, jamMaxTitle
 	}
 	if live {
 		data["GraceUntil"] = s.jams.graceUntil(j.ID)
@@ -982,13 +1063,13 @@ func (s *server) startJam(w http.ResponseWriter, r *http.Request, p station.Prin
 		return
 	}
 	var body struct {
-		Prompt, Device, Model, Mode string
+		Prompt, Device, Model, Mode, Title string
 	}
 	if err := json.NewDecoder(io.LimitReader(r.Body, 16384)).Decode(&body); err != nil {
-		apiError(w, http.StatusBadRequest, "a JSON object with prompt, and device, model and mode when wanted")
+		apiError(w, http.StatusBadRequest, "a JSON object with prompt, and device, model, mode and title when wanted")
 		return
 	}
-	j, err := s.jams.start(r.Context(), p, body.Prompt, body.Device, body.Model, body.Mode)
+	j, err := s.jams.start(r.Context(), p, body.Prompt, body.Device, body.Model, body.Mode, body.Title)
 	if errors.Is(err, station.ErrForbidden) {
 		apiError(w, http.StatusForbidden, err.Error())
 		return
@@ -1073,6 +1154,30 @@ func (s *server) keepJam(w http.ResponseWriter, r *http.Request, p station.Princ
 		return
 	}
 	apiJSON(w, map[string]any{"kept": s.jams.keep(id), "jam": j})
+}
+
+// setJamTitle is POST /v1/jams/{id}/title: {"title": ...}. Whoever may
+// steer the jam may name it, while it runs and after.
+func (s *server) setJamTitle(w http.ResponseWriter, r *http.Request, p station.Principal) {
+	if s.jamsOff(w, r) {
+		return
+	}
+	id := r.PathValue("id")
+	if _, _, err := s.jams.act(r.Context(), p, id); err != nil {
+		jamActError(w, err)
+		return
+	}
+	var body struct{ Title string }
+	if err := json.NewDecoder(io.LimitReader(r.Body, 4096)).Decode(&body); err != nil {
+		apiError(w, http.StatusBadRequest, "a JSON object with title")
+		return
+	}
+	if _, err := s.jams.retitle(r.Context(), id, body.Title); err != nil {
+		apiError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	j, _, _ := s.jams.get(r.Context(), p, id)
+	apiJSON(w, map[string]any{"jam": j})
 }
 
 // stopJam is POST /v1/jams/{id}/stop.

@@ -3,6 +3,7 @@ package sqlite
 import (
 	"context"
 	"errors"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -196,5 +197,46 @@ func TestBlobTagsAndGolden(t *testing.T) {
 	}
 	if counts, _ = d.BlobTagCounts(ctx); len(counts) != 1 || counts[0].N != 1 {
 		t.Errorf("tags after a delete: %+v", counts)
+	}
+}
+
+// A rig's record named after its hold takes the rec_ name at the next
+// start; a jam's record, an upload under a name of its own and a record
+// already renamed stay as they are.
+func TestHoldRecordsAreRenamed(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "station.db")
+	d, err := Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx := context.Background()
+	names := map[string][2]string{ // sha's first letter: hold, name
+		"a": {"hld_9f3c0a11", "hld_9f3c0a11.zip"},
+		"b": {"hld_9f3c0a11", "jam_307e57cc.zip"},
+		"c": {"hld_0badcafe", "calc.zip"},
+		"d": {"hld_0badcafe", "rec_0badcafe.zip"},
+		"e": {"", "hld_77777777.zip"},
+		"f": {"hld_12345678", "hld_87654321.zip"},
+	}
+	for k, n := range names {
+		if err := d.PutBlob(ctx, station.Blob{SHA256: k + repeat("0", 63), Size: 1, Type: "application/zip", Name: n[1], Uploader: "rig:rig_1", PubKey: "k", HoldID: n[0], CreatedAt: time.Now()}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	d.Close()
+	for range 2 { // the second start finds nothing left to rename
+		if d, err = Open(path); err != nil {
+			t.Fatal(err)
+		}
+		for k, n := range names {
+			want := n[1]
+			if k == "a" {
+				want = "rec_9f3c0a11.zip"
+			}
+			if b, err := d.Blob(ctx, k+repeat("0", 63)); err != nil || b.Name != want {
+				t.Errorf("%s (hold %q): name %q, want %q (%v)", n[1], n[0], b.Name, want, err)
+			}
+		}
+		d.Close()
 	}
 }

@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strconv"
+	"strings"
 	"testing"
 	"time"
 
@@ -121,6 +122,21 @@ func TestRecordsPublicAndPrivate(t *testing.T) {
 	admin := callers[8]
 	if admin.name != "admin" {
 		t.Fatalf("caller 8 is %s", admin.name)
+	}
+	// The list has no Access column. Share sits with the other actions,
+	// held like Delete: lit on a shared record, where it makes it private.
+	list := f.do(admin, "GET", "/records?view=list&n=100", "", true).Body.String()
+	if strings.Contains(list, "<th>Access</th>") || strings.Contains(list, "make public") {
+		t.Error("the list still has an Access column")
+	}
+	if !strings.Contains(list, `name="sha256" value="`+public+`"><input type="hidden" name="public" value="0"><button class="small icon hold share on" type="button" data-hold`) {
+		t.Error("a shared record has no lit Share button that makes it private")
+	}
+	if !strings.Contains(list, `name="public" value="1"><button class="small icon hold share" type="button" data-hold title="Hold to share`) {
+		t.Error("a private record has no held Share button")
+	}
+	if !strings.Contains(list, " · shared</span>") {
+		t.Error("a shared record is not marked in the list")
 	}
 	if w := f.do(admin, "POST", "/records/public", "sha256="+public+"&public=0", true); w.Code != http.StatusSeeOther {
 		t.Fatalf("making private: %d %s", w.Code, w.Body)

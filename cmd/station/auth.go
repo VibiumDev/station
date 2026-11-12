@@ -206,8 +206,8 @@ func (a *auth) identityUser(ctx context.Context, login, name string, tags []stri
 // an error that says which step it is at.
 func (a *auth) Authenticate(r *http.Request) (station.Principal, error) {
 	ctx := r.Context()
-	if h := r.Header.Get("Authorization"); strings.HasPrefix(strings.ToLower(h), "bearer ") {
-		secret := strings.TrimSpace(h[7:])
+	if hasBearer(r) {
+		secret := strings.TrimSpace(r.Header.Get("Authorization")[7:])
 		tok, err := a.db.LookupToken(ctx, secret)
 		if err != nil {
 			return station.Principal{}, station.ErrUnauthenticated
@@ -244,6 +244,11 @@ func (a *auth) Authenticate(r *http.Request) (station.Principal, error) {
 		}
 	}
 	return station.Principal{}, station.ErrUnauthenticated
+}
+
+// hasBearer says whether the request names a token.
+func hasBearer(r *http.Request) bool {
+	return strings.HasPrefix(strings.ToLower(r.Header.Get("Authorization")), "bearer ")
 }
 
 // drop forgets the request's session.
@@ -374,13 +379,16 @@ func (a *auth) sessionOf(r *http.Request) *session {
 	return s
 }
 
-// csrfOK checks a state-changing request from a browser session: the
-// token must come in the X-CSRF-Token header or the csrf form field. Token
-// and identity requests carry no cookie and need none.
+// csrfOK checks a state-changing request. From a browser session it
+// carries the session's token in the X-CSRF-Token header or the csrf form
+// field. With a bearer token it needs nothing more: no other site can set
+// that header. Anything else stands on a tailnet identity, which a browser
+// brings to every request whichever site's page sent it, so it must come
+// from this station's own pages.
 func (a *auth) csrfOK(r *http.Request) bool {
 	s := a.sessionOf(r)
 	if s == nil {
-		return true
+		return hasBearer(r) || new(http.CrossOriginProtection).Check(r) == nil
 	}
 	got := r.Header.Get("X-CSRF-Token")
 	if got == "" {

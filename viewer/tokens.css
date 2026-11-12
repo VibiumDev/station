@@ -1,0 +1,41 @@
+/* The colors, fonts and type of Vibium's pages, as the web style guide
+   has them: dark and quiet, warm off-white text, one orange accent. One
+   file, so the pages and the device viewer cannot drift apart: pages.css
+   and shell.css both start from it. Light mode follows the system, or the
+   page's toggle. */
+
+@font-face { font-family: 'IBM Plex Sans'; font-style: normal; font-weight: 400 700; font-display: swap; src: url(plex-sans.woff2) format('woff2'); }
+@font-face { font-family: 'IBM Plex Mono'; font-style: normal; font-weight: 400; font-display: swap; src: url(plex-mono-400.woff2) format('woff2'); }
+@font-face { font-family: 'IBM Plex Mono'; font-style: normal; font-weight: 500; font-display: swap; src: url(plex-mono-500.woff2) format('woff2'); }
+@font-face { font-family: 'Rajdhani'; font-style: normal; font-weight: 600; font-display: swap; src: url(rajdhani-600.woff2) format('woff2'); }
+@font-face { font-family: 'Rajdhani'; font-style: normal; font-weight: 700; font-display: swap; src: url(rajdhani-700.woff2) format('woff2'); }
+
+:root {
+  --bg: #0F1013; --bg-band: #13151A; --surface: #17191E; --surface-2: #15171B;
+  --line: #23262D; --line-card: #2A2D35; --line-strong: #3A3E47;
+  --text: #F3F1EC; --text-2: #C9CCD3; --text-3: #A9ADB6; --text-muted: #8D929C; --on-accent: #121214;
+  --accent: #F5822A; --link: #F5822A; --link-hover: #F9AE75;
+  --success: #2EB67D; --success-text: #9FD6A8; --error-bg: rgba(229, 72, 77, 0.12); --error-text: #FF9A9E;
+  --sans: 'IBM Plex Sans', system-ui, sans-serif; --mono: 'IBM Plex Mono', ui-monospace, monospace; --head: 'Rajdhani', 'IBM Plex Sans', sans-serif;
+  color-scheme: dark;
+}
+/* Light: the docs site's light theme (vibium.com/docs), its stone greys
+   and its orange, so the pages and the docs read as one. */
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme="dark"]) {
+    --bg: #fafaf9; --bg-band: #ffffff; --surface: #f5f5f4; --surface-2: #e7e5e4;
+    --line: rgba(0, 0, 0, 0.08); --line-card: #e7e5e4; --line-strong: #c8c4bf;
+    --text: #0c0a09; --text-2: #1c1917; --text-3: #44403c; --text-muted: #78716c; --on-accent: #0c0a09;
+    --accent: #FF6700; --link: #C45000; --link-hover: #0c0a09;
+    --success: #22c55e; --success-text: #15803d; --error-bg: rgba(239, 68, 68, 0.10); --error-text: #b91c1c;
+    color-scheme: light;
+  }
+}
+:root[data-theme="light"] {
+  --bg: #fafaf9; --bg-band: #ffffff; --surface: #f5f5f4; --surface-2: #e7e5e4;
+  --line: rgba(0, 0, 0, 0.08); --line-card: #e7e5e4; --line-strong: #c8c4bf;
+  --text: #0c0a09; --text-2: #1c1917; --text-3: #44403c; --text-muted: #78716c; --on-accent: #0c0a09;
+  --accent: #FF6700; --link: #C45000; --link-hover: #0c0a09;
+  --success: #22c55e; --success-text: #15803d; --error-bg: rgba(239, 68, 68, 0.10); --error-text: #b91c1c;
+  color-scheme: light;
+}

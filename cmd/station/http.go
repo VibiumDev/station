@@ -222,6 +222,7 @@ func (s *server) handler() http.Handler {
 	mux.Handle("POST /v1/jams/{id}/turns", s.api(station.ActionControl, s.jamTurn))
 	mux.Handle("GET /v1/jams/{id}/events", s.api(station.ActionView, s.jamEvents))
 	mux.Handle("POST /v1/jams/{id}/stop", s.api(station.ActionControl, s.stopJam))
+	mux.Handle("POST /v1/jams/{id}/title", s.api(station.ActionControl, s.setJamTitle))
 	mux.Handle("POST /v1/jams/{id}/keep", s.api(station.ActionControl, s.keepJam))
 	// The Record Store: Blossom at the root, the station's own calls under /v1/records.
 	mux.HandleFunc("PUT /upload", func(w http.ResponseWriter, r *http.Request) { s.records.ServeUpload(w, r) })

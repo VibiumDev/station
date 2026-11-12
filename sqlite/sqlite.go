@@ -150,6 +150,7 @@ CREATE TABLE IF NOT EXISTS jams (
 	device_id  TEXT NOT NULL,
 	model      TEXT NOT NULL,
 	prompt     TEXT NOT NULL,
+	title      TEXT NOT NULL DEFAULT '',
 	mode       TEXT NOT NULL DEFAULT '',
 	status     TEXT NOT NULL,
 	took       TEXT NOT NULL DEFAULT '',
@@ -284,6 +285,7 @@ func (d *DB) migrate() error {
 		{"users", "totp_at", "INTEGER NOT NULL DEFAULT 0"},
 		{"users", "totp_step", "INTEGER NOT NULL DEFAULT 0"},
 		{"users", "jam_notes", "TEXT NOT NULL DEFAULT ''"},
+		{"jams", "title", "TEXT NOT NULL DEFAULT ''"},
 	} {
 		has, err := d.hasColumn(c.table, c.column)
 		if err != nil {
@@ -294,6 +296,12 @@ func (d *DB) migrate() error {
 				return fmt.Errorf("schema: add %s.%s: %w", c.table, c.column, err)
 			}
 		}
+	}
+	// A rig's record of a hold was named after the hold, hld_<hex>.zip,
+	// until rigs called it rec_<hex>.zip: the ones kept from before take
+	// the new name. A record under any other name is left alone.
+	if _, err := d.db.Exec(`UPDATE blobs SET name = 'rec_' || substr(name, 5) WHERE hold_id LIKE 'hld\_%' ESCAPE '\' AND name = hold_id || '.zip'`); err != nil {
+		return fmt.Errorf("schema: record names: %w", err)
 	}
 	// Tokens from before levels were read-only or control: watch or drive.
 	if _, err := d.db.Exec(`UPDATE api_tokens SET level = CASE WHEN read_only = 1 THEN 'watch' ELSE 'drive' END WHERE level = ''`); err != nil {
