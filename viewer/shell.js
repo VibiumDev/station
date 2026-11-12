@@ -429,15 +429,17 @@
     var st = qslider.style;
     st.left = st.right = st.top = st.bottom = '';
     var room;
+    // The menu sits the same distance from the toolbar's buttons on every
+    // side: 2px into the toolbar's own padding.
     if (toolbarSide === 'top') {
-      st.top = 'calc(100% + 2px)'; st.left = '8px';
-      room = window.innerHeight - tr.bottom - 10;
+      st.top = 'calc(100% - 2px)'; st.left = '8px';
+      room = window.innerHeight - tr.bottom - 6;
     } else if (toolbarSide === 'bottom') {
-      st.bottom = 'calc(100% + 2px)'; st.left = '8px';
-      room = tr.top - 10;
+      st.bottom = 'calc(100% - 2px)'; st.left = '8px';
+      room = tr.top - 6;
     } else {
       st.top = '8px';
-      if (window.innerWidth - tr.right > 230) st.left = 'calc(100% + 2px)';
+      if (window.innerWidth - tr.right > 230) st.left = 'calc(100% - 2px)';
       else st.right = 'calc(100% - 2px)';
       room = window.innerHeight - tr.top - 18;
     }
@@ -1331,14 +1333,10 @@
   var role = watchOnly ? 'watch' : 'drive';
   var lookAgain = null;
   var holdStatus = $('holdStatus');
-  var recNote = $('recNote'); // REC while a session is live on a host that records them
+  var recNote = $('recNote'); // REC while this page drives a session on a host that records them
   var takeBtn = $('takeBtn'), releaseBtn = $('releaseBtn');
   function holding() { return !station || (!!hold && !released); }
   function driving() { return !watchOnly && (!station || (holding() && role === 'drive')); }
-  if (watchOnly && !station && holdStatus) {
-    holdStatus.textContent = 'watching';
-    holdStatus.title = 'Watching only: this page sends no input';
-  }
   function wanted() { return role === 'drive' ? ['view', 'input'] : ['view']; }
   function request(method, path, data) {
     return fetch(path, opts({method: method, headers: {'Content-Type': 'application/json'}, body: data ? JSON.stringify(data) : undefined})).then(function (r) {
@@ -1354,11 +1352,14 @@
   // Hold button with a note while you watch.
   function showHold() {
     if (!station) return;
-    var watching = hold && observer && role === 'watch';
-    if (recNote) recNote.style.display = cfg.recorded && hold && !released ? 'inline-block' : 'none';
-    var alone = watchOnly && hold && !observer;  // a watcher holding a free device, view only
-    holdStatus.textContent = watching ? 'watching ' + hold.subject : alone ? 'watching' : '';
-    holdStatus.title = watching ? 'Watching ' + hold.subject + '’s session' + (watchOnly ? '' : '; press Hold to take the device') : alone ? 'Watching; nobody is driving the device' : '';
+    // A page that could drive and is watching someone else's session says
+    // whose. A watching page says nothing: it is plainly watching.
+    var waiting = hold && observer && role === 'watch' && !watchOnly;
+    // What a host records is the driver's: their input, and the screen
+    // and sound while they drive. A watcher is not told REC.
+    if (recNote) recNote.style.display = cfg.recorded && hold && !released && !observer && role === 'drive' ? 'inline-block' : 'none';
+    holdStatus.textContent = waiting ? 'watching ' + hold.subject : '';
+    holdStatus.title = waiting ? 'Watching ' + hold.subject + '’s session; press Hold to take the device' : '';
     takeBtn.style.display = role === 'watch' && !watchOnly ? 'flex' : 'none';
     // Release ends a hold of one's own; on a watching page the same
     // button stops watching, which ends a view-only hold or just leaves
