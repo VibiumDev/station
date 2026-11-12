@@ -14,7 +14,7 @@
   --bg: #0F1013; --bg-band: #13151A; --surface: #17191E; --surface-2: #15171B;
   --line: #23262D; --line-card: #2A2D35; --line-strong: #3A3E47;
   --text: #F3F1EC; --text-2: #C9CCD3; --text-3: #A9ADB6; --text-muted: #8D929C; --on-accent: #121214;
-  --accent: #F5822A; --link: #F5B544; --link-hover: #FFD27F;
+  --accent: #F5822A; --link: #F5822A; --link-hover: #F9AE75;
   --success: #2EB67D; --success-text: #9FD6A8; --error-bg: rgba(229, 72, 77, 0.12); --error-text: #FF9A9E;
   --sans: 'IBM Plex Sans', system-ui, sans-serif; --mono: 'IBM Plex Mono', ui-monospace, monospace; --head: 'Rajdhani', 'IBM Plex Sans', sans-serif;
   color-scheme: dark;
