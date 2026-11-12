@@ -17,7 +17,25 @@ import (
 // modelsData adds the AI section's data to the Settings page's.
 func (s *server) modelsData(data map[string]any) {
 	models, _ := s.jams.models.List()
-	data["Models"], data["Providers"], data["Roles"], data["Efforts"] = models, jam.Providers, jam.Roles, jam.Efforts
+	data["Models"], data["Efforts"] = models, jam.Efforts
+	// The page's three parts, each its own list with the one in use.
+	parts := []aiPart{
+		{Role: jam.RoleAgent, Title: "Agent", Add: "Add an agent model",
+			About: "The brain of a jam: it reasons, reads the screenshots and calls the tools. A jam uses the one in use unless another is picked when it starts."},
+		{Role: jam.RoleSay, Title: "Say", Add: "Add a voice",
+			About: "Speaks into the device when a jam says something. Piper speaks on this machine with no key; a cloud voice needs its key."},
+		{Role: jam.RoleListen, Title: "Listen", Add: "Add a listen model",
+			About: "Turns the device's sound into text when a jam listens."},
+	}
+	for i := range parts {
+		parts[i].Providers = jam.ProvidersFor(parts[i].Role)
+		for _, c := range models {
+			if c.Role == parts[i].Role {
+				parts[i].Models = append(parts[i].Models, c)
+			}
+		}
+	}
+	data["AIParts"], data["AIDir"] = parts, s.jams.models.Dir
 	data["JamsOn"], data["JamsPossible"], data["Vibium"], data["VibiumMissing"] = s.jams.on(), s.jams.possible(), s.jams.vibium, s.jams.missing
 	data["JamVideo"] = s.jams.video()
 	piper := s.piper.status()
@@ -58,6 +76,13 @@ func (s *server) addModel(w http.ResponseWriter, r *http.Request, p station.Prin
 		}
 	}
 	s.render(w, "settings", s.settingsData(r, p, map[string]any{"Message": msg}))
+}
+
+// aiPart is one part of the AI section: the models of one role.
+type aiPart struct {
+	Role, Title, About, Add string
+	Models                  []jam.ModelConfig
+	Providers               []jam.Provider
 }
 
 // piperVoice is POST /settings/piper/voice: the voice the station's own

@@ -10,6 +10,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/VibiumDev/station/jam"
 )
 
 // fakePiperServer is a stand-in for python -m piper.http_server: /info
@@ -124,5 +126,64 @@ func TestPiperRunner(t *testing.T) {
 	}
 	if piperAnswers(url) || p.URL() != "" || p.builtin() != nil {
 		t.Error("the server outlived the station")
+	}
+}
+
+// Settings' AI section is three parts, Agent, Say and Listen, each with
+// its own models, the one in use marked, Use on the others, and an add
+// form that names its role and offers only that role's providers.
+func TestAIPartsOnSettings(t *testing.T) {
+	f := newFullStation(t)
+	m := f.s.jams.models
+	for _, c := range []jam.ModelConfig{
+		{Name: "gpt", Role: jam.RoleAgent, Provider: "openai", Model: "gpt-5.6-sol", APIKey: "sk-a", Default: true},
+		{Name: "claude", Role: jam.RoleAgent, Provider: "anthropic", Model: "claude-x", APIKey: "sk-b"},
+		{Name: "tts", Role: jam.RoleSay, Provider: "openai", Model: "gpt-4o-mini-tts", APIKey: "sk-c"},
+		{Name: "stt", Role: jam.RoleListen, Provider: "openai", Model: "gpt-transcribe", APIKey: "sk-d"},
+	} {
+		if err := m.Save(c); err != nil {
+			t.Fatal(err)
+		}
+	}
+	m.Builtin = func() []jam.ModelConfig {
+		return []jam.ModelConfig{{Name: piperModel, Role: jam.RoleSay, Provider: "piper-server", Model: "en_US-danny-low"}}
+	}
+	ck, csrf := f.session(f.users["admin"].ID, stageSignedIn)
+	admin := caller{name: "admin", decor: withCookie(ck), csrf: csrf, signed: true, admin: true, person: true}
+	html := f.do(admin, "GET", "/settings", "", true).Body.String()
+	part := func(role string) string {
+		i := strings.Index(html, `<section class="aipart" id="ai-`+role+`">`)
+		if i < 0 {
+			t.Fatalf("no %s part", role)
+		}
+		j := strings.Index(html[i:], "</section>")
+		return html[i : i+j]
+	}
+	agent, say, listen := part("agent"), part("say"), part("listen")
+	if !(strings.Index(html, `id="ai-agent"`) < strings.Index(html, `id="ai-say"`) && strings.Index(html, `id="ai-say"`) < strings.Index(html, `id="ai-listen"`)) {
+		t.Error("the parts are not Agent, Say, Listen")
+	}
+	// The test station has an agent model of its own, so two are offered.
+	if !strings.Contains(agent, "<b>gpt</b> <span class=\"pill inuse\">in use</span>") || strings.Count(agent, ">Use</button>") != 2 {
+		t.Error("Agent: gpt should be in use, the others offered with Use")
+	}
+	// Piper, on this machine, is in use where no voice was marked.
+	if !strings.Contains(say, "<b>piper</b> <span class=\"pill inuse\">in use</span>") || !strings.Contains(say, "<b>tts</b><span") {
+		t.Error("Say: piper should be in use over tts")
+	}
+	if strings.Contains(listen, "piper") || !strings.Contains(listen, "<b>stt</b> <span class=\"pill inuse\">in use</span>") {
+		t.Error("Listen: stt alone, in use")
+	}
+	for role, want := range map[string]string{"agent": "anthropic", "say": "piper-server", "listen": "openai"} {
+		p := part(role)
+		if !strings.Contains(p, `<input type="hidden" name="role" value="`+role+`">`) || !strings.Contains(p, `<option value="`+want+`">`) {
+			t.Errorf("%s: its form lacks the role or %s", role, want)
+		}
+		if !strings.Contains(p, `id="help-ai-`+role+`"`) || !strings.Contains(p, "set-up-jams.md#") {
+			t.Errorf("%s: no help with a guide link", role)
+		}
+	}
+	if strings.Contains(say, `value="anthropic"`) || strings.Contains(listen, `value="piper-server"`) {
+		t.Error("a part offers a provider its role cannot use")
 	}
 }

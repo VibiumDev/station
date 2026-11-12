@@ -242,11 +242,11 @@ func (c ModelConfig) Validate() error {
 	if !ok {
 		return errors.New("unknown provider")
 	}
-	if p.Role != "" && p.Role != c.Role {
-		return fmt.Errorf("%s is for the %s role only", p.Label, p.Role)
+	if !p.For(c.Role) {
+		return fmt.Errorf("%s cannot be a %s model", p.Label, c.Role)
 	}
 	if strings.TrimSpace(c.Model) == "" {
-		if p.Role == RoleSay {
+		if p.ID == "piper-server" {
 			return errors.New("the model is the voice's name, such as en_US-lessac-medium")
 		}
 		return errors.New("the model needs the provider's name for it")

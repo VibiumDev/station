@@ -3,7 +3,12 @@
 A jam is a prompt on the station's front page that a model carries out on
 a device. This guide sets up the models a jam uses: the agent that drives
 the device, and the voices that listen and speak. Everything here is on
-**Settings**, under **AI models**, except installing Vibium and Piper.
+**Settings**, under **AI**, except installing Vibium and Piper.
+
+The **AI** section has three parts: **Agent**, **Say** and **Listen**.
+Each keeps as many models as you add, and one of them is **in use**: the
+one a jam takes. **Use** on another row puts it in that place. Each part's
+**?** says where its models and voices are kept.
 
 ## 1. Vibium
 
@@ -15,18 +20,17 @@ restart the station after installing or replacing it.
 
 ## 2. An agent model
 
-The agent reasons, reads the screenshots and calls the tools. Under **AI
-models**, fill in the form:
+The agent reasons, reads the screenshots and calls the tools. Under
+**Agent**, press **Add an agent model** and fill in the form:
 
 - **name**: any name, such as `gpt`.
-- **role**: `agent`.
 - **provider**: OpenAI, Anthropic, Google Gemini, xAI, or a server of your
   own that speaks OpenAI's API.
 - **model**: the provider's name for the model.
 - **API key**: seen once as it is typed, then kept in a file under `ai/`
   in the data directory that only the station's user can read.
 
-**Add model** asks the model for one word, so a wrong key shows at once.
+**Add** asks the model for one word, so a wrong key shows at once.
 With an agent model set, Jams turn on and the prompt appears on the
 front page.
 
@@ -36,14 +40,16 @@ A jam can hear the device and speak into it when a **listen** model and a
 **say** model are set. Vibium makes these calls itself, with the settings
 the station hands it. The agent's key is not passed on.
 
-With an OpenAI key:
+A jam speaks with Piper on this machine when Piper is installed, as step
+4 shows. With an OpenAI key, a cloud voice and listening work too:
 
-| Role | Provider | Model |
-|------|----------|-------|
-| listen | OpenAI | `gpt-transcribe` |
-| say | OpenAI | `gpt-4o-mini-tts` |
+| Part | Button | Provider | Model |
+|------|--------|----------|-------|
+| Say | **Add a voice** | OpenAI | `gpt-4o-mini-tts` |
+| Listen | **Add a listen model** | OpenAI | `gpt-transcribe` |
 
-Each needs the key typed again: models do not share keys.
+Each needs the key typed again: models do not share keys. Listening on
+this machine is not offered yet.
 
 ## 4. Speak with Piper, on this machine
 
@@ -83,29 +89,31 @@ does not include it: you install it once, and the station finds it.
 3. Restart the station: `sudo systemctl restart station`.
 
 The station starts Piper's server on a free port of `127.0.0.1`, loads a
-voice, and restarts the server if it stops. On **Settings**, under **AI
-models**:
+voice, and restarts the server if it stops. On **Settings**, under
+**AI**, in **Say**:
 
-- A say model named `piper` is listed without adding it. It is the say
-  default unless another say model is marked default.
-- With more than one voice installed, the `piper` row has a list of
-  them. **Use** switches the voice, and the server loads it at once.
-- The **Piper** row says where Piper's server runs and how many voices
-  it has, or why it is not running. The server's own output is in `piper/server.log`.
+- A voice named `piper` is listed without adding it. It is in use unless
+  another voice was marked in use.
+- With more than one Piper voice installed, the `piper` row has a list
+  of them. **Use voice** switches the voice, and the server loads it at
+  once.
+- The **Piper** line under the list says where Piper's server runs and
+  how many voices it has, or why it is not running. The server's own
+  output is in `piper/server.log`.
 
-A cloud voice is still a say model of its own, as in step 3. Marking it
-default makes jams speak with it instead.
+A cloud voice is a model of its own, as in step 3. **Use** on its row
+makes jams speak with it instead.
 
-A Piper server on another machine is a say model with provider
-**Piper (say)**, the voice's name as its model and the server's address
-as its base URL.
+A Piper server on another machine is a voice with provider **Piper
+server**, the voice's name as its model and the server's address as its
+base URL.
 
 ## When something is off
 
 - No prompt on the front page: no agent model is set, or Jams are off on
   Settings.
 - **Vibium** on Settings says not found: see step 1.
-- No `piper` model on Settings: the **Piper** row says why. Piper's
+- No `piper` voice on Settings: the **Piper** line under **Say** says why. Piper's
   server takes some seconds to load a voice after a restart.
 - A jam's say fails with `engine_failed: no Piper server answered`: the
   server stopped, or a base URL names another address.

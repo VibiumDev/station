@@ -122,7 +122,7 @@ func TestPiperServerModel(t *testing.T) {
 	for _, role := range []string{RoleAgent, RoleListen} {
 		c := piper
 		c.Role = role
-		if err := c.Validate(); err == nil || !strings.Contains(err.Error(), "say role only") {
+		if err := c.Validate(); err == nil || !strings.Contains(err.Error(), "cannot be a "+role+" model") {
 			t.Errorf("as %s: %v", role, err)
 		}
 	}
@@ -179,5 +179,28 @@ func TestBuiltinPiper(t *testing.T) {
 	}
 	if c, _ := s.Default(RoleSay); c.Name != "tts" {
 		t.Errorf("with no Piper: %s", c.Name)
+	}
+}
+
+// Each role offers the providers Vibium can use in it.
+func TestProvidersFor(t *testing.T) {
+	ids := func(ps []Provider) string {
+		var out []string
+		for _, p := range ps {
+			out = append(out, p.ID)
+		}
+		return strings.Join(out, " ")
+	}
+	if got := ids(ProvidersFor(RoleAgent)); got != "openai anthropic google xai openai-compatible local" {
+		t.Errorf("agent: %s", got)
+	}
+	if got := ids(ProvidersFor(RoleSay)); got != "openai piper-server" {
+		t.Errorf("say: %s", got)
+	}
+	if got := ids(ProvidersFor(RoleListen)); got != "openai" {
+		t.Errorf("listen: %s", got)
+	}
+	if err := (ModelConfig{Name: "c", Role: RoleSay, Provider: "anthropic", Model: "m", APIKey: "k"}).Validate(); err == nil {
+		t.Error("an Anthropic say model was taken")
 	}
 }
