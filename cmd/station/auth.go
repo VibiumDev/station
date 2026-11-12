@@ -569,7 +569,10 @@ func (a *auth) deviceOf(r *http.Request, userID string) (string, bool) {
 // login checks a login and password and starts a session at the stage the
 // user is at: a code due when they have an authenticator, setting one up
 // when they have none yet. Misses count against the address and, for a
-// browser without this user's device cookie, against the login.
+// browser without this user's device cookie, against the login. The right
+// password forgets none of them. Only the step after it does, or someone
+// with the password could guess at the code for ever by typing the
+// password again between guesses.
 func (a *auth) login(w http.ResponseWriter, r *http.Request, login, password, next string) (stage, bool) {
 	u, hash, err := a.db.Credentials(r.Context(), login)
 	g := a.gateFor(r, login, u.ID)
@@ -581,7 +584,6 @@ func (a *auth) login(w http.ResponseWriter, r *http.Request, login, password, ne
 		a.miss(g)
 		return 0, false
 	}
-	a.pass(g)
 	a.drop(r)
 	st := stageCode
 	if !u.TwoFactor {

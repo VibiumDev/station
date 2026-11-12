@@ -292,6 +292,55 @@ func TestWrongCodesEndTheAttempt(t *testing.T) {
 	}
 }
 
+// Wrong codes add up however often the right password is typed between
+// them. Someone who has the password gets five guesses at the code from
+// an address, and the login's growing wait from every other, not two
+// fresh guesses for each time the password passes.
+func TestRightPasswordDoesNotForgetWrongCodes(t *testing.T) {
+	s, _ := signinServer(t)
+	a, ctx := s.auth, context.Background()
+	owner, _ := s.db.UserByLogin(ctx, station.OwnerLogin)
+	s.db.SetSecondFactor(ctx, owner.ID, newTOTPSecret(), time.Now())
+	// As if the login's wait had passed each time: this is about what
+	// is counted, not how long the wait is.
+	waited := func() {
+		a.mu.Lock()
+		if m := a.logins["owner"]; m != nil {
+			m.last = m.last.Add(-backoff(m.n))
+		}
+		a.mu.Unlock()
+	}
+	wrong := 0
+	for round := 0; round < 4; round++ {
+		waited()
+		lw := httptest.NewRecorder()
+		_, ok := a.login(lw, httptest.NewRequest("POST", "/login", nil), "owner", "owner-secret-123", "/")
+		if ok != (wrong < maxFailures) {
+			t.Fatalf("after %d wrong codes the right password passed: %v", wrong, ok)
+		}
+		for i := 0; ok && i < 2 && wrong < maxFailures; i++ {
+			waited()
+			if ok, _, _ := a.code(httptest.NewRecorder(), cookies(lw, httptest.NewRequest("POST", "/login/code", nil)), "000000"); ok {
+				t.Fatal("a wrong code passed")
+			}
+			wrong++
+		}
+	}
+	if wrong != maxFailures || !a.throttled("addr:192.0.2.1") {
+		t.Errorf("%d wrong codes between right passwords, and the address is not locked", wrong)
+	}
+	// From another address the right password is let through to the code
+	// once the login's wait has passed, and the misses stay counted.
+	r := httptest.NewRequest("POST", "/login", nil)
+	r.RemoteAddr = "198.51.100.7:4000"
+	if _, ok := a.login(httptest.NewRecorder(), r, "owner", "owner-secret-123", "/"); !ok {
+		t.Error("the right password from another address, after the wait, was refused")
+	}
+	if m := a.logins["owner"]; m == nil || m.n != maxFailures {
+		t.Errorf("the login's misses: %+v, want %d", m, maxFailures)
+	}
+}
+
 // A login's wait doubles with each miss after the first two and is
 // forgotten after a quiet lockout; a browser with the user's device
 // cookie from an earlier sign-in is never held up by it, and is measured
@@ -360,14 +409,24 @@ func TestLoginBackoffAndDeviceCookie(t *testing.T) {
 	if _, ok := a.login(httptest.NewRecorder(), from("POST", "/login"), "owner", "owner-secret-123", "/"); ok {
 		t.Error("the right password passed during the wait")
 	}
-	// The owner's own browser is not held up, and its sign-in forgets
-	// the misses.
+	// The owner's own browser is not held up. Its password alone forgets
+	// nothing; its sign-in, once the code has passed, forgets the misses.
 	r := from("POST", "/login")
 	r.AddCookie(device)
-	if st, ok := a.login(httptest.NewRecorder(), r, "owner", "owner-secret-123", "/"); !ok || st != stageCode {
+	lw = httptest.NewRecorder()
+	if st, ok := a.login(lw, r, "owner", "owner-secret-123", "/"); !ok || st != stageCode {
 		t.Errorf("the device cookie did not vouch: %v %v", st, ok)
 	}
-	if a.loginWait("owner") != 0 {
+	if m := a.logins["owner"]; m == nil || m.n != 3 {
+		t.Errorf("the right password forgot the login's misses: %+v", m)
+	}
+	r = cookies(lw, from("POST", "/login/code"))
+	r.AddCookie(device)
+	code, _ = totpCode(secret, totpStep(time.Now())+1) // the step after the one already used
+	if ok, _, _ := a.code(httptest.NewRecorder(), r, code); !ok {
+		t.Fatal("code, with the device cookie")
+	}
+	if a.loginWait("owner") != 0 || a.logins["owner"] != nil {
 		t.Error("a sign-in did not clear the login's misses")
 	}
 	// The device cookie is measured on its own: five misses with it from
