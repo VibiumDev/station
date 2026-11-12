@@ -147,7 +147,7 @@ it, so the history is readable later.
 | 6 | Roadie's `auth_routes_test.go`, `allowlist_test.go`, `auth_test.go`, with `rig/rig_test.go` for the gate |
 | 7 | `cmd/station/fuzz_test.go`, `records/fuzz_test.go` |
 | 8 | `.github/workflows/ci.yml` runs the station's tests under `-race`; the matrix's completeness check |
-| Review | `TestStoredFilesCannotActAsPages` in `cmd/station/records_e2e_test.go`, `TestServedFilesAreSandboxed` and `TestRemovedRigKeyIsRefused` in `records/records_test.go`, `TestHiddenArgumentsNeverReachVibium` in `jam/loop_test.go`, `TestUnpackLimitHoldsForAnyDeclaredSize` and `TestThumbnailStaysInsideItsRecording` in `records/thumb_test.go`, `TestRightPasswordDoesNotForgetWrongCodes`, `TestGuessesSentTogetherAreCountedFirst`, `TestPasswordChecksTakeTurns` and `TestNextWithATabGoesHome` in `cmd/station/signin_test.go`, `TestBoundTokenKeepsToItsDevice` in `cmd/station/holds_e2e_test.go` |
+| Review | `TestStoredFilesCannotActAsPages` in `cmd/station/records_e2e_test.go`, `TestServedFilesAreSandboxed` and `TestRemovedRigKeyIsRefused` in `records/records_test.go`, `TestHiddenArgumentsNeverReachVibium` in `jam/loop_test.go`, `TestUnpackLimitHoldsForAnyDeclaredSize` and `TestThumbnailStaysInsideItsRecording` in `records/thumb_test.go`, `TestRightPasswordDoesNotForgetWrongCodes`, `TestGuessesSentTogetherAreCountedFirst`, `TestPasswordChecksTakeTurns` and `TestNextWithATabGoesHome` and `TestSignInFromAnotherSiteIsRefused` in `cmd/station/signin_test.go`, `TestBoundTokenKeepsToItsDevice` in `cmd/station/holds_e2e_test.go` |
 
 ## Found and fixed
 
@@ -261,3 +261,8 @@ A review of the whole station by a second reader, after the phases:
   listed and deleted the records it had uploaded: the store matched
   the signature to the record's key and never asked whether the rig was
   still enrolled. It asks now.
+- The sign-in form took a post from any site. A page elsewhere could
+  post a login of its own and leave that login's session in the
+  visitor's browser in place of theirs, which signed them out. The
+  form takes a post from the station's own page, or from a client
+  that is no browser.

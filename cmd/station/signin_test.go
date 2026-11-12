@@ -661,6 +661,36 @@ func TestSafeNext(t *testing.T) {
 	}
 }
 
+// The sign-in form is posted by the station's own page, or by a client
+// that is no browser. Another site's post is refused before the password
+// is looked at, and sets no cookie: it would swap the visitor's session
+// for one of the other site's choosing.
+func TestSignInFromAnotherSiteIsRefused(t *testing.T) {
+	s, _ := signinServer(t)
+	post := func(header, value string) *httptest.ResponseRecorder {
+		r := form("POST", "/login", url.Values{"login": {"owner"}, "password": {"owner-secret-123"}}, nil)
+		if header != "" {
+			r.Header.Set(header, value)
+		}
+		w := httptest.NewRecorder()
+		s.loginPost(w, r)
+		return w
+	}
+	for _, c := range [][2]string{{"Origin", "https://evil.example"}, {"Sec-Fetch-Site", "cross-site"}, {"Sec-Fetch-Site", "same-site"}} {
+		if w := post(c[0], c[1]); w.Code != http.StatusForbidden || len(w.Result().Cookies()) != 0 {
+			t.Errorf("%s: %s: %d with %d cookies", c[0], c[1], w.Code, len(w.Result().Cookies()))
+		}
+	}
+	if len(s.auth.sessions) != 0 || len(s.auth.failures) != 0 {
+		t.Errorf("another site's posts left %d sessions and %d counts", len(s.auth.sessions), len(s.auth.failures))
+	}
+	for _, c := range [][2]string{{"Origin", "http://example.com"}, {"Sec-Fetch-Site", "same-origin"}, {"", ""}} {
+		if w := post(c[0], c[1]); w.Code != http.StatusSeeOther || len(w.Result().Cookies()) == 0 {
+			t.Errorf("the station's own form (%s: %s): %d", c[0], c[1], w.Code)
+		}
+	}
+}
+
 // A sign-in that came with next=/<tab>/host ends on the front page. The
 // tab would reach the browser in the Location header, and the browser
 // would drop it and go to //host.

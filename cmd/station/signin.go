@@ -58,6 +58,13 @@ func (s *server) loginPage(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *server) loginPost(w http.ResponseWriter, r *http.Request) {
+	// The form is the station's own. Another site posting a login of its
+	// choosing would leave that login's session in the visitor's browser
+	// in place of their own.
+	if new(http.CrossOriginProtection).Check(r) != nil {
+		http.Error(w, "the form has expired; go back and try again", http.StatusForbidden)
+		return
+	}
 	login := strings.TrimSpace(r.FormValue("login"))
 	next := safeNext(r.FormValue("next"))
 	st, ok := s.auth.login(w, r, login, r.FormValue("password"), next)
