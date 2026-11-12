@@ -46,6 +46,7 @@ var (
 	ErrSignature   = errors.New("bad signature")
 	ErrMalformed   = errors.New("malformed grant")
 	ErrExpired     = errors.New("grant expired")
+	ErrTooLong     = errors.New("grant lasts longer than a grant may")
 	ErrNotYetValid = errors.New("grant from the future")
 	ErrStation     = errors.New("not signed by an accepted station")
 	ErrRig         = errors.New("grant is for another rig")
@@ -202,6 +203,9 @@ func ParseGrant(ev nostr.Event) (Grant, error) {
 	if g.RigID == "" || g.DeviceID == "" || g.HoldID == "" || len(g.Scopes) == 0 || g.ExpiresAt.IsZero() {
 		return Grant{}, fmt.Errorf("%w: rig, dev, hold, scope and expiration tags are required", ErrMalformed)
 	}
+	if !PlainID(g.HoldID) {
+		return Grant{}, fmt.Errorf("%w: hold id %q", ErrMalformed, g.HoldID)
+	}
 	if _, _, ok := station.SplitDeviceID(g.DeviceID); !ok {
 		return Grant{}, fmt.Errorf("%w: device id %q", ErrMalformed, g.DeviceID)
 	}
@@ -249,6 +253,12 @@ func Verify(ev nostr.Event, v Verifier) (Grant, error) {
 	}
 	if g.IssuedAt.After(now.Add(Skew)) {
 		return Grant{}, ErrNotYetValid
+	}
+	// A grant lives GrantLifetime and is refreshed. One that claims more
+	// would hold its device, and stay on the rig's list of used grants,
+	// for as long as it says.
+	if g.ExpiresAt.After(now.Add(GrantLifetime + Skew)) {
+		return Grant{}, ErrTooLong
 	}
 	return g, nil
 }
@@ -306,7 +316,27 @@ func ParseRevocation(ev nostr.Event) (Revocation, error) {
 	if r.Rig == nostr.ZeroPK || r.HoldID == "" {
 		return Revocation{}, fmt.Errorf("%w: p and hold tags are required", ErrMalformed)
 	}
+	if !PlainID(r.HoldID) {
+		return Revocation{}, fmt.Errorf("%w: hold id %q", ErrMalformed, r.HoldID)
+	}
 	return r, nil
+}
+
+// PlainID says whether a hold's id is letters, digits, "_" and "-" and no
+// longer than 64. A rig keys its state by the id and names a recording's
+// files after it, so an id is never anything a path or a shell reads.
+func PlainID(id string) bool {
+	if id == "" || len(id) > 64 {
+		return false
+	}
+	for _, c := range []byte(id) {
+		switch {
+		case c >= 'a' && c <= 'z', c >= 'A' && c <= 'Z', c >= '0' && c <= '9', c == '_', c == '-':
+		default:
+			return false
+		}
+	}
+	return true
 }
 
 // Scheme is the Authorization scheme a relayed request carries its grant

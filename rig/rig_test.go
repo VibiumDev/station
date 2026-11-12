@@ -468,3 +468,94 @@ func TestAnnounceSaysRecorded(t *testing.T) {
 		}
 	}
 }
+
+// A grant holds its device no longer than a grant lives, and never past
+// the session the policy allows. One that claims ten years is refused, so
+// it cannot keep every other station out.
+func TestGateRefusesAGrantThatOutlivesAGrant(t *testing.T) {
+	statePath := filepath.Join(t.TempDir(), "state.json")
+	f := newGate(t, statePath)
+	other := nostr.Generate()
+	f.gate.Policy.Set(&StationEntry{Name: "hosted", Npub: Npub(other.Public()), RigID: "rig_1", Scopes: []string{"view", "input"}})
+	long, err := token.SignGrant(f.stationKey, token.Grant{Rig: f.rigKey.Public(), RigID: "rig_1", DeviceID: "rig_1/phone", Subject: "x",
+		HoldID: "hld_1", Seq: 1, Scopes: []station.Scope{station.ScopeView}, IssuedAt: f.clock, ExpiresAt: f.clock.AddDate(10, 0, 0)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.gate.Check(long, station.ScopeView); !errors.Is(err, token.ErrTooLong) {
+		t.Fatalf("a grant good for ten years: %v", err)
+	}
+	if _, held := f.gate.Current("rig_1/phone"); held {
+		t.Fatal("the refused grant holds the device")
+	}
+	if _, err := f.gate.Check(f.grant(t, other, "hld_x", 1), station.ScopeInput); err != nil {
+		t.Fatalf("the other station after it: %v", err)
+	}
+
+	// The hold's end is the session's at the latest. With a session of
+	// five minutes, a grant of ten holds the device for five.
+	g := newGate(t, filepath.Join(t.TempDir(), "state.json"))
+	g.entry.MaxSession = "5m"
+	g.gate.Policy.Set(&StationEntry{Name: "hosted", Npub: Npub(other.Public()), RigID: "rig_1", Scopes: []string{"view", "input"}})
+	if _, err := g.gate.Check(g.grant(t, g.stationKey, "hld_1", 1), station.ScopeInput); err != nil {
+		t.Fatal(err)
+	}
+	g.clock = g.clock.Add(4 * time.Minute)
+	if _, err := g.gate.Check(g.grant(t, other, "hld_x", 1), station.ScopeInput); !errors.Is(err, ErrBusy) {
+		t.Fatalf("inside the session, the other station: %v", err)
+	}
+	g.clock = g.clock.Add(2 * time.Minute)
+	if _, err := g.gate.Check(g.grant(t, other, "hld_x", 1), station.ScopeInput); err != nil {
+		t.Fatalf("past the session, the other station: %v", err)
+	}
+}
+
+// A grant taken once is refused again after a restart too: the list of
+// used grants is kept with the rest of the state.
+func TestGateRemembersUsedGrantsAcrossARestart(t *testing.T) {
+	statePath := filepath.Join(t.TempDir(), "state.json")
+	f := newGate(t, statePath)
+	ev := f.grant(t, f.stationKey, "hld_1", 1)
+	if _, err := f.gate.Check(ev, station.ScopeInput); err != nil {
+		t.Fatal(err)
+	}
+	g2 := newGate(t, statePath)
+	g2.gate.Policy, g2.gate.Key, g2.clock = f.gate.Policy, f.gate.Key, f.clock.Add(5*time.Minute)
+	if _, err := g2.gate.Check(ev, station.ScopeInput); !errors.Is(err, ErrReplay) {
+		t.Fatalf("the spent grant after a restart: %v", err)
+	}
+	// A fresh grant for the same hold still passes, and a grant that has
+	// expired leaves the list.
+	f.clock = g2.clock
+	if _, err := g2.gate.Check(f.grant(t, f.stationKey, "hld_1", 1), station.ScopeInput); err != nil {
+		t.Fatalf("a fresh grant after a restart: %v", err)
+	}
+	g2.clock = g2.clock.Add(time.Hour)
+	f.clock = g2.clock
+	if _, err := g2.gate.Check(f.grant(t, f.stationKey, "hld_2", 2), station.ScopeInput); err != nil {
+		t.Fatalf("a later hold: %v", err)
+	}
+	g3 := newGate(t, statePath)
+	g3.gate.load()
+	if _, kept := g3.gate.seen[ev.ID]; kept {
+		t.Error("an expired grant is still on the list")
+	}
+}
+
+// A hold's id is letters, digits, "_" and "-". A rig names files after it,
+// so one with a path in it is no grant at all.
+func TestGateRefusesAHoldIDThatIsNoName(t *testing.T) {
+	f := newGate(t, "")
+	for _, id := range []string{"hld_/../../rig", "../x", "hld 1", "hld.1", "a/b", `a\b`, strings.Repeat("a", 65)} {
+		if _, err := f.gate.Check(f.grant(t, f.stationKey, id, 1), station.ScopeInput); !errors.Is(err, token.ErrMalformed) {
+			t.Errorf("hold id %q: %v", id, err)
+		}
+		rev, _ := token.SignRevocation(f.stationKey, token.Revocation{Rig: f.rigKey.Public(), HoldID: id, IssuedAt: f.clock})
+		if err := f.gate.Revoke(rev); !errors.Is(err, token.ErrMalformed) {
+			t.Errorf("revocation of %q: %v", id, err)
+		}
+	}
+	if _, err := f.gate.Check(f.grant(t, f.stationKey, "hld_9f3c0a11", 1), station.ScopeInput); err != nil {
+		t.Errorf("a plain id: %v", err)
+	}
+}
