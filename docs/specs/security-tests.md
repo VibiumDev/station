@@ -217,7 +217,10 @@ A review of the whole station by a second reader, after the phases:
   opened the link ran them as the admin. A file inside a recording did
   the same by its name, and an SVG screenshot by its thumbnail. Every
   stored file, thumbnail and unpacked file is sandboxed now. One a
-  browser would render as a document is sent as a download.
+  browser would render as a document is sent as a download. Sound and
+  video keep their origin under the sandbox, with scripts still off:
+  without it Chrome's own player could not load the file it was opened
+  on.
 - A jam's model was shown each tool with the parameters a jam needs,
   but an argument it sent beyond those went to Vibium all the same.
   Vibium saves a screenshot under any file name it is given, so a
