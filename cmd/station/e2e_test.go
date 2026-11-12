@@ -14,6 +14,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -721,13 +722,19 @@ func TestNoSecretsLeakAndLockBites(t *testing.T) {
 // address. It sets no cookie there, and but for the extras script it is
 // sandboxed, so a page the rig sends has no origin and runs nothing. The
 // viewer's own traffic is as it was: the stream, a snapshot and JSON
-// come back byte for byte, and a WebSocket still opens.
+// come back byte for byte, and a WebSocket still opens. The rig in turn
+// is never shown the browser's Origin or cookies: its own same-origin
+// check, which a Roadie makes on every socket, would refuse the station's.
 func TestRigAnswersCannotActAsTheStation(t *testing.T) {
 	f := newFullStation(t)
 	srv := httptest.NewServer(f.h)
 	defer srv.Close()
 	stream := "--frame\r\nContent-Type: image/jpeg\r\n\r\nJPEG-ONE\r\n--frame\r\nContent-Type: image/jpeg\r\n\r\nJPEG-TWO\r\n"
+	var shown atomic.Value // what of the browser's the rig was shown
 	rig := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if o, c := r.Header.Get("Origin"), r.Header.Get("Cookie"); o != "" || c != "" {
+			shown.Store(r.URL.Path + ": Origin " + o + ", Cookie " + c)
+		}
 		http.SetCookie(w, &http.Cookie{Name: sessionCookie, Value: "chosen-by-the-rig", Path: "/"})
 		switch r.URL.Path {
 		case "/viewer/extras.js":
@@ -743,7 +750,8 @@ func TestRigAnswersCannotActAsTheStation(t *testing.T) {
 			w.Header().Set("Content-Type", "multipart/x-mixed-replace; boundary=frame")
 			w.Write([]byte(stream))
 		case "/audio":
-			c, err := websocket.Accept(w, r, &websocket.AcceptOptions{InsecureSkipVerify: true})
+			// The same-origin check a Roadie makes.
+			c, err := websocket.Accept(w, r, nil)
 			if err != nil {
 				return
 			}
@@ -775,7 +783,11 @@ func TestRigAnswersCannotActAsTheStation(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	agent := caller{name: "an admin's token", decor: withBearer(secret)}
+	agent := caller{name: "an admin's token", decor: func(r *http.Request) {
+		withBearer(secret)(r)
+		r.Header.Set("Origin", "https://another.example")
+		r.AddCookie(&http.Cookie{Name: "pet", Value: "cat"})
+	}}
 	for _, c := range []struct {
 		path, mediaType, body string
 		sandboxed             bool
@@ -804,7 +816,7 @@ func TestRigAnswersCannotActAsTheStation(t *testing.T) {
 	}
 	// A WebSocket through the relay, as the viewer opens for sound.
 	ws, resp, err := websocket.Dial(ctx, "ws"+strings.TrimPrefix(srv.URL, "http")+"/v1/devices/"+devA+"/audio",
-		&websocket.DialOptions{HTTPHeader: http.Header{"Authorization": {"Bearer " + secret}}})
+		&websocket.DialOptions{HTTPHeader: http.Header{"Authorization": {"Bearer " + secret}, "Origin": {srv.URL}, "Cookie": {"pet=cat"}}})
 	if err != nil {
 		t.Fatalf("the relayed WebSocket: %v", err)
 	}
@@ -815,5 +827,8 @@ func TestRigAnswersCannotActAsTheStation(t *testing.T) {
 	ws.Write(ctx, websocket.MessageText, []byte("this"))
 	if _, data, err := ws.Read(ctx); err != nil || string(data) != "heard this" {
 		t.Errorf("over the relayed WebSocket: %q, %v", data, err)
+	}
+	if got := shown.Load(); got != nil {
+		t.Errorf("the rig was shown the browser's own headers: %v", got)
 	}
 }
