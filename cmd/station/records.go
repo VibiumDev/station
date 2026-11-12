@@ -378,6 +378,9 @@ type recordView struct {
 	// HasThumb says a picture can be shown: a recording's last frame, or
 	// the image itself.
 	HasThumb bool
+	// Sound is a sound file, shown as its waveform: wide and short, where
+	// a recording's frames are tall.
+	Sound bool
 	// Meta is what a recording holds, such as "17 steps · 18 s".
 	Meta string
 	// Strip is the recording's filmstrip: the numbers of its frames.
@@ -509,7 +512,7 @@ func (s *server) recordsData(r *http.Request, p station.Principal, extra map[str
 	for _, b := range bs[from:to] {
 		v := recordView{Blob: b, Title: recordTitle(b), Kind: recordKind(b), URL: s.records.URL(b), Play: playURL(b), When: b.CreatedAt.Local().Format("Jan 2 15:04"), Size: humanSize(b.Size),
 			Device: b.DeviceID, Label: labels[b.DeviceID], CanEdit: p.Admin || p.Subject == b.Uploader, CanPlay: viewer.HasPlayer() && (b.Type == "application/zip"),
-			HasThumb: b.Type == "application/zip" || strings.HasPrefix(b.Type, "image/"), Meta: recordingMeta(b)}
+			HasThumb: b.Type == "application/zip" || strings.HasPrefix(b.Type, "image/") || records.IsWAV(b.Type), Sound: records.IsSound(b.Type), Meta: recordingMeta(b)}
 		switch {
 		case v.CanPlay:
 			v.Open, v.OpenWord = "/records/"+b.SHA256+"/play", "Play"
