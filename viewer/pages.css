@@ -295,6 +295,24 @@ button.hold.share .fill { background: color-mix(in srgb, var(--accent) 45%, tran
 .tagsform button { vertical-align: middle; }
 .pager { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; margin: 16px 0 0; font-size: 14px; }
 .pager .muted:first-child { margin-right: auto; }
+/* The Filmstrip view: each record a row of its frames, spread evenly from
+   the first to the last, with a line about it underneath. The script
+   shows as many frames as the row has room for. */
+.strips { display: flex; flex-direction: column; gap: 14px; margin-top: 16px; }
+.striprow { background: var(--surface); border: 1px solid var(--line-card); border-radius: 14px; overflow: hidden; }
+.strip { display: flex; gap: 3px; height: 112px; overflow: hidden; background: #000; }
+.strip.full { justify-content: space-between; }
+.strip img { display: block; flex: none; height: 100%; width: auto; }
+.strip img[hidden] { display: none; }
+.strip .nothumb { display: flex; align-items: center; justify-content: center; width: 100%; color: #999; font-size: 13px; }
+.stripinfo { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; padding: 8px 12px; }
+.stripinfo .what { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 12px; flex: 1 1 280px; min-width: 0; }
+.stripinfo b { font-size: 15px; overflow-wrap: anywhere; }
+.stripinfo b a { text-decoration: none; }
+.stripinfo b a:hover, .stripinfo b a:focus-visible { text-decoration: underline; text-underline-offset: 3px; }
+.stripinfo .sub { font: 13px var(--mono); color: var(--text-muted); }
+.stripinfo .sub.tags { display: inline-flex; flex-wrap: wrap; gap: 4px; font: inherit; }
+.stripinfo .act { margin-left: auto; white-space: nowrap; }
 .card.rec { padding: 0; margin: 0; overflow: hidden; display: flex; flex-direction: column; }
 .card.rec .thumb { display: block; aspect-ratio: 3 / 4; background: #000; }
 .card.rec .thumb img { display: block; width: 100%; height: 100%; object-fit: contain; }

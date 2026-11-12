@@ -164,6 +164,14 @@ func (s *server) handler() http.Handler {
 	mux.Handle("GET /records/{sha}/thumb.jpg", s.page(station.ActionView, func(w http.ResponseWriter, r *http.Request, p station.Principal) {
 		s.records.ServeThumbnail(w, r, r.PathValue("sha"), &p)
 	}))
+	mux.Handle("GET /records/{sha}/strip/{frame}", s.page(station.ActionView, func(w http.ResponseWriter, r *http.Request, p station.Principal) {
+		i, err := strconv.Atoi(strings.TrimSuffix(r.PathValue("frame"), ".jpg"))
+		if err != nil {
+			http.NotFound(w, r)
+			return
+		}
+		s.records.ServeStrip(w, r, r.PathValue("sha"), i, &p)
+	}))
 	mux.Handle("GET /records/{sha}/files/{path...}", s.page(station.ActionView, func(w http.ResponseWriter, r *http.Request, p station.Principal) {
 		s.records.ServeFile(w, r, r.PathValue("sha"), r.PathValue("path"), &p)
 	}))

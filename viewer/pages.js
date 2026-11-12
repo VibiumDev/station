@@ -82,6 +82,43 @@
       btn.addEventListener('keyup', function (e) { if ((e.key === ' ' || e.key === 'Enter') && !btn.disabled) stop(); });
       btn.addEventListener('click', function (e) { e.preventDefault(); });  // a click alone does nothing
     });
+    // A filmstrip shows as many of a recording's frames as its row has
+    // room for, spread evenly from the first to the last. The first
+    // frame's shape says how wide each one is. Only the frames shown are
+    // fetched.
+    Array.prototype.forEach.call(document.querySelectorAll('.strip[data-strip]'), function (strip) {
+      var imgs = Array.prototype.slice.call(strip.querySelectorAll('img')), shown = 0;
+      function lay() {
+        var first = imgs[0];
+        if (!first || !first.naturalWidth || !first.naturalHeight) return;
+        var gap = 3, w = strip.clientHeight * first.naturalWidth / first.naturalHeight;
+        var fit = Math.max(1, Math.floor((strip.clientWidth + gap) / (w + gap)));
+        var n = Math.min(imgs.length, fit);
+        strip.classList.toggle('full', fit <= imgs.length && n > 1);
+        if (n === shown) return;
+        shown = n;
+        var show = {};
+        for (var j = 0; j < n; j++) show[n === 1 ? 0 : Math.round(j * (imgs.length - 1) / (n - 1))] = true;
+        imgs.forEach(function (img, i) {
+          img.hidden = !show[i];
+          if (show[i] && !img.getAttribute('src')) { img.loading = 'lazy'; img.src = img.getAttribute('data-src'); }
+        });
+      }
+      imgs.forEach(function (img) {
+        // A frame the station cannot give leaves the strip to the others.
+        img.addEventListener('error', function () {
+          var i = imgs.indexOf(img);
+          if (i < 0) return;
+          imgs.splice(i, 1);
+          img.remove();
+          shown = 0;
+          lay();
+        });
+      });
+      if (imgs[0]) imgs[0].addEventListener('load', lay);
+      if (window.ResizeObserver) new ResizeObserver(lay).observe(strip); else window.addEventListener('resize', lay);
+      lay();
+    });
     // A select that files its form as soon as it changes, such as how
     // many records a page shows.
     Array.prototype.forEach.call(document.querySelectorAll('select[data-submit]'), function (sel) {

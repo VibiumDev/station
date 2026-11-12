@@ -108,8 +108,7 @@ type recordsQuery struct {
 	Text         string   // its words that are not tags
 	Tags         []string // its #tags, as filed
 	Golden       bool
-	List         bool
-	View         string // "list" or "grid" when chosen or remembered; "" means the default, grid
+	View         string // "grid", "list" or "strip" when chosen or remembered; "" means the default, grid
 	Per, Page    int
 }
 
@@ -121,6 +120,9 @@ const (
 	perCookie  = "station-records-per"
 )
 
+// recordsView says whether a word names one of the page's views.
+func recordsView(v string) bool { return v == "grid" || v == "list" || v == "strip" }
+
 // perPage is the choice of records per page; defaultPer is the first
 // page's.
 var perPage = []int{10, 25, 50, 100}
@@ -129,7 +131,7 @@ const defaultPer = 25
 
 // parseRecordsQuery reads the page's query: q is words and #tags, n one
 // of 10, 25, 50 or 100, page from 1, golden=1 golden records alone,
-// view=list the list.
+// view=list the list and view=strip the filmstrips.
 func parseRecordsQuery(r *http.Request) recordsQuery {
 	q := recordsQuery{Device: r.FormValue("device"), Hold: r.FormValue("hold"), Raw: strings.TrimSpace(r.FormValue("q")),
 		Golden: r.FormValue("golden") == "1", Per: defaultPer, Page: 1}
@@ -139,10 +141,9 @@ func parseRecordsQuery(r *http.Request) recordsQuery {
 			view = c.Value
 		}
 	}
-	if view == "list" || view == "grid" {
+	if recordsView(view) {
 		q.View = view
 	}
-	q.List = view == "list"
 	var words []string
 	for _, w := range strings.Fields(q.Raw) {
 		if strings.HasPrefix(w, "#") && len(w) > 1 {
@@ -374,6 +375,8 @@ type recordView struct {
 	HasThumb bool
 	// Meta is what a recording holds, such as "17 steps · 18 s".
 	Meta string
+	// Strip is the recording's filmstrip: the numbers of its frames.
+	Strip []int
 	// TagLinks are the record's tags, each a link that searches for it.
 	TagLinks []chip
 }
@@ -505,6 +508,9 @@ func (s *server) recordsData(r *http.Request, p station.Principal, extra map[str
 		for _, t := range b.Tags {
 			v.TagLinks = append(v.TagLinks, chip{Tag: t, URL: q.Link("q", q.withTag(t)), On: slices.Contains(q.Tags, t)})
 		}
+		for i := range records.StripCount(b) {
+			v.Strip = append(v.Strip, i)
+		}
 		views = append(views, v)
 	}
 	var pers []perChoice
@@ -517,11 +523,11 @@ func (s *server) recordsData(r *http.Request, p station.Principal, extra map[str
 	}
 	count, size, _ := s.db.BlobTotal(r.Context())
 	data := map[string]any{
-		"Page": "records", "Principal": p, "CSRF": s.auth.csrfToken(r), "Records": views, "Device": q.Device, "Grid": !q.List, "Hold": q.Hold,
+		"Page": "records", "Principal": p, "CSRF": s.auth.csrfToken(r), "Records": views, "Device": q.Device, "Grid": q.View == "" || q.View == "grid", "List": q.View == "list", "Strip": q.View == "strip", "Hold": q.Hold,
 		"DeviceLabel": labels[q.Device], "Count": count, "Total": humanSize(size),
 		"MaxFile": humanSize(s.records.MaxFile), "MaxTotal": humanSize(s.records.MaxTotal), "MaxAge": humanAge(s.records.MaxAge),
 		"Q": q, "Query": q.Raw, "GoldenOnly": q.Golden, "Filtered": q.Raw != "" || q.Golden,
-		"GridURL": q.Link("view", "grid"), "ListURL": q.Link("view", "list"), "GoldenURL": q.Link("golden", golden), "ClearURL": q.Link("q", "", "golden", ""), "AllURL": q.Link("device", "", "hold", ""),
+		"GridURL": q.Link("view", "grid"), "ListURL": q.Link("view", "list"), "StripURL": q.Link("view", "strip"), "GoldenURL": q.Link("golden", golden), "ClearURL": q.Link("q", "", "golden", ""), "AllURL": q.Link("device", "", "hold", ""),
 		"Keep": q.back(true), "Back": q.back(false), "Chips": chips, "Pers": pers,
 		"Found": found, "From": from + 1, "To": to, "PageNo": pageNo, "Pages": pages,
 	}
@@ -578,7 +584,7 @@ func playURL(b station.Blob) string {
 
 func (s *server) recordsPage(w http.ResponseWriter, r *http.Request, p station.Principal) {
 	// A choice made here is remembered for the next plain visit.
-	if v := r.FormValue("view"); v == "list" || v == "grid" {
+	if v := r.FormValue("view"); recordsView(v) {
 		s.remember(w, viewCookie, v)
 	}
 	if n := r.FormValue("n"); n != "" && parseRecordsQuery(r).Per == atoi(n) {
