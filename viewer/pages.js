@@ -127,20 +127,22 @@
         if (sel.form.requestSubmit) sel.form.requestSubmit(); else sel.form.submit();
       });
     });
-    // The Records grid: a slider sets the card size, kept per browser.
-    var size = document.getElementById('cardSize');
-    var cards = document.querySelector('.cards');
-    if (size && cards) {
-      var apply = function (px) { cards.style.setProperty('--card', px + 'px'); };
+    // The Records grid and filmstrips: a slider sets the size of a card,
+    // or the height of a strip, kept per browser. A strip that changes
+    // height lays its frames out again by itself.
+    [['cardSize', '.cards', '--card', 'station-card-size'], ['stripSize', '.strips', '--strip', 'station-strip-size']].forEach(function (s) {
+      var size = document.getElementById(s[0]), box = document.querySelector(s[1]);
+      if (!size || !box) return;
+      var apply = function (px) { box.style.setProperty(s[2], px + 'px'); };
       var kept = null;
-      try { kept = localStorage.getItem('station-card-size'); } catch (e) {}
+      try { kept = localStorage.getItem(s[3]); } catch (e) {}
       if (kept && +kept >= +size.min && +kept <= +size.max) { size.value = kept; }
       apply(size.value);
       size.addEventListener('input', function () {
         apply(size.value);
-        try { localStorage.setItem('station-card-size', size.value); } catch (e) {}
+        try { localStorage.setItem(s[3], size.value); } catch (e) {}
       });
-    }
+    });
     // A framed Record Player gets the keyboard once it has loaded, so the
     // arrow keys step through the recording without a click first.
     var player = document.querySelector('iframe.player');

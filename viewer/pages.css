@@ -300,7 +300,7 @@ button.hold.share .fill { background: color-mix(in srgb, var(--accent) 45%, tran
    shows as many frames as the row has room for. */
 .strips { display: flex; flex-direction: column; gap: 14px; margin-top: 16px; }
 .striprow { background: var(--surface); border: 1px solid var(--line-card); border-radius: 14px; overflow: hidden; }
-.strip { display: flex; gap: 3px; height: 112px; overflow: hidden; background: #000; }
+.strip { display: flex; gap: 3px; height: var(--strip, 112px); overflow: hidden; background: #000; }
 .strip.full { justify-content: space-between; }
 .strip img { display: block; flex: none; height: 100%; width: auto; }
 .strip img[hidden] { display: none; }
