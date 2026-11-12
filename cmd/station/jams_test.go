@@ -291,3 +291,36 @@ func TestJamNotesOnThePages(t *testing.T) {
 		t.Errorf("the transcript row: %s", html)
 	}
 }
+
+func TestJamTitleOnThePages(t *testing.T) {
+	_, owner := teamsServer(t)
+	prompt := "In Safari, open the sound check page. Tap Mic and allow the microphone. Say a phrase into the phone and tell me what you hear back from it."
+	jams := []jamView{
+		{Jam: station.Jam{ID: "jam_named", Prompt: prompt, Title: "Sound check <echo>", Status: "done"}, Label: "iPhone"},
+		{Jam: station.Jam{ID: "jam_plain", Prompt: prompt, Status: "done"}, Label: "iPhone"},
+	}
+	var list strings.Builder
+	if err := pages.ExecuteTemplate(&list, "jams", map[string]any{"Principal": owner, "CSRF": "c", "Name": "Station", "Named": true, "Page": "jams", "Jams": jams}); err != nil {
+		t.Fatal(err)
+	}
+	html := list.String()
+	// The list shows the title, links it to the jam, and keeps the whole
+	// prompt under the pointer.
+	if !strings.Contains(html, `<a href="/jams/jam_named" title="`+prompt+`">Sound check &lt;echo&gt;</a>`) {
+		t.Errorf("no titled row in: %s", html)
+	}
+	// A jam with no title shows the start of its prompt, as before.
+	if !strings.Contains(html, `<a href="/jams/jam_plain" title="`+prompt+`">`+brief(prompt, 120)+`</a>`) {
+		t.Errorf("no row with the prompt's start in: %s", html)
+	}
+}
+
+func TestBriefAndTitleAgreeOnShortPrompts(t *testing.T) {
+	// A prompt short enough to be its own title reads the same in the list
+	// with or without one.
+	short := "Is the phone on its home screen?"
+	title, _, err := (&jam.Model{}).Title(context.Background(), short)
+	if err != nil || title != short || brief(short, 120) != short {
+		t.Fatalf("title %q, %v; brief %q", title, err, brief(short, 120))
+	}
+}

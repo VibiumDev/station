@@ -247,9 +247,9 @@ var pages = template.Must(template.New("").Funcs(template.FuncMap{"npub": npub, 
 {{define "jams"}}{{template "head" (dict "Title" "Jams" "Name" .Name "Named" .Named)}}{{template "header" .}}
 <main class="wrap jams">
 <h2 class="h2">Jams {{template "help" "jams"}}</h2>
-<p class="helptext" id="help-jams" hidden>Every jam session on this station, newest first: the prompt, when and who asked, on which device and with which AI model, and the result. The prompt opens the session, with its transcript and the recording. A new one starts from the <a href="/">front page</a>.</p>
-{{if .Jams}}<div class="tablewrap"><table><thead><tr><th>Prompt</th><th>When</th><th>Who</th><th>Device</th><th>AI model</th><th>Result</th></tr></thead><tbody>
-{{range .Jams}}<tr><td data-l="Prompt" class="prompt"><a href="/jams/{{.ID}}" title="{{.Prompt}}">{{brief .Prompt 120}}</a></td><td data-l="When">{{.When}}</td><td data-l="Who">{{.Subject}}</td><td data-l="Device">{{.Label}}</td><td data-l="AI model">{{.Model}}</td>
+<p class="helptext" id="help-jams" hidden>Every jam session on this station, newest first: a title the AI model gave its prompt, when and who asked, on which device and with which AI model, and the result. A jam from before titles shows the start of its prompt. The title opens the session, with its transcript and the recording, and shows the whole prompt under the pointer. A new one starts from the <a href="/">front page</a>.</p>
+{{if .Jams}}<div class="tablewrap"><table><thead><tr><th>Jam</th><th>When</th><th>Who</th><th>Device</th><th>AI model</th><th>Result</th></tr></thead><tbody>
+{{range .Jams}}<tr><td data-l="Jam" class="prompt"><a href="/jams/{{.ID}}" title="{{.Prompt}}">{{if .Title}}{{.Title}}{{else}}{{brief .Prompt 120}}{{end}}</a></td><td data-l="When">{{.When}}</td><td data-l="Who">{{.Subject}}</td><td data-l="Device">{{.Label}}</td><td data-l="AI model">{{.Model}}</td>
 <td data-l="Result">{{if .Open}}<span class="dot on"></span>running{{else if .Word}}<b class="verdict {{.Result}}">{{.Word}}</b>{{else}}<span class="muted">{{.Status}}</span>{{end}}</td></tr>{{end}}
 </tbody></table></div>{{else}}<p class="muted">No jams yet. <a href="/">Start one.</a></p>{{end}}
 </main>{{template "foot" .}}{{end}}
@@ -258,7 +258,7 @@ var pages = template.Must(template.New("").Funcs(template.FuncMap{"npub": npub, 
 <main class="wrap jam{{if .Watch}} watching{{end}}">
 <header class="jamhead">
 <p class="crumb"><a href="/jams">‹ Jams</a></p>
-<div class="titlerow"><h1 class="jamtitle" title="{{.Jam.Prompt}}">{{.Jam.Prompt}}</h1>
+<div class="titlerow"><h1 class="jamtitle" title="{{.Jam.Prompt}}">{{if .Jam.Title}}{{.Jam.Title}}{{else}}{{.Jam.Prompt}}{{end}}</h1>
 {{if .Word}}<span class="pill {{.Jam.Result}}">{{.Word}}</span>{{else if .Open}}<span class="pill running"><span class="dot on"></span>running</span>{{else}}<span class="pill">{{.Jam.Status}}</span>{{end}}
 <span class="act">{{if and .Open (not .Watch)}}<form class="inline" method="post" action="/jams/{{.Jam.ID}}/stop"><input type="hidden" name="csrf" value="{{.CSRF}}"><button class="small icon" type="submit" title="Stop the jam" aria-label="Stop the jam">{{template "icon-stop"}}</button></form>{{end}}{{if .Play}}<a class="btn small icon" href="{{.Play}}" title="Play the recording" aria-label="Play the recording">{{template "icon-play"}}</a>{{end}}{{if not .Watch}}<a class="btn small icon" href="/devices/{{.Jam.DeviceID}}/drive" title="Drive the device" aria-label="Drive the device">{{template "icon-drive"}}</a>{{end}}</span></div>
 <p class="meta">{{.When}} · {{.Jam.Subject}} · {{.DeviceLabel}} · AI model {{.Jam.Model}}{{if .Took}} · {{.Took}}{{end}} · {{.Jam.ID}}</p>

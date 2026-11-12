@@ -354,8 +354,19 @@ online and a model picker when more than one agent model is set, and
 two or three example prompts under it for the device's kind and the
 tools it has, which a demo can click and a first-time visitor can learn
 from. The Jams page, at `/jams`, is the list of past jams, with the
-prompt first, which opens the jam, then when, who, the device, the
-model, and the result where there is one. Buttons on the pages are
+jam's title first, which opens the jam, then when, who, the device, the
+model, and the result where there is one.
+
+A jam's title is a few words for its prompt:
+
+- The jam's own model writes it, in one small request with no tools, sent as the jam starts. The jam does not wait for it.
+- A prompt of 48 characters or fewer is its own title, and the model is not asked.
+- A title is at most 60 characters.
+- The request's tokens count toward the jam's.
+- A jam whose model gave no title shows the start of its prompt in the list.
+- The title is the first prompt's. A follow-up does not change it.
+
+Buttons on the pages are
 icons with a tooltip where the picture is plain: play, stop, open,
 records, download, delete. The list of devices moves to `/devices`, and the docs that point
 at it follow. The sidebar reads New jam, Jams, Devices, Records,

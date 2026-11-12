@@ -195,6 +195,7 @@ func (m *jams) start(ctx context.Context, p station.Principal, prompt, deviceID,
 	m.live[j.ID] = lj
 	m.mu.Unlock()
 	lj.emit(m, jam.Event{Kind: "start", Text: dev.ID + " with " + model.Name})
+	go m.title(lj, model.Client(), prompt)
 	stationNotes, personNotes := m.s.jamNotes(ctx, p)
 	if ev, ok := jam.NotesEvent(stationNotes, personNotes); ok {
 		lj.emit(m, ev)
@@ -223,6 +224,30 @@ func (m *jams) start(ctx context.Context, p station.Principal, prompt, deviceID,
 		m.finish(lj, res, nil)
 	}()
 	return j, nil
+}
+
+// title gives a jam the few words the Jams list shows for it, from the
+// jam's own model. A jam runs the same without one, so a failure is
+// logged and nothing more. The request's tokens count toward the jam's
+// while it runs.
+func (m *jams) title(lj *liveJam, model *jam.Model, prompt string) {
+	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+	defer cancel()
+	title, usage, err := model.Title(ctx, prompt)
+	if err != nil {
+		fmt.Printf("jam %s: no title: %v\n", lj.j.ID, err)
+		return
+	}
+	lj.mu.Lock()
+	lj.j.Title = title
+	running := lj.j.Status == "running"
+	lj.mu.Unlock()
+	if err := m.s.db.SetJamTitle(ctx, lj.j.ID, title); err != nil {
+		fmt.Printf("jam %s: title: %v\n", lj.j.ID, err)
+	}
+	if running && usage.Prompt+usage.Completion > 0 {
+		lj.emit(m, jam.Event{Kind: "usage", In: usage.Prompt, Out: usage.Completion})
+	}
 }
 
 // recordJam starts Vibium's recording of a jam and returns what ends it

@@ -135,3 +135,56 @@ func TestJamsVerdictBecomesResult(t *testing.T) {
 		t.Errorf("no result: %+v, %v", got, err)
 	}
 }
+
+func TestJamTitle(t *testing.T) {
+	// A database from before titles gains the column, and its jams have none.
+	path := t.TempDir() + "/old.db"
+	raw, err := sql.Open("sqlite", path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	old := `CREATE TABLE jams (id TEXT PRIMARY KEY, subject TEXT NOT NULL, device_id TEXT NOT NULL, model TEXT NOT NULL, prompt TEXT NOT NULL,
+		mode TEXT NOT NULL DEFAULT '', status TEXT NOT NULL, took TEXT NOT NULL DEFAULT '', result TEXT NOT NULL DEFAULT '', summary TEXT NOT NULL DEFAULT '',
+		hold_id TEXT NOT NULL DEFAULT '', actions INTEGER NOT NULL DEFAULT 0, tokens_in INTEGER NOT NULL DEFAULT 0, tokens_out INTEGER NOT NULL DEFAULT 0,
+		error TEXT NOT NULL DEFAULT '', created_at INTEGER NOT NULL, ended_at INTEGER NOT NULL DEFAULT 0);
+		INSERT INTO jams (id, subject, device_id, model, prompt, status, created_at) VALUES ('jam_old', 'owner', 'rig_a/phone', 'gpt', 'Open the clock and read it.', 'done', 1700000000);`
+	if _, err := raw.Exec(old); err != nil {
+		t.Fatal(err)
+	}
+	raw.Close()
+	d, err := Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer d.Close()
+	ctx := context.Background()
+	if got, err := d.Jam(ctx, "jam_old"); err != nil || got.Title != "" || got.Prompt != "Open the clock and read it." {
+		t.Fatalf("an old jam: %+v, %v", got, err)
+	}
+
+	// The title is written by itself, and what a jam's run writes leaves it.
+	j := station.Jam{ID: "jam_new", Subject: "owner", DeviceID: "rig_a/phone", Model: "gpt", Prompt: "A long prompt.", Status: "running"}
+	if err := d.CreateJam(ctx, j); err != nil {
+		t.Fatal(err)
+	}
+	if err := d.SetJamTitle(ctx, "jam_new", "Read the clock"); err != nil {
+		t.Fatal(err)
+	}
+	j.Status, j.Result, j.Summary = "done", "completed", "It is noon."
+	if err := d.UpdateJam(ctx, j); err != nil {
+		t.Fatal(err)
+	}
+	got, err := d.Jam(ctx, "jam_new")
+	if err != nil || got.Title != "Read the clock" || got.Result != "completed" {
+		t.Fatalf("after the run: %+v, %v", got, err)
+	}
+	list, err := d.Jams(ctx, "", 10)
+	if err != nil || len(list) != 2 {
+		t.Fatalf("list: %v, %v", list, err)
+	}
+	for _, l := range list {
+		if l.ID == "jam_new" && l.Title != "Read the clock" {
+			t.Errorf("the list lost the title: %+v", l)
+		}
+	}
+}

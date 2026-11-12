@@ -150,6 +150,7 @@ CREATE TABLE IF NOT EXISTS jams (
 	device_id  TEXT NOT NULL,
 	model      TEXT NOT NULL,
 	prompt     TEXT NOT NULL,
+	title      TEXT NOT NULL DEFAULT '',
 	mode       TEXT NOT NULL DEFAULT '',
 	status     TEXT NOT NULL,
 	took       TEXT NOT NULL DEFAULT '',
@@ -284,6 +285,7 @@ func (d *DB) migrate() error {
 		{"users", "totp_at", "INTEGER NOT NULL DEFAULT 0"},
 		{"users", "totp_step", "INTEGER NOT NULL DEFAULT 0"},
 		{"users", "jam_notes", "TEXT NOT NULL DEFAULT ''"},
+		{"jams", "title", "TEXT NOT NULL DEFAULT ''"},
 	} {
 		has, err := d.hasColumn(c.table, c.column)
 		if err != nil {
