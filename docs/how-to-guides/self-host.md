@@ -34,36 +34,31 @@ with the same two binaries, the systemd unit and the sample `fly.toml`;
 Jams, the prompt on the station's front page, drive devices through
 `vibium mcp`, so the station also needs the Vibium binary, on its
 `PATH` or named with `--vibium` (or `STATION_VIBIUM` in
-`/etc/default/station`). The npm package carries a static binary for
-each platform; without a Node install, pick the package for the
-machine out of the registry:
+`/etc/default/station`). A jam on a phone needs a Vibium newer than the
+last release, 26.8.21. That release cannot tap, swipe, long press or
+type text on a phone, and cannot send a jam's record to the station. Use
+a nightly build, which is a static binary for each platform:
 
 ```bash
-ARCH=arm64   # or x64
-curl -fL "https://registry.npmjs.org/@vibium/linux-$ARCH/-/linux-$ARCH-26.8.21.tgz" | tar xz
-sudo install -m 755 package/bin/vibium /usr/local/bin/
+ARCH=arm64   # or amd64
+NIGHTLY=nightly-2026.11.10-dev.20261110220518-01f5372
+curl -fLO https://github.com/VibiumDev/vibium/releases/download/$NIGHTLY/vibium-linux-$ARCH
+curl -fLO https://github.com/VibiumDev/vibium/releases/download/$NIGHTLY/SHA256SUMS
+sha256sum vibium-linux-$ARCH
+grep "vibium-linux-$ARCH\$" SHA256SUMS
+sudo install -m 755 vibium-linux-$ARCH /usr/local/bin/vibium
 vibium --version
 ```
 
+The two checksums printed must be the same. With this build a jam on a
+phone can tap, swipe, long press, type text and send its record. Say and
+listen are in builds made after 2026-11-11: take a later nightly from
+Vibium's [releases](https://github.com/VibiumDev/vibium/releases) the
+same way.
+
 Vibium needs no browser for this: a jam's session is the station's own
-device, reached through `/session`.
-
-That is Vibium 26.8.21, the newest npm release. With it a jam on a
-phone can take screenshots, press keys and wait. It cannot tap, swipe,
-long press or type text, it cannot say or listen, and its own record is
-not sent to the station.
-
-- Tap, swipe and long press came with the Vibium nightly of 2026-10-22.
-- Typing text and sending the record are both in from the nightly of
-  2026-11-09.
-- Say and listen need a build of Vibium's `main`.
-
-The nightlies are among Vibium's
-[releases](https://github.com/VibiumDev/vibium/releases), each with a
-`vibium-linux-arm64` and a `vibium-linux-amd64` binary. A nightly
-binary or a build of `main` goes to `/usr/local/bin/vibium`, in place
-of the one above. The station looks for Vibium when it starts, so
-restart the station after installing or replacing it.
+device, reached through `/session`. The station looks for Vibium when it
+starts, so restart the station after installing or replacing it.
 
 ## 2. The user and the service
 
@@ -290,7 +285,7 @@ publish it as `ghcr.io/vibiumdev/station`.
 docker build -t vibium-station .
 ```
 
-The image holds the same binaries and Vibium 26.8.21, which step 1
+The image holds the same binaries and the Vibium nightly that step 1
 describes, with the data directory at `/data`. A public station:
 
 ```bash

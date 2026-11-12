@@ -80,15 +80,13 @@ station starting, and on the first start it prints `Owner's password
 set from STATION_PASSWORD`. The image carries the Vibium binary too, for
 jams: once the station is up, a model added on Settings turns Jams on.
 
-The image installs Vibium 26.8.21 from npm (`VIBIUM_VERSION` in the
-[`Dockerfile`](../../Dockerfile)). With it a jam on a phone can take
-screenshots, press keys and wait. It cannot tap, swipe, long press or
-type text, it cannot say or listen, and its own record is not sent to
-the station. Tap, swipe and long press came with the Vibium nightly of
-2026-10-22, typing text and sending the record are both in from the
-nightly of 2026-11-09, and say and listen need a build of Vibium's
-`main`. The nightlies are among Vibium's
-[releases](https://github.com/VibiumDev/vibium/releases).
+The image installs a Vibium nightly build (`VIBIUM_NIGHTLY` in the
+[`Dockerfile`](../../Dockerfile)), checked against that build's own
+checksums. With it a jam on a phone can tap, swipe, long press, type
+text and send its record. Say and listen are in builds made after
+2026-11-11. To use a later nightly from Vibium's
+[releases](https://github.com/VibiumDev/vibium/releases), add
+`--build-arg VIBIUM_NIGHTLY=<its tag>` to `fly deploy`.
 
 ## 5. Check it
 
