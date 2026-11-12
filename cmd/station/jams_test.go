@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/VibiumDev/station"
 	"github.com/VibiumDev/station/jam"
@@ -322,5 +323,92 @@ func TestBriefAndTitleAgreeOnShortPrompts(t *testing.T) {
 	title, _, err := (&jam.Model{}).Title(context.Background(), short)
 	if err != nil || title != short || brief(short, 120) != short {
 		t.Fatalf("title %q, %v; brief %q", title, err, brief(short, 120))
+	}
+}
+
+func TestJamRetitle(t *testing.T) {
+	s, owner := teamsServer(t)
+	s.dir, s.cfg = t.TempDir(), &Config{Name: "station"}
+	s.jams = &jams{s: s, dir: t.TempDir(), live: map[string]*liveJam{}}
+	ctx := context.Background()
+	prompt := strings.Repeat("a long prompt that is not its own title ", 3)
+	j := station.Jam{ID: "jam_live", Subject: owner.Subject, DeviceID: "rig_a/phone", Model: "gpt", Prompt: prompt, Status: "running", CreatedAt: time.Now()}
+	if err := s.db.CreateJam(ctx, j); err != nil {
+		t.Fatal(err)
+	}
+	lj := &liveJam{j: j, subs: map[chan station.JamEvent]struct{}{}}
+	s.jams.live[j.ID] = lj
+
+	// The model that names jams, and how often it was asked.
+	asked := 0
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		asked++
+		w.Write([]byte(`{"choices":[{"message":{"role":"assistant","content":"The model's title"},"finish_reason":"stop"}],"usage":{"prompt_tokens":40,"completion_tokens":4}}`))
+	}))
+	defer srv.Close()
+	model := &jam.Model{Provider: "example", Name: "m", BaseURL: srv.URL + "/v1", APIKey: "k"}
+	titleOf := func(id string) string {
+		t.Helper()
+		got, err := s.db.Jam(ctx, id)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return got.Title
+	}
+
+	// With no word from a person, the model's title is the jam's, and
+	// its tokens count toward the jam's.
+	s.jams.title(lj, model, prompt)
+	if titleOf(j.ID) != "The model's title" || lj.j.Title != "The model's title" || lj.j.TokensIn != 40 || lj.j.TokensOut != 4 {
+		t.Fatalf("after the model: %q in the database, %+v live", titleOf(j.ID), lj.j)
+	}
+
+	// A person's title replaces it, tidied to one line.
+	if title, err := s.jams.retitle(ctx, j.ID, "  My \n own   title "); err != nil || title != "My own title" || titleOf(j.ID) != "My own title" || lj.j.Title != "My own title" {
+		t.Fatalf("a person's title: %q, %v, %q in the database", title, err, titleOf(j.ID))
+	}
+	// The model's answer, arriving after, does not take it back.
+	s.jams.title(lj, model, prompt)
+	if titleOf(j.ID) != "My own title" || lj.j.Title != "My own title" {
+		t.Errorf("the model overwrote a person's title: %q", titleOf(j.ID))
+	}
+	// Not even after the person cleared it.
+	if _, err := s.jams.retitle(ctx, j.ID, ""); err != nil || titleOf(j.ID) != "" {
+		t.Fatalf("clearing: %v, %q", err, titleOf(j.ID))
+	}
+	s.jams.title(lj, model, prompt)
+	if titleOf(j.ID) != "" {
+		t.Errorf("the model named a jam whose title a person took away: %q", titleOf(j.ID))
+	}
+	// A title has a limit.
+	if _, err := s.jams.retitle(ctx, j.ID, strings.Repeat("x", jamMaxTitle+1)); err == nil {
+		t.Error("a title over the limit was taken")
+	}
+
+	// A jam that has ended is named the same way.
+	done := station.Jam{ID: "jam_done", Subject: owner.Subject, DeviceID: "rig_a/phone", Model: "gpt", Prompt: prompt, Status: "done", CreatedAt: time.Now()}
+	if err := s.db.CreateJam(ctx, done); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.jams.retitle(ctx, done.ID, "Yesterday's check"); err != nil || titleOf(done.ID) != "Yesterday's check" {
+		t.Errorf("an ended jam: %v, %q", err, titleOf(done.ID))
+	}
+
+	// The jam's page offers the box to someone who may steer the jam.
+	var page strings.Builder
+	data := map[string]any{"Principal": owner, "CSRF": "c", "Name": "Station", "Named": true, "Page": "jams", "Jam": station.Jam{ID: "jam_done", Prompt: prompt, Title: "Yesterday's check"}, "CanAct": true, "MaxTitle": jamMaxTitle}
+	if err := pages.ExecuteTemplate(&page, "jam", data); err != nil {
+		t.Fatal(err)
+	}
+	if html := page.String(); !strings.Contains(html, `action="/jams/jam_done/title"`) || !strings.Contains(html, `value="Yesterday&#39;s check" maxlength="120"`) {
+		t.Errorf("no title box on the page")
+	}
+	delete(data, "CanAct")
+	page.Reset()
+	if err := pages.ExecuteTemplate(&page, "jam", data); err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(page.String(), `action="/jams/jam_done/title"`) {
+		t.Error("a watcher is offered the title box")
 	}
 }

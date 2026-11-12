@@ -291,9 +291,10 @@ characters. A jam's `notes` event holds what it was given.
 | Method and path | What it does |
 |---|---|
 | `GET /v1/models` | The models on Settings, each with `name`, `role` (`agent`, `listen` or `say`), `provider`, `model` and `default`; never a key |
-| `POST /v1/jams` | Starts a jam: `{"prompt": ..., "device": "<rig>/<name>", "model": "<name>", "mode": "check" or "run"}`; the device may be left out when one is online, the model when one agent model is set, and the mode when the model should decide from the prompt. Needs control. Returns the jam, 201 |
+| `POST /v1/jams` | Starts a jam: `{"prompt": ..., "device": "<rig>/<name>", "model": "<name>", "mode": "check" or "run", "title": ...}`; the device may be left out when one is online, the model when one agent model is set, the mode when the model should decide from the prompt, and the title when the model should write it. Needs control. Returns the jam, 201 |
 | `GET /v1/jams` | The caller's jams, newest first; every jam for the owner. A jam has a `title`, a few words its model gave the prompt, once the model has answered; a prompt of 48 characters or fewer is its own title |
 | `GET /v1/jams/{id}` | `{"jam": ..., "events": [...], "recording": "<sha256>"}`: the jam, its transcript, and its recording when there is one |
+| `POST /v1/jams/{id}/title` | `{"title": ...}`: names the jam, while it runs or after, in at most 120 characters. An empty title takes it away. For whoever may steer the jam: its starter, an admin, or someone at jam level on its device. Returns the jam |
 | `POST /v1/jams/{id}/turns` | `{"prompt": ...}`: a follow-up on an open jam, one still running or whose last result was `inconclusive` or `not_completed`, taken up once the current prompt has its result, and answered in words when it asks nothing of the device; 409 when the jam has ended or a prompt is already waiting |
 | `GET /v1/jams/{id}/events` | The transcript as server-sent events, each with `id` (the sequence number), `event` (the kind) and `data` (the event), from the start or after `?after=<seq>` or `Last-Event-ID`; a running jam streams on until its `end`, a finished one replays and closes |
 | `POST /v1/jams/{id}/stop` | Ends the jam, which releases the device |
