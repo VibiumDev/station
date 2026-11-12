@@ -365,7 +365,7 @@ A jam's title is a few words for its prompt:
 - The request's tokens count toward the jam's.
 - A jam whose model gave no title shows the start of its prompt in the list.
 - The title is the first prompt's. A follow-up does not change it.
-- A person can always write the title: on the jam's page, with `POST /v1/jams/{id}/title`, or as `title` when starting a jam. Whoever may steer the jam may name it, a token included, while it runs and after it has ended.
+- A person can always write the title: in the heading of the jam's page, which is the title's field, with `POST /v1/jams/{id}/title`, or as `title` when starting a jam. Whoever may steer the jam may name it, a token included, while it runs and after it has ended.
 - A title a person wrote is at most 120 characters. The model's answer never replaces it, even when the person's title is an empty one.
 
 Buttons on the pages are

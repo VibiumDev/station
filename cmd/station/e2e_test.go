@@ -369,7 +369,6 @@ func (f *fullStation) rows() []row {
 		{"POST", "/jams/{id}/turns", "/jams/" + jamTest + "/turns", "prompt=more", ruleJamAct, false, false},
 		{"POST", "/jams/{id}/stop", "/jams/" + jamTest + "/stop", "", ruleJamAct, false, false},
 		{"POST", "/jams/{id}/keep", "/jams/" + jamTest + "/keep", "", ruleJamAct, false, false},
-		{"POST", "/jams/{id}/title", "/jams/" + jamTest + "/title", "title=named", ruleJamAct, false, false},
 		{"GET", "/jams/{id}/shots/{seq}", "/jams/" + jamTest + "/shots/1", "", ruleReadA, true, false},
 		{"GET", "/devices/{rig}/{name}/drive", "/devices/" + A + "/drive", "", ruleReadA, false, false},
 		{"GET", "/devices/{rig}/{name}/view", "/devices/" + A + "/view", "", ruleReadA, false, false},

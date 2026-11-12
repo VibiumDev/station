@@ -155,7 +155,6 @@ func (s *server) handler() http.Handler {
 	mux.Handle("GET /jams/{id}", s.page(station.ActionView, s.jamPage))
 	mux.Handle("POST /jams/{id}/turns", s.page(station.ActionControl, s.jamTurnForm))
 	mux.Handle("POST /jams/{id}/stop", s.page(station.ActionControl, s.jamStopForm))
-	mux.Handle("POST /jams/{id}/title", s.page(station.ActionControl, s.jamTitleForm))
 	mux.Handle("POST /jams/{id}/keep", s.page(station.ActionControl, s.jamKeepForm))
 	mux.Handle("GET /jams/{id}/shots/{seq}", s.page(station.ActionView, s.jamShot))
 	mux.Handle("GET /devices/{rig}/{name}/drive", s.page(station.ActionView, s.drivePage))

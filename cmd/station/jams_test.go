@@ -394,21 +394,21 @@ func TestJamRetitle(t *testing.T) {
 		t.Errorf("an ended jam: %v, %q", err, titleOf(done.ID))
 	}
 
-	// The jam's page offers the box to someone who may steer the jam.
+	// The jam's page makes the heading a field for someone who may steer the jam.
 	var page strings.Builder
 	data := map[string]any{"Principal": owner, "CSRF": "c", "Name": "Station", "Named": true, "Page": "jams", "Jam": station.Jam{ID: "jam_done", Prompt: prompt, Title: "Yesterday's check"}, "CanAct": true, "MaxTitle": jamMaxTitle}
 	if err := pages.ExecuteTemplate(&page, "jam", data); err != nil {
 		t.Fatal(err)
 	}
-	if html := page.String(); !strings.Contains(html, `action="/jams/jam_done/title"`) || !strings.Contains(html, `value="Yesterday&#39;s check" maxlength="120"`) {
-		t.Errorf("no title box on the page")
+	if html := page.String(); !strings.Contains(html, `<h1 class="jamtitle" data-jam="jam_done" data-csrf="c" data-max="120" data-title="Yesterday&#39;s check"`) {
+		t.Errorf("the heading is not a field: %s", html[strings.Index(html, "<h1"):][:300])
 	}
 	delete(data, "CanAct")
 	page.Reset()
 	if err := pages.ExecuteTemplate(&page, "jam", data); err != nil {
 		t.Fatal(err)
 	}
-	if strings.Contains(page.String(), `action="/jams/jam_done/title"`) {
-		t.Error("a watcher is offered the title box")
+	if html := page.String(); strings.Contains(html, `<h1 class="jamtitle" data-jam=`) || !strings.Contains(html, `<h1 class="jamtitle" title="`) {
+		t.Error("a watcher is offered the title field")
 	}
 }

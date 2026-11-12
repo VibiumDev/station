@@ -291,12 +291,6 @@ td .sub.tags, .card.rec .meta .tags { display: flex; flex-wrap: wrap; gap: 4px; 
 .tagsform input { min-height: 32px; padding: 4px 10px; font: 14px var(--sans); width: 200px; border: 1px solid var(--line-strong); border-radius: 8px; background: var(--surface); color: var(--text); vertical-align: middle; }
 .tagsform button { vertical-align: middle; }
 /* The jam's title, changed in place: a pencil that opens a box under it. */
-.retitle { display: inline-block; position: relative; vertical-align: middle; }
-.retitle summary { list-style: none; }
-.retitle summary::-webkit-details-marker { display: none; }
-.retitle[open] summary { border-color: var(--accent); color: var(--text); }
-.retitle form { position: absolute; right: 0; top: calc(100% + 6px); z-index: 5; display: flex; align-items: center; gap: 6px; padding: 8px; background: var(--surface); border: 1px solid var(--line-card); border-radius: 12px; box-shadow: 0 8px 24px rgba(0, 0, 0, 0.25); }
-.retitle form input[type=text] { width: min(60vw, 320px); }
 .pager { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; margin: 16px 0 0; font-size: 14px; }
 .pager .muted:first-child { margin-right: auto; }
 .card.rec { padding: 0; margin: 0; overflow: hidden; display: flex; flex-direction: column; }
@@ -373,6 +367,10 @@ main.home { padding-top: clamp(44px, 30vh, 320px); }
 .crumb a:hover { color: var(--text); text-decoration: underline; text-underline-offset: 3px; }
 .titlerow { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 14px; }
 .jamtitle { flex: 1 1 320px; min-width: 0; margin: 0; font: 600 clamp(20px, 2.4vw, 26px)/1.25 var(--sans); letter-spacing: -0.01em; color: var(--text); display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; overflow-wrap: anywhere; }
+.jamtitle[data-jam] { cursor: text; padding: 2px 8px; margin: -2px -8px; border-radius: 8px; outline: none; }
+.jamtitle[data-jam]:hover { background: var(--surface); }
+.jamtitle[data-jam]:focus { display: block; overflow: visible; background: var(--surface); box-shadow: 0 0 0 1.5px var(--accent); }
+.jamtitle.saving { opacity: 0.6; }
 .titlerow .act { margin-left: auto; display: inline-flex; gap: 6px; align-items: center; }
 .meta { margin: 10px 0 0; font: 13px/1.6 var(--mono); color: var(--text-muted); overflow-wrap: anywhere; }
 .pill { display: inline-flex; align-items: center; gap: 7px; padding: 3px 11px; border-radius: 999px; border: 1px solid var(--line-card); background: var(--surface); font: 600 13px/1.4 var(--sans); letter-spacing: 0.03em; color: var(--text-2); white-space: nowrap; }

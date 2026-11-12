@@ -1,6 +1,7 @@
-// The Jams pages: example prompts fill the box, Enter sends, and a jam
-// that is still running streams its transcript from the station's
-// server-sent events and reloads once it ends.
+// The Jams pages: example prompts fill the box, Enter sends, a jam's
+// title is written in place, and a jam that is still running streams its
+// transcript from the station's server-sent events and reloads once it
+// ends.
 (function () {
   function h(tag, cls, text) {
     var e = document.createElement(tag);
@@ -57,6 +58,63 @@
     ev.appendChild(body);
     return ev;
   }
+  // The title is its own field for someone who may steer the jam: Enter
+  // or leaving it saves, Escape puts it back, and an empty one gives the
+  // title up, which shows the prompt again. It returns a function that
+  // runs its argument once nobody is writing.
+  function editTitle(el) {
+    var after = null, writing = false;
+    function settle() { writing = false; if (after) { var f = after; after = null; f(); } }
+    if (!el) return function (f) { f(); };
+    el.contentEditable = 'true';
+    try { el.contentEditable = 'plaintext-only'; } catch (e) {}
+    var shown = el.textContent, max = parseInt(el.dataset.max, 10) || 120;
+    function say(text) {
+      var note = document.getElementById('titleNote');
+      if (!text) { if (note) note.remove(); return; }
+      if (!note) {
+        note = h('div', 'msg error'); note.id = 'titleNote'; note.setAttribute('role', 'alert');
+        var head = el.closest('header') || el.parentNode;
+        head.parentNode.insertBefore(note, head.nextSibling);
+      }
+      note.textContent = text;
+    }
+    el.addEventListener('focus', function () {
+      writing = true;
+      // An untitled jam shows its prompt: typing replaces it.
+      if (!el.dataset.title) { var r = document.createRange(); r.selectNodeContents(el); var sel = getSelection(); sel.removeAllRanges(); sel.addRange(r); }
+    });
+    el.addEventListener('keydown', function (e) {
+      if (e.key === 'Enter') { e.preventDefault(); el.blur(); }
+      else if (e.key === 'Escape') { e.preventDefault(); el.textContent = shown; el.blur(); }
+    });
+    el.addEventListener('paste', function (e) {
+      e.preventDefault();
+      var text = ((e.clipboardData && e.clipboardData.getData('text/plain')) || '').replace(/\s+/g, ' ');
+      document.execCommand('insertText', false, text);
+    });
+    el.addEventListener('blur', function () {
+      var text = el.textContent.replace(/\s+/g, ' ').trim();
+      el.scrollLeft = 0;
+      if (text === shown.replace(/\s+/g, ' ').trim()) { el.textContent = shown; settle(); return; }
+      if (text.length > max) { el.textContent = shown; say('A title is at most ' + max + ' characters.'); settle(); return; }
+      var headers = {'Content-Type': 'application/json'};
+      if (el.dataset.csrf) headers['X-CSRF-Token'] = el.dataset.csrf;
+      el.classList.add('saving');
+      fetch('/v1/jams/' + el.dataset.jam + '/title', {method: 'POST', headers: headers, credentials: 'same-origin', body: JSON.stringify({title: text})})
+        .then(function (r) { return r.json().then(function (d) { if (!r.ok) throw new Error(d.error || 'The title was not saved.'); return d; }); })
+        .then(function (d) {
+          var title = (d.jam && d.jam.title) || '';
+          el.dataset.title = title;
+          shown = title || el.dataset.prompt || '';
+          el.textContent = shown;
+          say('');
+        })
+        .catch(function (err) { el.textContent = shown; say(err.message || 'The title was not saved.'); })
+        .then(function () { el.classList.remove('saving'); settle(); });
+    });
+    return function (f) { if (writing) after = f; else f(); };
+  }
   document.addEventListener('DOMContentLoaded', function () {
     var box = document.querySelector('textarea.prompt');
     Array.prototype.forEach.call(document.querySelectorAll('.example'), function (b) {
@@ -67,6 +125,7 @@
         if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); if (t.value.trim()) t.form.requestSubmit(); }
       });
     });
+    var busy = editTitle(document.querySelector('h1.jamtitle[data-jam]'));
     var tr = document.getElementById('transcript');
     if (!tr || !tr.dataset.open) return;
     // The grace after a settled result: a bar runs down to the moment
@@ -107,7 +166,7 @@
         var follow = atEnd();
         var node = render(kind, d);
         if (node) { tr.appendChild(node); if (follow) node.scrollIntoView({block: 'nearest'}); }
-        if (kind === 'end') { es.close(); setTimeout(function () { location.reload(); }, 800); }
+        if (kind === 'end') { es.close(); setTimeout(function () { busy(function () { location.reload(); }); }, 800); }
       });
     });
   });

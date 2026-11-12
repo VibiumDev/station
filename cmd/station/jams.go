@@ -995,23 +995,6 @@ func (s *server) jamKeepForm(w http.ResponseWriter, r *http.Request, p station.P
 	http.Redirect(w, r, "/jams/"+id, http.StatusSeeOther)
 }
 
-// jamTitleForm is POST /jams/{id}/title from the page.
-func (s *server) jamTitleForm(w http.ResponseWriter, r *http.Request, p station.Principal) {
-	if s.jamsOff(w, r) {
-		return
-	}
-	id := r.PathValue("id")
-	if _, _, err := s.jams.act(r.Context(), p, id); err != nil {
-		jamFormError(w, r, err)
-		return
-	}
-	if _, err := s.jams.retitle(r.Context(), id, r.FormValue("title")); err != nil {
-		http.Redirect(w, r, "/jams/"+id+"?msg="+url.QueryEscape(err.Error()), http.StatusSeeOther)
-		return
-	}
-	http.Redirect(w, r, "/jams/"+id, http.StatusSeeOther)
-}
-
 // jamStopForm is POST /jams/{id}/stop from the page.
 func (s *server) jamStopForm(w http.ResponseWriter, r *http.Request, p station.Principal) {
 	if s.jamsOff(w, r) {
