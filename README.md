@@ -41,7 +41,7 @@ Packaging and hardening (R6) are under review.
 
 ## Run it
 
-Go 1.27 or newer.
+Go 1.27.4 or newer.
 
 ```bash
 go build ./cmd/station
@@ -52,11 +52,12 @@ go build ./cmd/station
 ./station --http :8080 --public-url https://station.example.com --turn-public-ip 203.0.113.9   # behind your own TLS proxy
 ```
 
-Each release carries static binaries for linux/amd64 and linux/arm64
-as tarballs, with the systemd unit inside, and a Docker image at
-`ghcr.io/vibiumdev/station`.
+No release is published yet, so the binary comes from a build like the
+one above. A release will carry static binaries for linux/amd64 and
+linux/arm64 as tarballs, with the systemd unit inside, and a Docker
+image at `ghcr.io/vibiumdev/station`.
 [docs/how-to-guides/self-host.md](docs/how-to-guides/self-host.md)
-installs one as a sandboxed systemd service on a Linux host of your
+installs a station as a sandboxed systemd service on a Linux host of your
 own, and
 [docs/how-to-guides/deploy-to-fly.md](docs/how-to-guides/deploy-to-fly.md)
 puts one on Fly.io.
@@ -96,10 +97,13 @@ Then enroll a rig:
 2. On the rig: `roadie enroll https://<station> --code ABCD-1234-7F3A`. On
    the same LAN the URL can be left out; the station advertises itself over
    mDNS. The rig checks the station's key against the code, sends its key
-   and devices, and writes its policy file.
+   and devices, and writes its policy file. On a Pi where Roadie runs as
+   a service the command is
+   `sudo -u roadie roadie enroll https://<station> --code ABCD-1234-7F3A`,
+   followed by `sudo systemctl restart roadie`.
 3. Restart `roadie`, with `--label "Dev iPhone 15"` to name the device on
    the station's pages and `--platform ios` so they say what it runs. The
-   device appears on the station's front page; Open takes a hold and
+   device appears on the station's Devices page; Drive takes a hold and
    shows it over WebRTC. The same link opened while an
    agent or someone else holds the device watches it instead, with a Hold
    button that takes it; `?watch=1` only ever watches.
@@ -131,7 +135,7 @@ events do today, and what they leave open.
 
 | Flag | Default | Meaning |
 |---|---|---|
-| `--data-dir` | `$STATION_DIR`, else the user config dir + `/station` | Where `config.json`, `station.key`, `station.db`, the certificate and tsnet state live |
+| `--data-dir` | `$STATION_DIR`, else the user config dir + `/station` | Where `config.json`, `station.key`, `station.db`, the certificate, tsnet state, the Record Store and the AI models live |
 | `--listen` | `:8443`, with `--public` `:443` | HTTPS address in LAN mode and with `--public` |
 | `--tailnet` | off | Join the tailnet with tsnet and serve there only |
 | `--hostname` | `station` | The node's name on the tailnet |
