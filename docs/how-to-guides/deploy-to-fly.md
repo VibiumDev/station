@@ -25,22 +25,33 @@ The dedicated IPv4 is for TURN, because Fly carries UDP only on a
 dedicated address, and Fly bills it separately; note the address that
 `fly ips allocate-v4` prints, because the configuration below needs it.
 The volume holds the station's configuration, its key and its database
-so that they survive deploys and restarts, and one gigabyte is plenty.
+so that they survive deploys and restarts. It also holds the Record
+Store and the screenshots of jams:
+
+- The Record Store keeps up to 2 GB by default. Each recording is also
+  kept unpacked, so the store takes about twice its limit on disk.
+- One gigabyte is enough for the rest, and for a station that keeps few
+  recordings.
+- For a full Record Store, create a larger volume (`--size 5`), or add
+  a lower `--records-max-total`, such as `256M`, to the `[processes]`
+  line in step 3. On a station that has recordings, a lower limit
+  removes the oldest of them past it at the next start.
 
 ## 2. Set the owner's password
 
 ```bash
-fly secrets set STATION_PASSWORD='a password of at least 8 characters' -a NAME
+fly secrets set STATION_PASSWORD='a password of at least 12 characters' -a NAME
 ```
 
 The station reads it at every start and saves the hash in its
-configuration on the volume. To change the password later, set the
-secret again and redeploy.
+database on the volume. To change the password later, set the
+secret again and redeploy. A password changed on the Account page is
+set back to the secret at the next start.
 
 ## 3. Write the configuration
 
-Copy [`deploy/fly/fly.toml`](../../deploy/fly/fly.toml) and change four
-things in it:
+Edit [`deploy/fly/fly.toml`](../../deploy/fly/fly.toml) in your clone
+and change four things in it:
 
 - `app`: your NAME.
 - `primary_region`: your REGION.
@@ -65,19 +76,39 @@ fly deploy -c deploy/fly/fly.toml --dockerfile Dockerfile --remote-only --ha=fal
 `--ha=false` keeps the app to one machine, which both the volume and the
 station's in-memory queue of holds require. The first deploy builds the
 image on Fly and takes a few minutes; `fly logs -a NAME` shows the
-station starting, and on the first start it prints `Password set from
-STATION_PASSWORD`. The image carries the Vibium binary too, for jams:
-once the station is up, a model added on Settings turns Jams on.
+station starting, and on the first start it prints `Owner's password
+set from STATION_PASSWORD`. The image carries the Vibium binary too, for
+jams: once the station is up, a model added on Settings turns Jams on.
+
+The image installs Vibium 26.8.21 from npm (`VIBIUM_VERSION` in the
+[`Dockerfile`](../../Dockerfile)). With it a jam on a phone can take
+screenshots, press keys and wait. It cannot tap, swipe, long press or
+type text, it cannot say or listen, and its own record is not sent to
+the station. Tap, swipe and long press came with the Vibium nightly of
+2026-10-22, typing text and sending the record are both in from the
+nightly of 2026-11-09, and say and listen need a build of Vibium's
+`main`. The nightlies are among Vibium's
+[releases](https://github.com/VibiumDev/vibium/releases).
 
 ## 5. Check it
 
-Open `https://NAME.fly.dev` and sign in with the password. Settings
-shows the station's name, its key and the TURN line, which should carry
-the public address from step 1.
+Open `https://NAME.fly.dev` and sign in. The login is `owner` and the
+password is the secret from step 2. The first sign-in shows a QR code.
+Scan it with an authenticator app and type the six-digit code the app
+shows. The station then lists ten backup codes, once. Keep them.
 
-Then enroll a rig: make an enrollment code on Settings and run
-`roadie enroll https://NAME.fly.dev --code ABCD-1234-7F3A` on the rig,
-which then appears on the front page within seconds.
+Settings shows the station's name, its key and the TURN line, which
+should carry the public address from step 1.
+
+Then enroll a rig: make an enrollment code on Settings and run these on
+the rig, a Pi where Roadie runs as a service:
+
+```bash
+sudo -u roadie roadie enroll https://NAME.fly.dev --code ABCD-1234-7F3A
+sudo systemctl restart roadie
+```
+
+The device then shows as online on the Devices page.
 
 To prove the relay path end to end, make an API token on Settings and
 run the probe from your machine, which uses relay-only media by
@@ -141,4 +172,7 @@ carry the new name.
   and the matching `[[services]]` port range together.
 - **Login lockouts** count by the client's address as Fly reports it in
   `Fly-Client-IP`, since every connection reaches the station from Fly's
-  proxy.
+  proxy. Five misses from one address lock that address out for up to
+  15 minutes.
+- **A lost authenticator**: a backup code signs you in once. Another
+  admin can hold Reset sign-in on your row under Users on Settings.
