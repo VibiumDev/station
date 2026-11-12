@@ -600,6 +600,39 @@ func TestCSRFOnEveryChange(t *testing.T) {
 	}
 }
 
+// A tailnet identity has no CSRF token to show, so its changes are taken
+// from the station's own pages and from clients that are no browser, and
+// from no other site.
+func TestIdentityChangesComeFromThisStation(t *testing.T) {
+	f := newFullStation(t)
+	from := func(origin string) caller {
+		return caller{name: "allowed identity from " + origin, decor: func(r *http.Request) {
+			r.RemoteAddr = "100.64.0.1:1"
+			if origin != "" {
+				r.Header.Set("Origin", origin)
+			}
+		}, signed: true, admin: true, person: true}
+	}
+	for _, row := range f.rows() {
+		if row.method == "GET" {
+			continue
+		}
+		f.ensureBlob()
+		f.ensureSpare()
+		path, body := f.fill(row.path), f.fill(row.body)
+		if w := f.do(from("https://evil.example"), row.method, path, body, false); w.Code != http.StatusForbidden {
+			t.Errorf("%s %s from another site: %d", row.method, path, w.Code)
+		}
+		for _, origin := range []string{"", "http://example.com"} {
+			if w := f.do(from(origin), row.method, path, body, false); w.Code == http.StatusForbidden && (strings.Contains(w.Body.String(), "CSRF") || strings.Contains(w.Body.String(), "expired")) {
+				t.Errorf("%s %s from origin %q: refused as another site's", row.method, path, origin)
+			}
+			f.ensureBlob()
+			f.ensureSpare()
+		}
+	}
+}
+
 // Cookies carry the flags, and a WebSocket from another origin is refused.
 func TestCookieFlagsAndOrigin(t *testing.T) {
 	f := newFullStation(t)

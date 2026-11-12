@@ -3,7 +3,10 @@
 All calls need a signed-in session (the pages), a tailnet identity in
 tailnet mode, or `Authorization: Bearer <token>` with a token from the
 Settings page. Browser sessions send the CSRF token the page carries in
-`X-CSRF-Token` on anything but GET. Errors are `{"error": "..."}`.
+`X-CSRF-Token` on anything but GET. A tailnet identity has no such token:
+its changes are taken from the station's own pages and from clients that
+are no browser, and a request another site's page sent is 403. A token is
+taken from anywhere. Errors are `{"error": "..."}`.
 
 A device id is `<rig id>/<name>`, such as `rig_3f9a1c02/phone`, and
 appears in paths as two segments.

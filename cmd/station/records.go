@@ -43,7 +43,7 @@ func (s *server) principalOrNil(r *http.Request) *station.Principal {
 
 // blossomBlob is GET, HEAD and DELETE /<sha256>[.ext].
 func (s *server) blossomBlob(w http.ResponseWriter, r *http.Request) {
-	if r.Method == http.MethodDelete && s.auth.sessionOf(r) != nil && !s.auth.csrfOK(r) {
+	if r.Method == http.MethodDelete && !s.auth.csrfOK(r) {
 		apiError(w, http.StatusForbidden, "missing or stale CSRF token")
 		return
 	}
