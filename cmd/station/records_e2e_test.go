@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"regexp"
 	"strconv"
 	"strings"
 	"testing"
@@ -292,5 +293,25 @@ func TestStoredFilesCannotActAsPages(t *testing.T) {
 	}
 	if w := f.do(admin, "GET", "/"+page, "", false); w.Header().Get("Content-Disposition") != `attachment; filename="notes.html"` {
 		t.Errorf("a page's download: %q", w.Header().Get("Content-Disposition"))
+	}
+	// On the Records page a file a browser can show or play opens by its
+	// name and its picture. Only the Download button downloads it. A page,
+	// which would be sent as a download anyway, says so.
+	for _, view := range []string{"grid", "list", "strip"} {
+		html := f.do(admin, "GET", "/records?n=100&view="+view, "", false).Body.String()
+		for name, sha := range map[string]string{"said.wav": clip, "screen.mp4": film, "shot.jpg": picture} {
+			if n := len(regexp.MustCompile(sha+`[^"?]*\?download"`).FindAllString(html, -1)); n != 1 {
+				t.Errorf("%s view, %s: %d download links, want the button alone", view, name, n)
+			}
+			if !strings.Contains(html, sha) || !regexp.MustCompile(`href="[^"]*`+sha+`[^"?]*"[^>]*>`).MatchString(html) {
+				t.Errorf("%s view, %s: its name does not open it in place", view, name)
+			}
+		}
+		if n := len(regexp.MustCompile(page+`[^"?]*\?download"`).FindAllString(html, -1)); n < 2 {
+			t.Errorf("%s view: a stored page should download by its name too (%d links)", view, n)
+		}
+		if !strings.Contains(html, `/records/`+recording+`/play"`) {
+			t.Errorf("%s view: a recording does not open in the player", view)
+		}
 	}
 }

@@ -634,6 +634,13 @@ func inertType(mediaType string) bool {
 	return inert[strings.ToLower(strings.TrimSpace(t))]
 }
 
+// OpensInPlace says a browser shows or plays a stored file of this media
+// type itself: a picture, sound, video or text. A zip it only downloads,
+// and anything else is sent as a download.
+func OpensInPlace(mediaType string) bool {
+	return inertType(mediaType) && !strings.HasPrefix(strings.ToLower(strings.TrimSpace(mediaType)), "application/zip")
+}
+
 // playable says a media type is sound or video a browser plays itself.
 func playable(mediaType string) bool {
 	t, _, _ := strings.Cut(mediaType, ";")

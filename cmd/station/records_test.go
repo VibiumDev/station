@@ -111,7 +111,7 @@ func TestRecordsTemplatesRender(t *testing.T) {
 	q := parseRecordsQuery(httptest.NewRequest(http.MethodGet, "/records?q=%23flaky&view=list", nil))
 	rec := func(golden, canEdit bool) recordView {
 		b := station.Blob{SHA256: strings.Repeat("ab", 32), Size: 1234, Type: "application/zip", Name: "record.zip", Uploader: "token:ci", HoldID: "hld_1", DeviceID: "rig_a/phone", Golden: golden, Tags: []string{"flaky"}, CreatedAt: time.Now()}
-		return recordView{Blob: b, Title: recordTitle(b), URL: "/" + b.SHA256 + ".zip", When: "Nov 8 10:47", Size: "1 KB", Device: b.DeviceID, Label: "phone", CanEdit: canEdit, CanPlay: true, HasThumb: true, Meta: "3 steps",
+		return recordView{Blob: b, Title: recordTitle(b), URL: "/" + b.SHA256 + ".zip", When: "Nov 8 10:47", Size: "1 KB", Device: b.DeviceID, Label: "phone", CanEdit: canEdit, CanPlay: true, Open: "/records/" + b.SHA256 + "/play", OpenWord: "Play", HasThumb: true, Meta: "3 steps",
 			TagLinks: []chip{{Tag: "flaky", URL: q.Link("q", ""), On: true}}}
 	}
 	base := map[string]any{"Page": "records", "Principal": station.Principal{Subject: "owner", Admin: true}, "CSRF": "c", "Name": "Station", "Named": true,
