@@ -61,6 +61,9 @@ installs a station as a sandboxed systemd service on a Linux host of your
 own, and
 [docs/how-to-guides/deploy-to-fly.md](docs/how-to-guides/deploy-to-fly.md)
 puts one on Fly.io.
+[docs/how-to-guides/set-up-jams.md](docs/how-to-guides/set-up-jams.md)
+sets up the models a jam uses, including speech through a local Piper
+server.
 
 The first run makes the station's key and prints its `npub`. Tailnet mode
 joins your tailnet as a node named `station` through `tsnet` and prints a

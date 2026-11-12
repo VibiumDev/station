@@ -14,7 +14,8 @@ type Provider struct {
 	BaseURL     string // the default; "" means the model must name one
 	KeyVar      string
 	KeyRequired bool
-	Effort      bool // takes a reasoning effort
+	Effort      bool   // takes a reasoning effort
+	Role        string // the one role it can have; "" is any
 }
 
 // Providers is the table, in the order the Settings page offers them.
@@ -25,6 +26,9 @@ var Providers = []Provider{
 	{ID: "xai", Label: "xAI", BaseURL: "https://api.x.ai/v1", KeyVar: "XAI_API_KEY", KeyRequired: true, Effort: true},
 	{ID: "openai-compatible", Label: "OpenAI-compatible server", KeyVar: "OPENAI_API_KEY", Effort: true},
 	{ID: "local", Label: "Local server", BaseURL: "http://127.0.0.1:8080/v1", KeyVar: "OPENAI_API_KEY", Effort: true},
+	// A Piper server the owner runs, which keeps a voice loaded. The
+	// model is the voice's name; Vibium sends it text and gets a WAV.
+	{ID: "piper-server", Label: "Piper server (say)", BaseURL: "http://127.0.0.1:5000", Role: RoleSay},
 }
 
 // ProviderByID finds a provider.

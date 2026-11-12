@@ -99,3 +99,40 @@ func TestEnvNamesFollowTheRole(t *testing.T) {
 		t.Errorf("say: %s", got)
 	}
 }
+
+// A Piper server speaks with the voice named as the model, at the base
+// URL or Piper's own default address, and only in the say role.
+func TestPiperServerModel(t *testing.T) {
+	piper := ModelConfig{Name: "danny", Role: RoleSay, Provider: "piper-server", Model: "en_US-danny-low", BaseURL: "http://127.0.0.1:5005"}
+	if err := piper.Validate(); err != nil {
+		t.Fatal(err)
+	}
+	if got := strings.Join(piper.Env(), " "); got != "VIBIUM_SAY_PROVIDER=piper-server VIBIUM_SAY_VOICE=en_US-danny-low VIBIUM_PIPER_URL=http://127.0.0.1:5005" {
+		t.Errorf("env: %s", got)
+	}
+	piper.BaseURL = ""
+	if got := strings.Join(piper.Env(), " "); !strings.HasSuffix(got, "VIBIUM_PIPER_URL=http://127.0.0.1:5000") {
+		t.Errorf("env with no base URL: %s", got)
+	}
+	for _, role := range []string{RoleAgent, RoleListen} {
+		c := piper
+		c.Role = role
+		if err := c.Validate(); err == nil || !strings.Contains(err.Error(), "say role only") {
+			t.Errorf("as %s: %v", role, err)
+		}
+	}
+	piper.Model = ""
+	if err := piper.Validate(); err == nil || !strings.Contains(err.Error(), "voice") {
+		t.Errorf("with no voice: %v", err)
+	}
+	// Saved and read back, it is the same model.
+	s := &Store{Dir: t.TempDir(), Getenv: func(string) string { return "" }}
+	piper.Model, piper.BaseURL = "en_US-danny-low", "http://127.0.0.1:5005"
+	if err := s.Save(piper); err != nil {
+		t.Fatal(err)
+	}
+	got, err := s.Get("danny")
+	if err != nil || got.Provider != "piper-server" || got.Model != "en_US-danny-low" || got.BaseURL != "http://127.0.0.1:5005" || got.Role != RoleSay {
+		t.Errorf("read back %+v %v", got, err)
+	}
+}

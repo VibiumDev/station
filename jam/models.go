@@ -55,6 +55,13 @@ func (c ModelConfig) Env() []string {
 	case RoleSay:
 		prefix = "VIBIUM_SAY_"
 	}
+	if c.Provider == "piper-server" {
+		url := c.BaseURL
+		if url == "" {
+			url = "http://127.0.0.1:5000"
+		}
+		return []string{"VIBIUM_SAY_PROVIDER=piper-server", "VIBIUM_SAY_VOICE=" + c.Model, "VIBIUM_PIPER_URL=" + url}
+	}
 	env := []string{prefix + "PROVIDER=" + c.Provider, prefix + "MODEL=" + c.Model}
 	if prefix == "VIBIUM_AI_" {
 		if c.BaseURL != "" {
@@ -214,7 +221,13 @@ func (c ModelConfig) Validate() error {
 	if !ok {
 		return errors.New("unknown provider")
 	}
+	if p.Role != "" && p.Role != c.Role {
+		return fmt.Errorf("%s is for the %s role only", p.Label, p.Role)
+	}
 	if strings.TrimSpace(c.Model) == "" {
+		if p.Role == RoleSay {
+			return errors.New("the model is the voice's name, such as en_US-lessac-medium")
+		}
 		return errors.New("the model needs the provider's name for it")
 	}
 	if p.BaseURL == "" && c.BaseURL == "" {
