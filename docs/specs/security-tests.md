@@ -147,7 +147,7 @@ it, so the history is readable later.
 | 6 | Roadie's `auth_routes_test.go`, `allowlist_test.go`, `auth_test.go`, with `rig/rig_test.go` for the gate |
 | 7 | `cmd/station/fuzz_test.go`, `records/fuzz_test.go` |
 | 8 | `.github/workflows/ci.yml` runs the station's tests under `-race`; the matrix's completeness check |
-| Review | `TestRigAnswersCannotActAsTheStation` in `cmd/station/e2e_test.go`, `TestStoredFilesCannotActAsPages` in `cmd/station/records_e2e_test.go`, `TestServedFilesAreSandboxed` and `TestRemovedRigKeyIsRefused` in `records/records_test.go`, `TestHiddenArgumentsNeverReachVibium` in `jam/loop_test.go`, `TestUnpackLimitHoldsForAnyDeclaredSize` and `TestThumbnailStaysInsideItsRecording` in `records/thumb_test.go`, `TestRightPasswordDoesNotForgetWrongCodes`, `TestGuessesSentTogetherAreCountedFirst`, `TestPasswordChecksTakeTurns` and `TestNextWithATabGoesHome` and `TestSignInFromAnotherSiteIsRefused` in `cmd/station/signin_test.go`, `TestBoundTokenKeepsToItsDevice` in `cmd/station/holds_e2e_test.go` |
+| Review | `TestRigAnswersCannotActAsTheStation` in `cmd/station/e2e_test.go`, `TestStoredFilesCannotActAsPages` in `cmd/station/records_e2e_test.go`, `TestServedFilesAreSandboxed` and `TestRemovedRigKeyIsRefused` in `records/records_test.go`, `TestHiddenArgumentsNeverReachVibium` in `jam/loop_test.go`, `TestUnpackLimitHoldsForAnyDeclaredSize` and `TestThumbnailStaysInsideItsRecording` in `records/thumb_test.go`, `TestRightPasswordDoesNotForgetWrongCodes`, `TestGuessesSentTogetherAreCountedFirst`, `TestPasswordChecksTakeTurns`, `TestNextWithATabGoesHome` and `TestSignInFromAnotherSiteIsRefused` in `cmd/station/signin_test.go`, `TestBoundTokenKeepsToItsDevice` in `cmd/station/holds_e2e_test.go`, `TestGateRefusesAHoldIDThatIsNoName`, `TestGateRefusesAGrantThatOutlivesAGrant` and `TestGateRemembersUsedGrantsAcrossARestart` in `rig/rig_test.go` |
 
 ## Found and fixed
 
@@ -273,3 +273,16 @@ A review of the whole station by a second reader, after the phases:
   relayed answer but the extras script is sandboxed. The extras script
   still runs in the viewer page with the station's origin: that part
   is open.
+- A rig took a grant's hold id as it came, and named a recording's
+  files after it. A station that records could name a hold so that the
+  files landed outside the recordings folder, over the rig's own policy
+  file. A hold id is letters, digits, `_` and `-` now, at most 64, in a
+  grant and in a revocation.
+- A rig held a device until its latest grant expired, whatever the
+  grant said. One grant good for ten years kept every other station
+  out, across restarts. A grant that expires more than ten minutes and
+  the skew ahead is refused now, and a hold never lasts past the
+  session the policy allows.
+- A rig remembered used grants in memory only, so a spent grant passed
+  again after a restart, until it expired. The list is kept with the
+  rest of the rig's state now.
