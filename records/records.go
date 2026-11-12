@@ -634,17 +634,34 @@ func inertType(mediaType string) bool {
 	return inert[strings.ToLower(strings.TrimSpace(t))]
 }
 
+// playable says a media type is sound or video a browser plays itself.
+func playable(mediaType string) bool {
+	t, _, _ := strings.Cut(mediaType, ";")
+	t = strings.ToLower(strings.TrimSpace(t))
+	return inert[t] && (strings.HasPrefix(t, "audio/") || strings.HasPrefix(t, "video/"))
+}
+
 // contain keeps a stored file from acting as a page of the station. Its
 // type is the uploader's word, and a file inside a recording has the name
 // the zip gave it, so an HTML or SVG file would run script under the
-// station's own origin. The sandbox directive takes that origin away,
-// beside whatever policy the response already carries. A type a browser
-// would render as a document goes out as a download.
+// station's own origin. The sandbox directive lets no script run and
+// takes that origin away, beside whatever policy the response already
+// carries. A type a browser would render as a document goes out as a
+// download.
+//
+// Sound and video keep the origin. A browser opens them in a player of
+// its own, which fetches the file a second time as the page's own, and a
+// page with no origin is refused that fetch. No script runs in them
+// either way.
 func contain(w http.ResponseWriter, mediaType string) {
 	h := w.Header()
-	policy := "sandbox"
+	sandbox := "sandbox"
+	if playable(mediaType) {
+		sandbox = "sandbox allow-same-origin"
+	}
+	policy := sandbox
 	if page := h.Get("Content-Security-Policy"); page != "" {
-		policy = page + "; sandbox"
+		policy = page + "; " + sandbox
 	}
 	h.Set("Content-Security-Policy", policy)
 	h.Set("X-Content-Type-Options", "nosniff")

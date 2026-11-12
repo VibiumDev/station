@@ -228,6 +228,7 @@ func TestStoredFilesCannotActAsPages(t *testing.T) {
 		{"resources/frame.jpeg", jpeg},
 		{"x.html", []byte(`<!doctype html><script src="x.js"></script>`)},
 		{"x.js", []byte(`alert(document.domain)`)},
+		{"video/screen.mp4", []byte("not really a film")},
 	} {
 		w, _ := zw.Create(e.name)
 		w.Write(e.data)
@@ -238,21 +239,27 @@ func TestStoredFilesCannotActAsPages(t *testing.T) {
 	drawing := f.uploadTyped(f.admin, []byte(`<svg xmlns="http://www.w3.org/2000/svg"><script href="/`+script+`"/></svg>`), "image/svg+xml", "shot.svg", "hld_a")
 	picture := f.uploadTyped(f.admin, jpeg, "image/jpeg", "shot.jpg", "hld_a")
 	recording := f.uploadTyped(f.admin, zbuf.Bytes(), "application/zip", "rec.zip", "hld_a")
+	clip := f.uploadTyped(f.admin, []byte("RIFF, as a sound file starts"), "audio/wav", "said.wav", "hld_a")
+	film := f.uploadTyped(f.admin, []byte("a film, as far as its type says"), "video/mp4", "screen.mp4", "hld_a")
 	for _, c := range []struct {
 		path, mediaType string
 		download        bool
+		plays           bool // sound or video, which keeps its origin to play
 	}{
-		{"/" + page, "text/html", true},
-		{"/" + script, "text/javascript", true},
-		{"/" + drawing, "image/svg+xml", true},
-		{"/records/" + drawing + "/thumb.jpg", "image/svg+xml", true},
-		{"/records/" + recording + "/files/x.html", "text/html", true},
-		{"/records/" + recording + "/files/x.js", "javascript", true},
-		{"/" + picture, "image/jpeg", false},
-		{"/records/" + picture + "/thumb.jpg", "image/jpeg", false},
-		{"/" + recording + ".zip", "application/zip", false},
-		{"/records/" + recording + "/thumb.jpg", "image/jpeg", false},
-		{"/records/" + recording + "/files/resources/frame.jpeg", "image/jpeg", false},
+		{"/" + page, "text/html", true, false},
+		{"/" + script, "text/javascript", true, false},
+		{"/" + drawing, "image/svg+xml", true, false},
+		{"/records/" + drawing + "/thumb.jpg", "image/svg+xml", true, false},
+		{"/records/" + recording + "/files/x.html", "text/html", true, false},
+		{"/records/" + recording + "/files/x.js", "javascript", true, false},
+		{"/" + picture, "image/jpeg", false, false},
+		{"/records/" + picture + "/thumb.jpg", "image/jpeg", false, false},
+		{"/" + recording + ".zip", "application/zip", false, false},
+		{"/records/" + recording + "/thumb.jpg", "image/jpeg", false, false},
+		{"/records/" + recording + "/files/resources/frame.jpeg", "image/jpeg", false, false},
+		{"/" + clip, "audio/wav", false, true},
+		{"/" + film, "video/mp4", false, true},
+		{"/records/" + recording + "/files/video/screen.mp4", "video/mp4", false, true},
 	} {
 		w := f.do(admin, "GET", c.path, "", false)
 		h := w.Header()
@@ -260,8 +267,14 @@ func TestStoredFilesCannotActAsPages(t *testing.T) {
 			t.Errorf("%s: %d %s", c.path, w.Code, h.Get("Content-Type"))
 			continue
 		}
-		if csp := h.Get("Content-Security-Policy"); csp != pageCSP+"; sandbox" {
-			t.Errorf("%s: not sandboxed beside the page policy: %q", c.path, csp)
+		// No "allow-scripts" anywhere. Sound and video alone keep their
+		// origin: a browser's own player cannot fetch the file without it.
+		want := pageCSP + "; sandbox"
+		if c.plays {
+			want += " allow-same-origin"
+		}
+		if csp := h.Get("Content-Security-Policy"); csp != want {
+			t.Errorf("%s: policy %q, want %q", c.path, csp, want)
 		}
 		if h.Get("X-Content-Type-Options") != "nosniff" {
 			t.Errorf("%s: no nosniff", c.path)
