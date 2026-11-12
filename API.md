@@ -275,12 +275,25 @@ expires with the jam, so the hold's subject is `token:jam:<id>` and the
 Devices page shows the jam as the holder. Taking the device from it
 ends the jam. While Jams is off, every path here answers 404.
 
+A jam records itself through Vibium and sends the record here when it
+ends. The record holds the steps, the screenshots, what was said and
+heard, and video of the device's screen. Video is most of its size.
+The Jam video switch on Settings leaves it out of jams started from
+then on. When a jam made no record of its own, its recording is the
+host's recording of its hold.
+
+Every jam is given the station's jam notes, and the notes of the user
+who started it, which for a token is the token's user. An admin writes
+the station's on Settings, or in `jam-notes.md` in the data directory.
+Each person writes their own on Account. One set is at most 4,000
+characters. A jam's `notes` event holds what it was given.
+
 | Method and path | What it does |
 |---|---|
 | `GET /v1/models` | The models on Settings, each with `name`, `role` (`agent`, `listen` or `say`), `provider`, `model` and `default`; never a key |
 | `POST /v1/jams` | Starts a jam: `{"prompt": ..., "device": "<rig>/<name>", "model": "<name>", "mode": "check" or "run"}`; the device may be left out when one is online, the model when one agent model is set, and the mode when the model should decide from the prompt. Needs control. Returns the jam, 201 |
 | `GET /v1/jams` | The caller's jams, newest first; every jam for the owner |
-| `GET /v1/jams/{id}` | `{"jam": ..., "events": [...], "recording": "<sha256>"}`: the jam, its transcript, and the host's recording of its hold when there is one |
+| `GET /v1/jams/{id}` | `{"jam": ..., "events": [...], "recording": "<sha256>"}`: the jam, its transcript, and its recording when there is one |
 | `POST /v1/jams/{id}/turns` | `{"prompt": ...}`: a follow-up on an open jam, one still running or whose last result was `inconclusive` or `not_completed`, taken up once the current prompt has its result, and answered in words when it asks nothing of the device; 409 when the jam has ended or a prompt is already waiting |
 | `GET /v1/jams/{id}/events` | The transcript as server-sent events, each with `id` (the sequence number), `event` (the kind) and `data` (the event), from the start or after `?after=<seq>` or `Last-Event-ID`; a running jam streams on until its `end`, a finished one replays and closes |
 | `POST /v1/jams/{id}/stop` | Ends the jam, which releases the device |
@@ -292,12 +305,14 @@ read the prompt as a `check` or a `run`, `result` one of `passed`,
 `failed`, `inconclusive`, `completed` and `not_completed`, and
 `summary` the model's explanation. The result is the first prompt's;
 a follow-up of the same kind replaces it, and one of the other kind
-shows in the transcript alone. The event kinds are `start`, `turn`
+shows in the transcript alone. The event kinds are `start`, `notes`
+(the jam notes the model was given, when there are any), `turn`
 (a prompt), `text` (the model's words), `call` (a tool and its
 arguments), `result` (what the tool returned, with `error` when it
 failed), `shot` (a screenshot, at `image`), `verdict` (a result the
 model delivered, with its `took`, `status`, `summary` and `evidence`),
-`usage` (tokens in and out), `grace` (a settled result landed while
+`usage` (tokens in and out), `brake` (the station's word that the jam
+is going in circles), `grace` (a settled result landed while
 someone was watching: the jam ends at `until`, Unix milliseconds,
 unless a follow-up or `keep` arrives first; sent to watchers, not kept
 in the transcript), `kept` (someone kept it open) and `end`, whose
@@ -308,7 +323,10 @@ seconds later when someone does, who can send a follow-up or `keep` in that
 time. It also ends after thirty minutes, a hundred actions, or five
 minutes without a follow-up on an `inconclusive` or `not_completed`
 result, or a kept one, which stay open for a person to look and follow
-up. It then presses the device's Home shortcut when it announces one,
+up. A jam going in circles is braked sooner: when the model repeats
+actions and the screen comes back as it was each time, the station
+tells it so after four such steps, and after eight takes no more
+actions and has it deliver its result. It then presses the device's Home shortcut when it announces one,
 so the device is left on its home screen.
 
 ## station-probe
@@ -372,7 +390,7 @@ the caller may see.
 | `/account/setup` | Adding the authenticator, for a user who signed in by password without one yet, or replacing it |
 | `/` | The prompt box once an agent model is set and Jams is on, with a device picker when more than one device is online and a model picker when more than one agent model is set, and example prompts for the device's kind; sends to `/devices` otherwise |
 | `/jams` | The jams so far, newest first: the prompt, which opens the jam, when, who, the device, the model, and the result |
-| `/jams/{id}` | One jam: its transcript as it happens, the viewer watching the device beside it while it runs, a box for a follow-up prompt, Stop, and Play for the host's recording of its hold when it ends |
+| `/jams/{id}` | One jam: its transcript as it happens, the viewer watching the device beside it while it runs with Stop and Drive on top of the picture, a box for a follow-up prompt, and Play for its recording when it ends. The page follows the transcript only while its end is on screen |
 | `/devices` | The devices: rig, kind, online, who controls it, Drive, Watch, Records |
 | `/devices/{rig}/{name}/drive` | The viewer: Roadie's shell with the WebRTC picture, sound, touch and keyboard, the mic, the settings panel, the on-screen keyboard, stats, the device's own buttons and panels from its extras, and Hold and Release. One link for driving and watching: a free device is taken, a held one is watched, and Hold takes it; Release ends the hold and returns to the device list. `?watch=1` watches only; on a touchscreen two fingers moving together turn the wheel and a pinch becomes Apple Maps' one-finger zoom on a device whose pointer stands in for touch (see Roadie's `/view`); `?minimal=1`, `?input=`, `?transport=`, `?ice=relay`, `?toolbar=`, `?align=`, `?zoom=` (a percentage, or `fit` for the room the picture has, the default on a phone or tablet) and `?stats=1` as on a Roadie |
 | `/devices/{rig}/{name}/view` | The same viewer looking only: it never takes the device and sends no input, for following someone else's session or a jam; a wheel in its toolbar leads to Drive, and the driving page's eye leads here; `?minimal=1` for a frame |
@@ -380,8 +398,8 @@ the caller may see.
 | `/records/{sha256}/thumb.jpg` | A recording's last frame, from its unpacked copy, or a screenshot itself; the same readers as the file |
 | `/records/{sha256}/files/{path}` | One file out of a recording's unpacked copy, such as `trace.trace` or `resources/<frame>`; the same readers as the file |
 | `/records/{sha256}/play` | A recording in the embedded [Record Player](https://github.com/VibiumDev/record-player), framed under the station's own bar with the golden star, the record's tags to edit, Download and a full-page link; the player is served by the station at `/viewer/player/app/?record=<sha256>.zip` and fetches the file with the browser's own session. In the frame it runs with `chrome=hidden`, without its own logo, title and theme switch, and paints with the station's colors and theme, which it reads from the framing page; `?full` is the same frame filling the window, without the bar |
-| `/account` | Who you are signed in as, your role and teams, the authenticator and the backup codes left; change the password, make new backup codes or replace the authenticator, each with the current password; your API tokens, made and revoked here within your own level |
-| `/settings` | The AI models and the Jams switch, enrollment codes, rigs, API tokens, Users, Teams and Device access (who signs in and what each team may do with each device), the password, the network, the Record Store's room and limits; Remove and Revoke are held for a moment rather than clicked |
+| `/account` | Who you are signed in as, your role and teams, the authenticator and the backup codes left; change the password, make new backup codes or replace the authenticator, each with the current password; your jam notes; your API tokens, made and revoked here within your own level |
+| `/settings` | The AI models, the Jams switch and the Jam video switch, the station's jam notes, enrollment codes, rigs, API tokens, Users, Teams and Device access (who signs in and what each team may do with each device), the password, the network, the Record Store's room and limits; Remove and Revoke are held for a moment rather than clicked |
 
 The viewer's files are at `/viewer/shell.js`, `/viewer/shell.css`,
 `/viewer/webrtc.js` and the audio worklets; a Roadie serves the same

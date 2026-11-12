@@ -66,6 +66,26 @@ func TestHoldsByLevel(t *testing.T) {
 	if subj, _ := f.holder(by["admin"], devA); subj != "drive@example.com" {
 		t.Fatalf("after the driver: %s", subj)
 	}
+	// The device list tells each caller which hold is their own, so a
+	// client that came in by /session can find the device it was given.
+	mine := func(who string) bool {
+		var devs []struct {
+			ID   string `json:"id"`
+			Hold *struct {
+				Mine bool `json:"mine"`
+			} `json:"hold"`
+		}
+		json.Unmarshal(f.do(by[who], "GET", "/v1/devices", "", true).Body.Bytes(), &devs)
+		for _, d := range devs {
+			if d.ID == devA && d.Hold != nil {
+				return d.Hold.Mine
+			}
+		}
+		return false
+	}
+	if !mine("drive user") || mine("admin") {
+		t.Errorf("mine: the driver %v, the admin %v; only the holder's list should say so", mine("drive user"), mine("admin"))
+	}
 	// Another regular user recalls them; a token waits in line instead.
 	if code := take("jam user", devA, control); code != 200 {
 		t.Errorf("a regular user recalling another: %d", code)

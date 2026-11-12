@@ -31,6 +31,8 @@ func (f *fakeTools) Tools(ctx context.Context) ([]ToolSchema, error) {
 		{Name: "browser_screenshot", Description: "Shot.", InputSchema: json.RawMessage(`{"type":"object","properties":{"filename":{"type":"string"},"page":{"type":"string"}}}`)},
 		{Name: "browser_tap", Description: "Tap.", InputSchema: schema(`"x":{"type":"number"},"y":{"type":"number"}`)},
 		{Name: "browser_map", Description: "Map (a browser's)."},
+		{Name: "vibium_say", Description: "Say.", InputSchema: json.RawMessage(`{"type":"object","properties":{"text":{"type":"string"},"file":{"type":"string"},"target":{"type":"string"},"provider":{"type":"string"}}}`)},
+		{Name: "vibium_listen", Description: "Listen.", InputSchema: json.RawMessage(`{"type":"object","properties":{"timeout":{"type":"number"},"target":{"type":"string"},"path":{"type":"string"}}}`)},
 	}, nil
 }
 
@@ -197,6 +199,59 @@ func TestDeviceTools(t *testing.T) {
 	tools, _ = l.deviceTools(context.Background())
 	if tools[len(tools)-1].Name != "return_verdict" || len(tools) != 3 {
 		t.Errorf("check mode tools: %d", len(tools))
+	}
+}
+
+// A jam speaks and hears only when the owner set a model for each. The
+// model sees the words to say and how long to wait, and no way to send
+// the sound anywhere but the device or to write it to the station's disk.
+func TestSpeechToolsFollowTheModels(t *testing.T) {
+	names := func(o Options) string {
+		tools, err := New(&scripted{}, &fakeTools{}, o).deviceTools(context.Background())
+		if err != nil {
+			t.Fatal(err)
+		}
+		var out []string
+		for _, tl := range tools {
+			out = append(out, tl.Name)
+		}
+		return strings.Join(out, " ")
+	}
+	if got := names(Options{DeviceKind: "phone", Mode: "run"}); strings.Contains(got, "vibium_") {
+		t.Errorf("with no say or listen model: %s", got)
+	}
+	if got := names(Options{DeviceKind: "phone", Mode: "run", Speaks: true}); got != "browser_screenshot browser_tap vibium_say return_result" {
+		t.Errorf("with a say model: %s", got)
+	}
+	if got := names(Options{DeviceKind: "browser", Mode: "run", Speaks: true, Hears: true}); !strings.HasSuffix(got, "vibium_say vibium_listen return_result") {
+		t.Errorf("a browser with both: %s", got)
+	}
+	l := New(&scripted{}, &fakeTools{}, Options{DeviceKind: "phone", Mode: "run", Speaks: true, Hears: true})
+	tools, _ := l.deviceTools(context.Background())
+	for _, tl := range tools {
+		if tl.Name == "vibium_say" && string(tl.Parameters) != `{"properties":{"text":{"type":"string"}},"type":"object"}` {
+			t.Errorf("say schema not narrowed to the text: %s", tl.Parameters)
+		}
+		if tl.Name == "vibium_listen" && (strings.Contains(string(tl.Parameters), "target") || strings.Contains(string(tl.Parameters), "path")) {
+			t.Errorf("listen schema offers a target or a path: %s", tl.Parameters)
+		}
+	}
+	for _, c := range []struct {
+		o    Options
+		want string
+	}{
+		{Options{}, ""},
+		{Options{Speaks: true, Hears: true}, "say first and then listen"},
+		{Options{Speaks: true}, "You cannot hear the device"},
+		{Options{Hears: true}, "You cannot speak to it"},
+	} {
+		got := New(&scripted{}, &fakeTools{}, c.o).instruction()
+		if c.want == "" && strings.Contains(got, "vibium_") {
+			t.Errorf("the instruction mentions speech with no model for it")
+		}
+		if c.want != "" && !strings.Contains(got, c.want) {
+			t.Errorf("instruction for %+v lacks %q", c.o, c.want)
+		}
 	}
 }
 

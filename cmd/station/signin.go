@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/VibiumDev/station"
+	"github.com/VibiumDev/station/jam"
 )
 
 // --- Signing in: the password, then a code; setup links for new users
@@ -302,6 +303,8 @@ func (s *server) accountData(r *http.Request, p station.Principal, extra map[str
 	left, _ := s.db.BackupCodesLeft(ctx, u.ID)
 	data := map[string]any{"Page": "account", "Principal": p, "CSRF": s.auth.csrfToken(r), "User": u, "TeamNames": teams, "Token": !person(p), "BackupLeft": left,
 		"Tokens": s.ownTokens(ctx, u), "TokenLevels": tokenLevels(s.tokenCeiling(ctx, u))}
+	data["JamNotes"], _ = s.db.JamNotes(ctx, u.ID)
+	data["MaxNotes"], data["JamsPossible"] = jam.MaxNotes, s.jams.possible()
 	for k, v := range extra {
 		data[k] = v
 	}

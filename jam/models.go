@@ -42,16 +42,27 @@ func (c ModelConfig) Client() *Model {
 	return &Model{Provider: c.Provider, Name: c.Model, BaseURL: c.BaseURL, APIKey: c.APIKey, ReasoningEffort: c.ReasoningEffort}
 }
 
-// Env is the model as Vibium reads it: the VIBIUM_AI_* variables and
-// the provider's key variable, for a subprocess that makes its own
-// model calls.
+// Env is the model as Vibium reads it, for a subprocess that makes its
+// own model calls: the provider and model under the names Vibium gives
+// the role, and the provider's key variable. An agent's are
+// VIBIUM_AI_*, a listen model's VIBIUM_LISTEN_* and a say model's
+// VIBIUM_SAY_*.
 func (c ModelConfig) Env() []string {
-	env := []string{"VIBIUM_AI_PROVIDER=" + c.Provider, "VIBIUM_AI_MODEL=" + c.Model}
-	if c.BaseURL != "" {
-		env = append(env, "VIBIUM_AI_BASE_URL="+c.BaseURL)
+	prefix := "VIBIUM_AI_"
+	switch c.Role {
+	case RoleListen:
+		prefix = "VIBIUM_LISTEN_"
+	case RoleSay:
+		prefix = "VIBIUM_SAY_"
 	}
-	if c.ReasoningEffort != "" {
-		env = append(env, "VIBIUM_AI_REASONING_EFFORT="+c.ReasoningEffort)
+	env := []string{prefix + "PROVIDER=" + c.Provider, prefix + "MODEL=" + c.Model}
+	if prefix == "VIBIUM_AI_" {
+		if c.BaseURL != "" {
+			env = append(env, "VIBIUM_AI_BASE_URL="+c.BaseURL)
+		}
+		if c.ReasoningEffort != "" {
+			env = append(env, "VIBIUM_AI_REASONING_EFFORT="+c.ReasoningEffort)
+		}
 	}
 	if p, ok := ProviderByID(c.Provider); ok && c.APIKey != "" {
 		env = append(env, p.KeyVar+"="+c.APIKey)

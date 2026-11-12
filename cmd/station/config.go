@@ -27,6 +27,9 @@ type Config struct {
 	// JamsOff keeps Jams off although an agent model is set: the switch
 	// on Settings.
 	JamsOff bool `json:"jams_off,omitempty"`
+	// JamVideoOff leaves the device's screen out of a jam's record: the
+	// other switch on Settings. Video is most of a record's size.
+	JamVideoOff bool `json:"jam_video_off,omitempty"`
 }
 
 // dataDir is where the station keeps everything: config, key, database,

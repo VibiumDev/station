@@ -31,7 +31,7 @@ func platformName(p string) string {
 // shared stylesheet and theme switch come from the viewer package, so a
 // Roadie's pages are the same. The mark reads Vibium everywhere; a
 // station's own name, when set, is the small line under it.
-var pages = template.Must(template.New("").Funcs(template.FuncMap{"npub": npub, "dict": dict, "platform": platformName, "initial": initial}).Parse(`
+var pages = template.Must(template.New("").Funcs(template.FuncMap{"npub": npub, "dict": dict, "platform": platformName, "initial": initial, "brief": brief}).Parse(`
 {{define "head"}}<!DOCTYPE html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>{{.Title}} · {{if .Named}}{{.Name}}{{else}}Vibium Station{{end}}</title><link rel="icon" type="image/png" href="/favicon.png"><link rel="apple-touch-icon" href="/apple-touch-icon.png">
@@ -133,14 +133,14 @@ var pages = template.Must(template.New("").Funcs(template.FuncMap{"npub": npub, 
 <div class="helptext" id="help-devices" hidden>
 <p>Every device on every host enrolled here. Drive, the wheel, takes a device nobody holds and gives you the picture, touch, keys and sound; a device someone else holds opens watching, and Hold in the viewer takes it from them, which ends an agent's run. Release in the viewer gives the device back and returns here, and a hold also ends after 5 idle minutes, or after 8 hours. Watch, the eye, only looks: it never takes the device and sends no input, so it is the safe way to follow someone else's session or a jam.</p>
 <p><b>Device.</b> The device's label, else its model, else its name, which opens the watching page, with its kind, its model when the label differs, its platform and version, and its name under it. The name is the last part of the device's address, rig/name, which holds and the API use; Roadie's <code>--label</code>, <code>--model</code>, <code>--os-version</code>, <code>--platform</code> and <code>--device-name</code> set the rest.</p>
-<p><b>Host.</b> The machine the device is wired to or runs on, a Roadie rig today: the name it enrolled with, and the id the station gave it. <i>Records sessions</i> means the host records every hold on the device, yours as much as an agent's: each input, and a frame of the screen after each burst of input, go into a recording that is uploaded to the Record Store when the hold ends, where the Records page lists it. That is the host's own setting (Roadie's <code>--record</code>), which the host announces when it connects; the viewer shows REC while such a session is live.</p>
+<p><b>Host.</b> The machine the device is wired to or runs on, a Roadie rig today: the name it enrolled with, and the id the station gave it. <i>Records sessions</i> means the host records every hold on the device, yours as much as an agent's: each input, and a frame of the screen after each burst of input, go into a recording that is uploaded to the Record Store when the hold ends, where the Records page lists it. A host that can also keeps a video of the screen, what the device played, and what was sent to its microphone, your voice included when the viewer's microphone is on. That is the host's own setting (Roadie's <code>--record</code>), which the host announces when it connects; the viewer shows REC while such a session is live.</p>
 <p><b>Status.</b> Online while the host's tunnel to the station is up, offline otherwise. Under it, available when nobody holds the device, or who holds it and how many agents are waiting their turn. Someone watching a free device is shown too; they hold it view only, anyone who drives takes it over at once, and the watch ends when they press Stop watching or close the page.</p>
 </div>
 {{if not .Devices}}<div class="msg">{{if .Principal.Admin}}No hosts yet. Make an enrollment code on <a href="/settings">Settings</a>, then on the host run <code>roadie enroll --code …</code>.{{else}}Nothing is shared with you yet. An admin shares a device with one of your teams on Settings, and it appears here.{{end}}</div>{{end}}
 {{if .Devices}}<div class="tablewrap"><table><thead><tr><th>Device</th><th>Host</th><th>Status</th><th></th></tr></thead><tbody>
 {{range .Devices}}<tr>
 <td data-l="Device">{{if .ID}}<b><a href="/devices/{{.ID}}/view">{{.Title}}</a></b><span class="sub">{{.Kind}}{{if and .Model (ne .Model .Title)}} · {{.Model}}{{end}}{{if .Platform}} · {{platform .Platform}}{{if .OSVersion}} {{.OSVersion}}{{end}}{{end}}{{if ne .Title .Name}} · {{.Name}}{{end}}</span>{{else}}<span class="muted">no devices announced</span>{{end}}</td>
-<td data-l="Host"><b>{{.Rig.Name}}</b><span class="sub">{{.Rig.ID}}{{if .Recorded}} · <span class="hint" title="This host records every session on the device: each input, and a frame of the screen after each burst of input, kept in the Record Store when the session ends.">records sessions</span>{{end}}</span></td>
+<td data-l="Host"><b>{{.Rig.Name}}</b><span class="sub">{{.Rig.ID}}{{if .Recorded}} · <span class="hint" title="This host records every session on the device: each input, a frame of the screen after each burst of input and, where the host can, a video of the screen, the device's sound and what is sent to its microphone, kept in the Record Store when the session ends.">records sessions</span>{{end}}</span></td>
 <td data-l="Status">{{if .Online}}<span class="dot on"></span>online{{else}}<span class="dot"></span><span class="muted">offline</span>{{end}}<span class="sub">{{if and .Hold (not .Hold.Watching)}}held by {{if .Hold.JamID}}<a href="/jams/{{.Hold.JamID}}">jam {{.Hold.JamID}}</a>{{else}}{{.Hold.Subject}}{{end}}{{else}}available{{if .Hold}} · watched by {{.Hold.Subject}}{{end}}{{end}}{{if .Waiting}} · {{.Waiting}} waiting{{end}}</span></td>
 <td class="act">{{if .ID}}{{if .CanDrive}}<a class="btn small icon" href="/devices/{{.ID}}/drive" title="Drive" aria-label="Drive {{.Title}}">{{template "icon-drive"}}</a> {{end}}<a class="btn small icon" href="/devices/{{.ID}}/view" title="Watch" aria-label="Watch {{.Title}}">{{template "icon-watch"}}</a> <a class="btn small icon" href="/records?device={{.ID}}" title="Records" aria-label="Records of {{.Title}}">{{template "icon-records"}}</a>{{end}}</td>
 </tr>{{end}}</tbody></table></div>{{end}}
@@ -202,7 +202,12 @@ var pages = template.Must(template.New("").Funcs(template.FuncMap{"npub": npub, 
 {{if .User.TwoFactor}}<h2 class="h2">Authenticator</h2>
 <form class="row" method="post" action="/account/codes"><input type="hidden" name="csrf" value="{{.CSRF}}"><input type="password" name="current" placeholder="current password" aria-label="Current password, for new backup codes" autocomplete="current-password"> <input type="submit" value="New backup codes"></form>
 <form class="row" method="post" action="/account/authenticator"><input type="hidden" name="csrf" value="{{.CSRF}}"><input type="password" name="current" placeholder="current password" aria-label="Current password, to replace the authenticator" autocomplete="current-password"> <input type="submit" value="Replace the authenticator"></form>{{end}}
-<h2 class="h2">API tokens {{template "help" "my-tokens"}}</h2>
+{{if .JamsPossible}}<h2 class="h2" id="jam-notes">Jam notes {{template "help" "my-jam-notes"}}</h2>
+<p class="helptext" id="help-my-jam-notes" hidden>Your own standing guidance for the model, given to it with every jam you start, after the station's notes. A jam's transcript shows the notes it was given. They travel with every step of a jam, so short notes cost fewer tokens.</p>
+<form method="post" action="/account/jam-notes"><input type="hidden" name="csrf" value="{{.CSRF}}">
+<textarea class="notes" name="notes" rows="6" maxlength="{{.MaxNotes}}" aria-label="Notes for every jam you start" placeholder="Reload a page before you use its microphone.">{{.JamNotes}}</textarea>
+<input type="submit" value="Save notes"></form>
+{{end}}<h2 class="h2">API tokens {{template "help" "my-tokens"}}</h2>
 <p class="helptext" id="help-my-tokens" hidden>A token lets a script or an agent act as you without signing in, sent as <code>Authorization: Bearer &lt;token&gt;</code>, at a level no higher than your own: watch only looks, drive holds and drives devices and runs jams and agents, admin also manages the station. {{if .TokenLevels}}You may make {{range $i, $l := .TokenLevels}}{{if $i}}, {{end}}{{$l}}{{end}} tokens.{{else}}You have no device access yet, so no token of yours could do anything.{{end}} The secret is shown once; the station keeps only a hash. Revoke stops a token at once.</p>
 {{if .NewToken}}<div class="card featured">Token <b>{{.NewTokenName}}</b>, shown once:<p class="secret">{{.NewToken}}</p></div>{{end}}
 {{if .Tokens}}<div class="tablewrap"><table><thead><tr><th>Name</th><th>Access</th><th>Created</th><th>Last used</th><th></th></tr></thead><tbody>
@@ -244,7 +249,7 @@ var pages = template.Must(template.New("").Funcs(template.FuncMap{"npub": npub, 
 <h2 class="h2">Jams {{template "help" "jams"}}</h2>
 <p class="helptext" id="help-jams" hidden>Every jam session on this station, newest first: the prompt, when and who asked, on which device and with which AI model, and the result. The prompt opens the session, with its transcript and the recording. A new one starts from the <a href="/">front page</a>.</p>
 {{if .Jams}}<div class="tablewrap"><table><thead><tr><th>Prompt</th><th>When</th><th>Who</th><th>Device</th><th>AI model</th><th>Result</th></tr></thead><tbody>
-{{range .Jams}}<tr><td data-l="Prompt" class="prompt"><a href="/jams/{{.ID}}">{{.Prompt}}</a></td><td data-l="When">{{.When}}</td><td data-l="Who">{{.Subject}}</td><td data-l="Device">{{.Label}}</td><td data-l="AI model">{{.Model}}</td>
+{{range .Jams}}<tr><td data-l="Prompt" class="prompt"><a href="/jams/{{.ID}}" title="{{.Prompt}}">{{brief .Prompt 120}}</a></td><td data-l="When">{{.When}}</td><td data-l="Who">{{.Subject}}</td><td data-l="Device">{{.Label}}</td><td data-l="AI model">{{.Model}}</td>
 <td data-l="Result">{{if .Open}}<span class="dot on"></span>running{{else if .Word}}<b class="verdict {{.Result}}">{{.Word}}</b>{{else}}<span class="muted">{{.Status}}</span>{{end}}</td></tr>{{end}}
 </tbody></table></div>{{else}}<p class="muted">No jams yet. <a href="/">Start one.</a></p>{{end}}
 </main>{{template "foot" .}}{{end}}
@@ -255,7 +260,7 @@ var pages = template.Must(template.New("").Funcs(template.FuncMap{"npub": npub, 
 <p class="crumb"><a href="/jams">‹ Jams</a></p>
 <div class="titlerow"><h1 class="jamtitle" title="{{.Jam.Prompt}}">{{.Jam.Prompt}}</h1>
 {{if .Word}}<span class="pill {{.Jam.Result}}">{{.Word}}</span>{{else if .Open}}<span class="pill running"><span class="dot on"></span>running</span>{{else}}<span class="pill">{{.Jam.Status}}</span>{{end}}
-<span class="act">{{if .Open}}<form class="inline" method="post" action="/jams/{{.Jam.ID}}/stop"><input type="hidden" name="csrf" value="{{.CSRF}}"><button class="small icon" type="submit" title="Stop the jam" aria-label="Stop the jam">{{template "icon-stop"}}</button></form>{{end}}{{if .Play}}<a class="btn small icon" href="{{.Play}}" title="Play the recording" aria-label="Play the recording">{{template "icon-play"}}</a>{{end}}<a class="btn small icon" href="/devices/{{.Jam.DeviceID}}/drive" title="Drive the device" aria-label="Drive the device">{{template "icon-drive"}}</a></span></div>
+<span class="act">{{if and .Open (not .Watch)}}<form class="inline" method="post" action="/jams/{{.Jam.ID}}/stop"><input type="hidden" name="csrf" value="{{.CSRF}}"><button class="small icon" type="submit" title="Stop the jam" aria-label="Stop the jam">{{template "icon-stop"}}</button></form>{{end}}{{if .Play}}<a class="btn small icon" href="{{.Play}}" title="Play the recording" aria-label="Play the recording">{{template "icon-play"}}</a>{{end}}{{if not .Watch}}<a class="btn small icon" href="/devices/{{.Jam.DeviceID}}/drive" title="Drive the device" aria-label="Drive the device">{{template "icon-drive"}}</a>{{end}}</span></div>
 <p class="meta">{{.When}} · {{.Jam.Subject}} · {{.DeviceLabel}} · AI model {{.Jam.Model}}{{if .Took}} · {{.Took}}{{end}} · {{.Jam.ID}}</p>
 </header>
 {{if .Message}}<div class="msg error" role="alert">{{.Message}}</div>{{end}}
@@ -263,7 +268,8 @@ var pages = template.Must(template.New("").Funcs(template.FuncMap{"npub": npub, 
 <div class="transcript" id="transcript" data-jam="{{.Jam.ID}}" data-after="{{.Last}}"{{if .Open}} data-open="1"{{end}}>
 {{range .Events}}{{template "event" .}}{{end}}
 </div>
-{{if .Watch}}<iframe class="watch" src="{{.Watch}}" title="Watching {{.DeviceLabel}}" allow="autoplay"></iframe>{{end}}
+{{if .Watch}}<aside class="watchside"><div class="watchbar"><form class="inline" method="post" action="/jams/{{.Jam.ID}}/stop"><input type="hidden" name="csrf" value="{{.CSRF}}"><button class="small icon" type="submit" title="Stop the jam">{{template "icon-stop"}} Stop</button></form><a class="btn small icon" href="/devices/{{.Jam.DeviceID}}/drive" title="Drive the device yourself">{{template "icon-drive"}} Drive</a></div>
+<iframe class="watch" src="{{.Watch}}" title="Watching {{.DeviceLabel}}" allow="autoplay"></iframe></aside>{{end}}
 </div>
 {{if .Open}}<div class="grace" id="grace" data-until="{{.GraceUntil}}" data-total="{{.GraceSeconds}}" hidden><div class="bar"><span></span></div><p>The result is in. The session ends in <b class="left">{{.GraceSeconds}}</b> s unless you keep it open or send a follow-up.</p><form method="post" action="/jams/{{.Jam.ID}}/keep"><input type="hidden" name="csrf" value="{{.CSRF}}"><button class="small" type="submit">Keep it open</button></form></div>
 <form class="promptbox" method="post" action="/jams/{{.Jam.ID}}/turns"><input type="hidden" name="csrf" value="{{.CSRF}}">
@@ -275,12 +281,14 @@ var pages = template.Must(template.New("").Funcs(template.FuncMap{"npub": npub, 
 {{define "event"}}{{if eq .Kind "turn"}}<div class="ev turn"><span class="t">{{.When}}</span><div class="body"><b>Prompt</b><p>{{.Text}}</p></div></div>
 {{else if eq .Kind "start"}}<div class="ev start"><span class="t">{{.When}}</span><div class="body muted">{{.Text}}</div></div>
 {{else if eq .Kind "kept"}}<div class="ev kept"><span class="t">{{.When}}</span><div class="body muted">{{.Text}}</div></div>
+{{else if eq .Kind "notes"}}<div class="ev notes"><span class="t">{{.When}}</span><details class="body"><summary>Notes given to the model</summary><p>{{.Text}}</p></details></div>
 {{else if eq .Kind "text"}}<div class="ev text"><span class="t">{{.When}}</span><div class="body"><p>{{.Text}}</p></div></div>
 {{else if eq .Kind "call"}}<div class="ev call"><span class="t">{{.When}}</span><div class="body"><code>{{.Tool}}{{if .Args}} {{.Args}}{{end}}</code></div></div>
 {{else if eq .Kind "result"}}<div class="ev result{{if .Error}} error{{end}}"><span class="t">{{.When}}</span><div class="body">{{.Text}}</div></div>
 {{else if eq .Kind "shot"}}<div class="ev shot"><span class="t">{{.When}}</span><div class="body">{{if .Image}}<a href="{{.Image}}" target="_blank" rel="noopener"><img src="{{.Image}}" alt="Screenshot {{.Tool}}" loading="lazy"></a>{{end}}</div></div>
 {{else if eq .Kind "verdict"}}<div class="ev verdict"><span class="t">{{.When}}</span><div class="body"><b class="verdict {{.Verdict.Status}}">{{.Word}}</b> {{.Verdict.Summary}}{{if .Verdict.Evidence}}<ul>{{range .Verdict.Evidence}}<li>{{.}}</li>{{end}}</ul>{{end}}{{if .Verdict.Reason}}<span class="muted">{{.Verdict.Reason}}</span>{{end}}</div></div>
 {{else if eq .Kind "error"}}<div class="ev error"><span class="t">{{.When}}</span><div class="body">{{.Text}}</div></div>
+{{else if eq .Kind "brake"}}<div class="ev brake"><span class="t">{{.When}}</span><div class="body">{{.Text}}</div></div>
 {{else if eq .Kind "end"}}<div class="ev end"><span class="t">{{.When}}</span><div class="body muted">{{.Text}}</div></div>
 {{end}}{{end}}
 
@@ -347,10 +355,16 @@ var pages = template.Must(template.New("").Funcs(template.FuncMap{"npub": npub, 
 <input class="primary" type="submit" value="Add model"></div></form>
 <div class="tablewrap"><table class="kv">
 <tr><th>Jams</th><td>{{if .JamsPossible}}<form class="inline" method="post" action="/settings/jams"><input type="hidden" name="csrf" value="{{.CSRF}}"><input type="hidden" name="on" value="{{if .JamsOn}}0{{else}}1{{end}}">{{if .JamsOn}}on <button class="link" type="submit">turn off</button>{{else}}off <button class="link" type="submit">turn on</button>{{end}}</form>{{else}}<span class="muted">off until an agent model is set</span>{{end}}</td></tr>
-<tr><th>Vibium</th><td>{{if .Vibium}}<code>{{.Vibium}}</code>{{else}}<span class="muted">not found ({{.VibiumMissing}}); jam sessions drive devices through <code>vibium mcp</code>, so put the binary on the station's PATH or pass <code>--vibium</code></span>{{end}}</td></tr>
+{{if .JamsPossible}}<tr><th>Jam video</th><td><form class="inline" method="post" action="/settings/jam-video"><input type="hidden" name="csrf" value="{{.CSRF}}"><input type="hidden" name="on" value="{{if .JamVideo}}0{{else}}1{{end}}">{{if .JamVideo}}on <button class="link" type="submit">turn off</button>{{else}}off <button class="link" type="submit">turn on</button>{{end}} <span class="muted">a jam's record holds video of the device's screen</span></form></td></tr>
+{{end}}<tr><th>Vibium</th><td>{{if .Vibium}}<code>{{.Vibium}}</code>{{else}}<span class="muted">not found ({{.VibiumMissing}}); jam sessions drive devices through <code>vibium mcp</code>, so put the binary on the station's PATH or pass <code>--vibium</code></span>{{end}}</td></tr>
 </table></div>
 
-<h2 class="h2">Enroll a rig {{template "help" "enroll"}}</h2>
+{{if .JamsPossible}}<h2 class="h2" id="jam-notes">Jam notes {{template "help" "jam-notes"}}</h2>
+<p class="helptext" id="help-jam-notes" hidden>Standing guidance for the model, given to it with every jam on this station, whoever starts it. Each person can add notes of their own on Account. A jam's transcript shows the notes it was given. They travel with every step of a jam, so short notes cost fewer tokens. They are guidance and not a guard: a prompt that asks for something else is followed. The notes are also the file <code>jam-notes.md</code> in the station's data directory, which can be edited by hand. A change applies to the next jam.</p>
+<form method="post" action="/settings/jam-notes"><input type="hidden" name="csrf" value="{{.CSRF}}">
+<textarea class="notes" name="notes" rows="6" maxlength="{{.MaxNotes}}" aria-label="Notes for every jam on this station" placeholder="After a completed run or a passed check, leave the device on its home screen.">{{.JamNotes}}</textarea>
+<input type="submit" value="Save notes"></form>
+{{end}}<h2 class="h2">Enroll a rig {{template "help" "enroll"}}</h2>
 <p class="helptext" id="help-enroll" hidden>A rig is a machine with devices on it: a Raspberry Pi running Roadie with a phone wired to it. Enrolling joins it to this station. From then on the rig keeps a tunnel open to the station, the station lists the rig's devices, and holds on them go through the tunnel. An enrollment code is used once and expires after 15 minutes. Its last group is this station's key fingerprint, which the rig checks, so it enrolls with the station you meant. On the same network the rig finds the station by mDNS and the address can be left out.</p>
 {{if .NewCode}}<div class="card featured">On the rig, within 15 minutes (until {{.CodeExpires}}):
 <p class="secret">roadie enroll {{.PublicURL}} --code {{.NewCode}}</p>

@@ -90,6 +90,13 @@ func (m *jams) on() bool {
 	return !off && len(m.models.OfRole(jam.RoleAgent)) > 0
 }
 
+// video says whether a jam's record holds video of the device.
+func (m *jams) video() bool {
+	m.s.nameMu.RLock()
+	defer m.s.nameMu.RUnlock()
+	return !m.s.cfg.JamVideoOff
+}
+
 // possible says whether an agent model exists, whatever the switch.
 func (m *jams) possible() bool { return m != nil && len(m.models.OfRole(jam.RoleAgent)) > 0 }
 
@@ -188,6 +195,10 @@ func (m *jams) start(ctx context.Context, p station.Principal, prompt, deviceID,
 	m.live[j.ID] = lj
 	m.mu.Unlock()
 	lj.emit(m, jam.Event{Kind: "start", Text: dev.ID + " with " + model.Name})
+	stationNotes, personNotes := m.s.jamNotes(ctx, p)
+	if ev, ok := jam.NotesEvent(stationNotes, personNotes); ok {
+		lj.emit(m, ev)
+	}
 	logf := func(format string, args ...any) {
 		line := strings.TrimPrefix(fmt.Sprintf(format, args...), "vibium: vibium: ")
 		fmt.Printf("jam %s: %s\n", j.ID, line)
@@ -198,15 +209,52 @@ func (m *jams) start(ctx context.Context, p station.Principal, prompt, deviceID,
 		return j, errors.New("starting Vibium: " + err.Error())
 	}
 	lj.loop = jam.New(model.Client(), mcp, jam.Options{Prompt: prompt, Mode: mode, DeviceKind: dev.Kind, MaxActions: jamMaxActions, TimeLimit: jamTimeLimit,
-		Grace: jamGrace, Watched: lj.watched, Shortcuts: jamShortcuts(dev.Shortcuts), About: deviceAbout(dev), Emit: func(ev jam.Event) { lj.emit(m, ev) }})
+		Grace: jamGrace, Watched: lj.watched, Shortcuts: jamShortcuts(dev.Shortcuts), About: deviceAbout(dev), Speaks: m.has(jam.RoleSay), Hears: m.has(jam.RoleListen), StationNotes: stationNotes, PersonNotes: personNotes, Emit: func(ev jam.Event) { lj.emit(m, ev) }})
 	m.s.db.Audit(ctx, station.AuditEntry{Subject: p.Subject, Action: "jam", DeviceID: dev.ID, Detail: "started " + j.ID + " with " + model.Name})
 	go m.watchHold(lj)
 	go func() {
+		// Vibium records the jam: its steps, what was said and what was
+		// heard, with the sound. The record goes to this station when the
+		// jam ends, next to the rig's own record of the hold.
+		recording := m.recordJam(mcp, j.ID, logf)
 		res := lj.loop.Run(context.Background())
+		recording()
 		mcp.Close()
 		m.finish(lj, res, nil)
 	}()
 	return j, nil
+}
+
+// recordJam starts Vibium's recording of a jam and returns what ends it
+// and sends it here. A jam runs the same without a record, so a failure
+// is logged and nothing more.
+func (m *jams) recordJam(mcp *jam.MCP, id string, logf func(string, ...any)) func() {
+	path := filepath.Join(m.s.dir, "vibium", "records", id+".zip")
+	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+	defer cancel()
+	res, err := mcp.Call(ctx, "browser_record_start", jamRecordArgs(id, path, m.video()))
+	if err != nil || res.IsError {
+		logf("no record of this jam: %v %s", err, res.Text())
+		return func() {}
+	}
+	return func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+		defer cancel()
+		if res, err := mcp.Call(ctx, "browser_record_stop", map[string]any{"upload": true}); err != nil || res.IsError {
+			logf("the jam's record was not sent: %v %s", err, res.Text())
+		}
+		os.Remove(path)
+	}
+}
+
+// jamRecordArgs is what a jam asks of Vibium's recording. Left to itself
+// Vibium films the device's screen whenever it can, so only "no" is said.
+func jamRecordArgs(id, path string, video bool) map[string]any {
+	args := map[string]any{"name": id, "path": path}
+	if !video {
+		args["video"] = false
+	}
+	return args
 }
 
 // deviceAbout words what the device is for the model's instruction:
@@ -314,6 +362,12 @@ func (m *jams) pickDevice(ctx context.Context, p station.Principal, want string)
 		return deviceView{}, errors.New("more than one device is online; name one")
 	}
 	return online[0], nil
+}
+
+// has says whether the owner set a default model for a role.
+func (m *jams) has(role string) bool {
+	_, ok := m.models.Default(role)
+	return ok
 }
 
 // env is the subprocess's environment: the station's own /session with
@@ -610,7 +664,9 @@ func (m *jams) subscribe(ctx context.Context, id string, after int) ([]station.J
 	return past, ch, cancel
 }
 
-// recordingOf is the rig's recording of the jam's hold, when there is one.
+// recordingOf is the record of the jam's hold, when there is one: the
+// jam's own, which Vibium made and which carries the sound, or else the
+// rig's record of the hold.
 func (m *jams) recordingOf(ctx context.Context, j station.Jam) (station.Blob, bool) {
 	if j.HoldID == "" {
 		return station.Blob{}, false
@@ -619,12 +675,40 @@ func (m *jams) recordingOf(ctx context.Context, j station.Jam) (station.Blob, bo
 	if err != nil {
 		return station.Blob{}, false
 	}
-	for _, b := range bs {
-		if b.Type == "application/zip" {
+	var first *station.Blob
+	for i, b := range bs {
+		if b.Type != "application/zip" {
+			continue
+		}
+		if b.Uploader == jamSubject(j.ID) {
 			return b, true
 		}
+		if first == nil {
+			first = &bs[i]
+		}
+	}
+	if first != nil {
+		return *first, true
 	}
 	return station.Blob{}, false
+}
+
+// brief shortens a long line for a list: at most n characters, cut at a
+// word where one is near, with an ellipsis.
+func brief(s string, n int) string {
+	s = strings.Join(strings.Fields(s), " ")
+	r := []rune(s)
+	if len(r) <= n {
+		return s
+	}
+	cut := n - 1
+	for i := cut; i > cut-20 && i > 0; i-- {
+		if r[i] == ' ' {
+			cut = i
+			break
+		}
+	}
+	return strings.TrimRight(string(r[:cut]), " ,.;:") + "…"
 }
 
 // Handlers.

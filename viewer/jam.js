@@ -46,7 +46,12 @@
         }
         if (v.reason) body.appendChild(h('span', 'muted', v.reason));
         break;
-      case 'error': body.textContent = d.text || ''; break;
+      case 'error': case 'brake': body.textContent = d.text || ''; break;
+      case 'notes':
+        body = h('details', 'body');
+        body.appendChild(h('summary', null, 'Notes given to the model'));
+        body.appendChild(h('p', null, d.text));
+        break;
       default: return null;
     }
     ev.appendChild(body);
@@ -85,16 +90,23 @@
       timer = setInterval(tick, 100);
     }
     function hideGrace() { if (g) { g.hidden = true; } clearInterval(timer); }
+    // The page follows the transcript while its end is on screen. A
+    // reader who has scrolled away, to the Stop button say, stays there.
+    function atEnd() {
+      var last = tr.lastElementChild;
+      return !last || last.getBoundingClientRect().top < window.innerHeight;
+    }
     showGrace(parseInt(g && g.dataset.until, 10));
     var es = new EventSource('/v1/jams/' + tr.dataset.jam + '/events?after=' + (tr.dataset.after || 0));
-    ['start', 'turn', 'text', 'call', 'result', 'shot', 'verdict', 'error', 'grace', 'kept', 'end'].forEach(function (kind) {
+    ['start', 'notes', 'turn', 'text', 'call', 'result', 'shot', 'verdict', 'error', 'brake', 'grace', 'kept', 'end'].forEach(function (kind) {
       es.addEventListener(kind, function (e) {
         var d = {};
         try { d = JSON.parse(e.data); } catch (err) {}
         if (kind === 'grace') { showGrace(d.until); return; }
         hideGrace();
+        var follow = atEnd();
         var node = render(kind, d);
-        if (node) { tr.appendChild(node); node.scrollIntoView({block: 'nearest'}); }
+        if (node) { tr.appendChild(node); if (follow) node.scrollIntoView({block: 'nearest'}); }
         if (kind === 'end') { es.close(); setTimeout(function () { location.reload(); }, 800); }
       });
     });

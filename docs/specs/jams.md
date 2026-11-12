@@ -114,7 +114,11 @@ A person types a prompt and sends it. The station:
    tools Vibium offers for this device; executes each tool call the
    model returns through Vibium; takes a screenshot after each action
    and sends it back as the observation; repeats until the model
-   delivers a verdict or a result, or a limit stops it.
+   delivers a verdict or a result, or a limit stops it. A model may ask
+   for several actions in one message. Each is answered first, in
+   order, and the screenshots follow the last answer: a provider
+   refuses a conversation with anything between a model's calls and
+   their answers.
 5. Shows each step on the page as it happens: the tool call and its
    arguments, the observation, the screenshot, the model's visible
    text, and at the end the verdict or the goal's completion, or an
@@ -252,6 +256,32 @@ and refuses what its policy does not allow, and it may belong to
 someone other than the person typing the prompt. A customer's model key
 and prompt do not go there.
 
+## Notes
+
+A model starts every jam knowing nothing of the station it is on. Jam
+notes are standing guidance it is given each time: what holds for
+every jam here, which a prompt should not have to repeat.
+
+- The station has one set of notes. An admin edits it on Settings. It
+  is the file `jam-notes.md` in the station's data directory, and it
+  can be edited by hand. The file is read when a jam starts, so a
+  change applies to the next jam.
+- Each person has a set of their own, edited on Account. It goes with
+  the jams that person starts, from a page or with one of their
+  tokens.
+- A jam is given the station's notes and then its starter's, at the
+  end of the system instruction. The model is told who wrote them,
+  that they are not from the device, and that the prompt is followed
+  where it asks for something else.
+- Notes are guidance and not a guard. What a jam may do is decided by
+  access levels and the rig's policy.
+- One set is at most 4,000 characters. The notes travel with every
+  model request of a jam, so they cost tokens at every step.
+- The transcript holds a `notes` event with what the jam was given, so
+  a reader can tell why the model did what no prompt asked for. A jam
+  given no notes has none.
+- A follow-up prompt runs under the notes the jam started with.
+
 ## Provider settings
 
 Jams are bring your own keys. Settings gains an **AI** section that
@@ -275,7 +305,8 @@ is seen once, as it is typed, and never again: the row says that one is
 set, offers Replace and Remove, and nothing a browser receives
 afterwards contains it. The section also holds the Jams switch, on by
 default once an agent model is set, which is what puts Jams in the top
-bar and the prompt on the front page.
+bar and the prompt on the front page. Beside it is the Jam video switch,
+on by default: whether a jam's record holds video of the device's screen.
 
 With one agent model the prompt has no picker and the person typing
 sees none of this. With two or more, a picker beside the prompt names
@@ -379,6 +410,30 @@ minutes and a hundred actions by default, which the loop enforces and
 the token's expiry backs even if the loop hangs. A listen or a say
 counts as an action, and its seconds count against the clock.
 
+A model can go in circles: it taps the same two buttons in turn, and
+each tap costs a full round of tokens. The loop has a brake for that.
+
+- A step is in a circle when it repeats an earlier action and the
+  screen afterwards looks like one that followed that action before.
+- Two actions are the same when the tool is the same and each number
+  is within 16 of the other. A model aiming at one button lands a few
+  points off each time.
+- Two screens are the same when no cell of a 24 by 24 grid of their
+  brightness differs by more than 16 of 255. A blinking caret stays
+  under that. A new digit does not.
+- A step in a circle goes one deeper. Any other step comes one out.
+  Looking and waiting are not steps: a screenshot, a sleep, a listen.
+- At four deep the station tells the model to try another way. The
+  transcript shows a `brake` event. Actions the model asked for in the
+  same message are not run: the model reads the station's word first.
+- At eight deep the station takes no more actions. The model must
+  deliver its result, which is not completed or inconclusive.
+- The same button pressed many times is not a circle while the screen
+  keeps changing.
+
+On the jam that prompted it, 67 actions and 341,000 tokens, the brake
+would have spoken at the 14th action and stopped the jam at the 18th.
+
 Model cost falls on the key the model was set up with. The first
 milestone records the tokens the provider reports in the jam's
 transcript, so the list can show what a jam cost, and sets no budget. A budget per jam
@@ -386,15 +441,27 @@ and per day is the hosted station's concern.
 
 ## Recordings
 
-A jam's recording is the rig's recording of its hold, which the Record
-Store already ties to the hold and the Records page already lists, so
-the jam's page links to it with nothing new. It is the stronger
-recording in any case: it shows what the phone showed and received, and
-the agent cannot alter it. The transcript, with the model's text, the
-tool calls and the token counts, stays in the station's database with
-the jam, and the jam's page shows the two side by side. A rig that does
-not record leaves a jam with its transcript alone, which is an open
-question below until the loop records for itself.
+A jam has up to two recordings of its hold.
+
+- The jam's own. The station starts a Vibium recording when the jam
+  starts and uploads it when the jam ends. It holds the steps, the
+  screenshots, what was said and heard with the sound, and video of the
+  device's screen. Vibium joins the device's stream as a viewer to get
+  the video. The Record Player plays the video in step with the steps.
+- The rig's, when the rig records. It shows what the device showed and
+  received, and the agent cannot alter it.
+
+The jam's page plays the jam's own recording, and the rig's when the jam
+made none. Both are tied to the hold, so the Records page lists both.
+
+Video is most of a record's size: about 3 to 8 MB a minute for a phone.
+The Jam video switch on Settings, on by default, leaves it out of jams
+started from then on. The steps, screenshots and sound are recorded
+either way.
+
+The transcript, with the model's text, the tool calls and the token
+counts, stays in the station's database with the jam, and the jam's page
+shows it beside the recording.
 
 ## Security
 
@@ -443,8 +510,11 @@ question below until the loop records for itself.
   says which one did it, and the jam's recording plays from the jam's
   page and the Records page. The same on the Fly test station, with
   nothing changed but the address.
-- [ ] **R9 Jams can listen**: once Vibium has `listen` and Roadie
-  answers it. The listen role on Settings, its variables passed to the
+- [ ] **R9 Jams can listen**: Vibium has `listen` and Roadie answers
+  it. Built so far: a listen model's settings reach the subprocess as
+  `VIBIUM_LISTEN_PROVIDER` and `VIBIUM_LISTEN_MODEL`, and `vibium_listen`
+  is offered when a default listen model is set. Not yet run on a
+  device, so the gate is open. The listen role on Settings, its variables passed to the
   subprocess, the tool offered when a listen model is set and the
   device announces audio, an example prompt that uses it, and the
   transcript showing what was heard. Gate: "Open YouTube, play the
@@ -452,7 +522,10 @@ question below until the loop records for itself.
   on the page plays the video on the phone, the jam listens, and the
   result quotes what it heard; the same with a local whisper server as
   the listen model.
-- [ ] **R10 Jams can speak**: once Vibium has `say`. The say role, the
+- [ ] **R10 Jams can speak**: Vibium has `say`. Built so far: a say
+  model's settings reach the subprocess as `VIBIUM_SAY_PROVIDER` and
+  `VIBIUM_SAY_MODEL`, and `vibium_say` is offered when a default say
+  model is set. Not yet run on a device, so the gate is open. The say role, the
   tool, and an example prompt that talks to the phone. Gate: "Ask the
   phone's assistant what time it is and tell me what it answers" says
   the question into the phone's microphone, the assistant answers out

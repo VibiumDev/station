@@ -182,7 +182,8 @@ CREATE TABLE IF NOT EXISTS users (
 	last_login    INTEGER NOT NULL DEFAULT 0,
 	totp_secret   TEXT NOT NULL DEFAULT '',
 	totp_at       INTEGER NOT NULL DEFAULT 0,
-	totp_step     INTEGER NOT NULL DEFAULT 0
+	totp_step     INTEGER NOT NULL DEFAULT 0,
+	jam_notes     TEXT NOT NULL DEFAULT ''
 );
 CREATE TABLE IF NOT EXISTS backup_codes (
 	user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -282,6 +283,7 @@ func (d *DB) migrate() error {
 		{"users", "totp_secret", "TEXT NOT NULL DEFAULT ''"},
 		{"users", "totp_at", "INTEGER NOT NULL DEFAULT 0"},
 		{"users", "totp_step", "INTEGER NOT NULL DEFAULT 0"},
+		{"users", "jam_notes", "TEXT NOT NULL DEFAULT ''"},
 	} {
 		has, err := d.hasColumn(c.table, c.column)
 		if err != nil {

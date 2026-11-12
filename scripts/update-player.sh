@@ -4,9 +4,13 @@
 #
 #   scripts/update-player.sh [REF]      default: main
 #
+# PLAYER_REPO names another clone to build from, such as a local one with
+# commits not yet pushed.
+#
 # Needs git, node and npm. Clones the player into a temporary directory,
 # applies scripts/player-station.patch (the router's base path, a
-# chrome=hidden switch and the station's colors read from the framing page),
+# chrome=hidden switch, a shorter timeline under it and the station's colors
+# read from the framing page),
 # builds it for the station's path, copies the output over viewer/player
 # (keeping README.md) and writes the commit to viewer/player/VERSION. When
 # the patch stops applying, refresh it against the new commit.
@@ -18,7 +22,7 @@ DEST=$ROOT/viewer/player
 TMP=$(mktemp -d)
 trap 'rm -rf "$TMP"' EXIT
 
-git clone -q https://github.com/VibiumDev/record-player.git "$TMP/player"
+git clone -q "${PLAYER_REPO:-https://github.com/VibiumDev/record-player.git}" "$TMP/player"
 git -C "$TMP/player" checkout -q "$REF"
 COMMIT=$(git -C "$TMP/player" rev-parse HEAD)
 git -C "$TMP/player" apply "$ROOT/scripts/player-station.patch"

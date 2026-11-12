@@ -169,6 +169,21 @@ func (d *DB) PasswordHash(ctx context.Context, id string) (string, error) {
 	return hash, err
 }
 
+// JamNotes is a user's standing notes for the jams they start.
+func (d *DB) JamNotes(ctx context.Context, id string) (string, error) {
+	var notes string
+	err := d.db.QueryRowContext(ctx, `SELECT jam_notes FROM users WHERE id = ?`, id).Scan(&notes)
+	if errors.Is(err, sql.ErrNoRows) {
+		return "", nil
+	}
+	return notes, err
+}
+
+// SetJamNotes replaces a user's standing notes.
+func (d *DB) SetJamNotes(ctx context.Context, id, notes string) error {
+	return d.update(ctx, `UPDATE users SET jam_notes = ? WHERE id = ?`, notes, id)
+}
+
 // TouchUser notes a sign-in.
 func (d *DB) TouchUser(ctx context.Context, id string, at time.Time) error {
 	return d.update(ctx, `UPDATE users SET last_login = ? WHERE id = ?`, at.UnixNano(), id)

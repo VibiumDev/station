@@ -278,3 +278,49 @@ func TestDisabledBecomesLocked(t *testing.T) {
 		t.Error("users.disabled is still there")
 	}
 }
+
+// A user's jam notes are kept, replaced and cleared, and a database
+// from before them gains the column with nobody's notes in it.
+func TestJamNotes(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "station.db")
+	d, err := Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx := context.Background()
+	if err := d.PutUser(ctx, station.User{ID: "usr_a", Login: "a@example.com"}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := d.db.Exec(`ALTER TABLE users DROP COLUMN jam_notes`); err != nil {
+		t.Fatal(err)
+	}
+	d.Close()
+	if d, err = Open(path); err != nil {
+		t.Fatal(err)
+	}
+	defer d.Close()
+	if notes, err := d.JamNotes(ctx, "usr_a"); err != nil || notes != "" {
+		t.Fatalf("after the migration: %q %v", notes, err)
+	}
+	if err := d.SetJamNotes(ctx, "usr_a", "Leave the device on its home screen."); err != nil {
+		t.Fatal(err)
+	}
+	if notes, _ := d.JamNotes(ctx, "usr_a"); notes != "Leave the device on its home screen." {
+		t.Errorf("kept %q", notes)
+	}
+	// Putting the user again, as a rename does, leaves the notes alone.
+	if err := d.PutUser(ctx, station.User{ID: "usr_a", Login: "a@example.com", Name: "A"}); err != nil {
+		t.Fatal(err)
+	}
+	if notes, _ := d.JamNotes(ctx, "usr_a"); notes == "" {
+		t.Error("putting the user dropped their notes")
+	}
+	d.SetJamNotes(ctx, "usr_a", "")
+	if notes, _ := d.JamNotes(ctx, "usr_a"); notes != "" {
+		t.Errorf("cleared, still %q", notes)
+	}
+	// Nobody has no notes, and that is not an error.
+	if notes, err := d.JamNotes(ctx, "usr_missing"); err != nil || notes != "" {
+		t.Errorf("a missing user: %q %v", notes, err)
+	}
+}
