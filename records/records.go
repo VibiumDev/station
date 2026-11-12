@@ -174,7 +174,9 @@ func (s *Store) holdFor(ctx context.Context, p station.Principal, holdID string)
 		if err != nil {
 			return h, err
 		}
-		if h.Subject != p.Subject && !p.Admin {
+		// An admin files under anyone's hold, but an admin's token bound to
+		// a device only under holds of that device.
+		if h.Subject != p.Subject && (!p.Admin || p.Device != "" && h.DeviceID != p.Device) {
 			return h, refuse(http.StatusForbidden, "hold %s is not yours", holdID)
 		}
 		return h, nil
@@ -199,7 +201,7 @@ func (s *Store) holdFor(ctx context.Context, p station.Principal, holdID string)
 		return station.Hold{}, refuse(http.StatusBadRequest, "you hold %d devices; name the hold", len(held))
 	case len(hs) > 0:
 		return hs[0], nil
-	case p.Admin:
+	case p.Admin && p.Device == "":
 		// The owner may keep a file that belongs to no hold.
 		return station.Hold{}, nil
 	}
@@ -579,9 +581,11 @@ func owns(p *station.Principal, b station.Blob) bool {
 }
 
 // mayChange says whether a principal may delete, share or refile a blob:
-// an admin's power, or their own, and never through a watch token.
+// an admin's power, or their own, and never through a watch token. A
+// token bound to a device changes that device's records alone, as it
+// reads them: its user's records of another device are out of its reach.
 func mayChange(p *station.Principal, b station.Blob) bool {
-	return !p.ReadOnly && (p.Manages() || owns(p, b))
+	return !p.ReadOnly && (p.Device == "" || p.Device == b.DeviceID) && (p.Manages() || owns(p, b))
 }
 
 // MayRead says whether a principal may fetch a blob.
@@ -870,7 +874,7 @@ func (s *Store) ServeList(w http.ResponseWriter, r *http.Request, pubkey string,
 		writeError(w, err)
 		return
 	}
-	allowed := p != nil && p.Admin
+	allowed := p != nil && p.Admin && p.Device == "" // a token bound to a device lists nothing by key
 	if auth != nil && verb(auth) == "list" && auth.PubKey.Hex() == pubkey {
 		allowed = true
 	}

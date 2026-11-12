@@ -326,7 +326,7 @@ var (
 	ruleManage = func(c caller) bool {
 		return c.signed && c.admin && (c.person || c.token == station.TokenAdmin)
 	}
-	ruleAdminRead = func(c caller) bool { return c.signed && c.admin }
+	ruleAdminRead = func(c caller) bool { return c.signed && c.admin && c.bound == "" }
 	// The admin's jam on A: its starter, admins and jam-level people act
 	// on it, never a watch token.
 	ruleJamAct = func(c caller) bool { return ruleBidiA(c) }

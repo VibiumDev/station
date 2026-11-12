@@ -147,7 +147,7 @@ it, so the history is readable later.
 | 6 | Roadie's `auth_routes_test.go`, `allowlist_test.go`, `auth_test.go`, with `rig/rig_test.go` for the gate |
 | 7 | `cmd/station/fuzz_test.go`, `records/fuzz_test.go` |
 | 8 | `.github/workflows/ci.yml` runs the station's tests under `-race`; the matrix's completeness check |
-| Review | `TestStoredFilesCannotActAsPages` in `cmd/station/records_e2e_test.go`, `TestServedFilesAreSandboxed` in `records/records_test.go`, `TestHiddenArgumentsNeverReachVibium` in `jam/loop_test.go`, `TestUnpackLimitHoldsForAnyDeclaredSize` and `TestThumbnailStaysInsideItsRecording` in `records/thumb_test.go`, `TestRightPasswordDoesNotForgetWrongCodes`, `TestGuessesSentTogetherAreCountedFirst`, `TestPasswordChecksTakeTurns` and `TestNextWithATabGoesHome` in `cmd/station/signin_test.go` |
+| Review | `TestStoredFilesCannotActAsPages` in `cmd/station/records_e2e_test.go`, `TestServedFilesAreSandboxed` in `records/records_test.go`, `TestHiddenArgumentsNeverReachVibium` in `jam/loop_test.go`, `TestUnpackLimitHoldsForAnyDeclaredSize` and `TestThumbnailStaysInsideItsRecording` in `records/thumb_test.go`, `TestRightPasswordDoesNotForgetWrongCodes`, `TestGuessesSentTogetherAreCountedFirst`, `TestPasswordChecksTakeTurns` and `TestNextWithATabGoesHome` in `cmd/station/signin_test.go`, `TestBoundTokenKeepsToItsDevice` in `cmd/station/holds_e2e_test.go` |
 
 ## Found and fixed
 
@@ -251,3 +251,9 @@ A review of the whole station by a second reader, after the phases:
   out in the Location header after the code step, and a browser drops
   tabs from an address, which leaves `//evil.example`. It refuses every
   control character now.
+- A jam's token was bound to its device on the device routes and for
+  reading records, and nowhere else. An admin's read every jam on the
+  station, listed every record by key, and could file a record under
+  another device's hold. Any user's could share or delete that user's
+  own records of another device. A bound token keeps to its device in
+  all of these now.
