@@ -227,11 +227,16 @@ input[type=radio], input[type=checkbox] { accent-color: var(--accent); width: 16
 @media (max-width: 480px) { th, td { padding: 12px 14px; } .tablewrap table:not(.kv) td { padding: 4px 14px 4px 108px; } .tablewrap table:not(.kv) td[data-l]::before { left: 14px; } }
 
 /* The play page: the station's bar on top, the Record Player below. */
-main.play { max-width: none; padding-top: 20px; padding-bottom: 16px; }
+/* The play page is as tall as the window, and the player takes all of it
+   that the heading leaves: no height is guessed. */
+main.play { display: flex; flex-direction: column; max-width: none; padding-top: 20px; padding-bottom: 16px; }
+/* A narrow page stacks its bar and its main as blocks. The play page
+   stays a column there too, so its main still fills the window. */
+@media (max-width: 640px) { body:has(> main.play) { display: flex; } }
 .playhead { margin-bottom: 0; }
 .playhead .tagsform { display: inline-flex; align-items: center; gap: 6px; }
 .playhead .tags { display: inline-flex; margin: 0; }
-.play iframe.player { display: block; width: 100%; height: calc(100vh - 210px); min-height: 480px; margin-top: 14px; border: 1px solid var(--line-card); border-radius: 8px; background: var(--bg); }
+.play iframe.player { display: block; flex: 1 1 0; width: 100%; min-height: 480px; margin-top: 14px; border: 1px solid var(--line-card); border-radius: 8px; background: var(--bg); }
 /* The full page: the frame alone, filling the window, still on a station
    page so the player takes its colors. */
 iframe.player.full { position: fixed; inset: 0; width: 100%; height: 100%; border: 0; background: var(--bg); }
