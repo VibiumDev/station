@@ -22,9 +22,12 @@ import (
 // safeNext is where to go after signing in: a path on this station, or
 // the front page. Anything a browser could read as another host is
 // refused: a scheme, a protocol-relative "//", a backslash (which
-// browsers turn into a slash), and line breaks.
+// browsers turn into a slash), and every control character. A browser
+// drops tabs and line breaks from an address before it reads it, so
+// "/", a tab and "/host" is "//host" to it.
 func safeNext(next string) string {
-	if next == "" || !strings.HasPrefix(next, "/") || strings.HasPrefix(next, "//") || strings.ContainsAny(next, "\\\r\n\x00") {
+	if next == "" || !strings.HasPrefix(next, "/") || strings.HasPrefix(next, "//") ||
+		strings.ContainsFunc(next, func(r rune) bool { return r == '\\' || r < 0x20 || r == 0x7f }) {
 		return "/"
 	}
 	return next

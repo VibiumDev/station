@@ -653,10 +653,33 @@ func TestSafeNext(t *testing.T) {
 		{"", "/"}, {"/", "/"}, {"/jams", "/jams"}, {"/records?q=a&page=2", "/records?q=a&page=2"},
 		{"//evil.example", "/"}, {"/\\evil.example", "/"}, {"https://evil.example/", "/"}, {"evil.example", "/"},
 		{"/jams\r\nSet-Cookie: x=y", "/"}, {"/\x00", "/"}, {"\\\\evil.example", "/"},
+		{"/\t/evil.example", "/"}, {"/\x0b/evil.example", "/"}, {"/jams\x1f", "/"}, {"/jams\x7f", "/"},
 	} {
 		if got := safeNext(c.in); got != c.want {
 			t.Errorf("safeNext(%q) = %q, want %q", c.in, got, c.want)
 		}
+	}
+}
+
+// A sign-in that came with next=/<tab>/host ends on the front page. The
+// tab would reach the browser in the Location header, and the browser
+// would drop it and go to //host.
+func TestNextWithATabGoesHome(t *testing.T) {
+	s, _ := signinServer(t)
+	owner, _ := s.db.UserByLogin(context.Background(), station.OwnerLogin)
+	secret := newTOTPSecret()
+	s.db.SetSecondFactor(context.Background(), owner.ID, secret, time.Now())
+	lw := httptest.NewRecorder()
+	s.loginPost(lw, form("POST", "/login", url.Values{"login": {"owner"}, "password": {"owner-secret-123"}, "next": {"/\t/evil.example/login"}}, nil))
+	sess := s.auth.sessionOf(cookies(lw, httptest.NewRequest("GET", "/", nil)))
+	if lw.Code != http.StatusSeeOther || sess == nil {
+		t.Fatalf("the password step: %d", lw.Code)
+	}
+	code, _ := totpCode(secret, totpStep(time.Now()))
+	cw := httptest.NewRecorder()
+	s.codePost(cw, form("POST", "/login/code", url.Values{"csrf": {sess.csrf}, "code": {code}}, lw))
+	if cw.Code != http.StatusSeeOther || cw.Header().Get("Location") != "/" {
+		t.Errorf("after the code: %d to %q, want the front page", cw.Code, cw.Header().Get("Location"))
 	}
 }
 

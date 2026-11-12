@@ -147,7 +147,7 @@ it, so the history is readable later.
 | 6 | Roadie's `auth_routes_test.go`, `allowlist_test.go`, `auth_test.go`, with `rig/rig_test.go` for the gate |
 | 7 | `cmd/station/fuzz_test.go`, `records/fuzz_test.go` |
 | 8 | `.github/workflows/ci.yml` runs the station's tests under `-race`; the matrix's completeness check |
-| Review | `TestStoredFilesCannotActAsPages` in `cmd/station/records_e2e_test.go`, `TestServedFilesAreSandboxed` in `records/records_test.go`, `TestHiddenArgumentsNeverReachVibium` in `jam/loop_test.go`, `TestUnpackLimitHoldsForAnyDeclaredSize` and `TestThumbnailStaysInsideItsRecording` in `records/thumb_test.go`, `TestRightPasswordDoesNotForgetWrongCodes`, `TestGuessesSentTogetherAreCountedFirst` and `TestPasswordChecksTakeTurns` in `cmd/station/signin_test.go` |
+| Review | `TestStoredFilesCannotActAsPages` in `cmd/station/records_e2e_test.go`, `TestServedFilesAreSandboxed` in `records/records_test.go`, `TestHiddenArgumentsNeverReachVibium` in `jam/loop_test.go`, `TestUnpackLimitHoldsForAnyDeclaredSize` and `TestThumbnailStaysInsideItsRecording` in `records/thumb_test.go`, `TestRightPasswordDoesNotForgetWrongCodes`, `TestGuessesSentTogetherAreCountedFirst`, `TestPasswordChecksTakeTurns` and `TestNextWithATabGoesHome` in `cmd/station/signin_test.go` |
 
 ## Found and fixed
 
@@ -247,3 +247,7 @@ A review of the whole station by a second reader, after the phases:
   for a dozen. A try is counted before it is checked now, and two
   checks run at a time. A login nobody has was refused without a
   hash, faster than a real one; it is hashed against a decoy now.
+- `safeNext` let `/`, a tab and `/evil.example` through. The tab went
+  out in the Location header after the code step, and a browser drops
+  tabs from an address, which leaves `//evil.example`. It refuses every
+  control character now.
