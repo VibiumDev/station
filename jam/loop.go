@@ -518,7 +518,16 @@ func (l *Loop) round(ctx context.Context, messages *[]Message, shots *[]int, too
 				continue
 			}
 			res.Actions++
-			l.opt.Emit(Event{Kind: "call", Tool: name, Args: json.RawMessage(call.Function.Arguments)})
+			// Vibium acts on more arguments than the model is shown: a
+			// screenshot's file name is a path on the station's own disk.
+			// What the schema did not offer never reaches it, and the
+			// transcript shows the call as it was made.
+			sent := json.RawMessage(call.Function.Arguments)
+			if kept, dropped := declared(tools, name, args); dropped {
+				args = kept
+				sent, _ = json.Marshal(kept)
+			}
+			l.opt.Emit(Event{Kind: "call", Tool: name, Args: sent})
 			cctx, cancel := context.WithTimeout(ctx, callTimeout)
 			r, err := l.tools.Call(cctx, name, args)
 			cancel()
@@ -730,6 +739,26 @@ func hasTool(tools []Tool, name string) bool {
 		}
 	}
 	return false
+}
+
+// declared keeps the arguments a tool's schema names, as the model was
+// shown it, and says whether any were left out.
+func declared(tools []Tool, name string, args map[string]any) (map[string]any, bool) {
+	var schema struct {
+		Properties map[string]json.RawMessage `json:"properties"`
+	}
+	for _, t := range tools {
+		if t.Name == name {
+			json.Unmarshal(t.Parameters, &schema)
+		}
+	}
+	kept := map[string]any{}
+	for k, v := range args {
+		if _, ok := schema.Properties[k]; ok {
+			kept[k] = v
+		}
+	}
+	return kept, len(kept) != len(args)
 }
 
 // The result tools, as Vibium's check and run have them.

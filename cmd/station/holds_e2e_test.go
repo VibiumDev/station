@@ -3,7 +3,9 @@ package main
 import (
 	"encoding/json"
 	"net/http"
+	"strings"
 	"testing"
+	"time"
 
 	"github.com/VibiumDev/station"
 )
@@ -175,4 +177,59 @@ func TestHoldsByLevel(t *testing.T) {
 		t.Errorf("admin on B: %d", code)
 	}
 	_ = station.LevelWatch
+}
+
+// A jam's token is bound to its device everywhere, not on the device
+// routes alone. An admin's sees no jam of another device, lists no
+// records by key, files nothing under another device's hold, and does
+// not change its user's records of another device. On its own device
+// it does what it did.
+func TestBoundTokenKeepsToItsDevice(t *testing.T) {
+	f := newFullStation(t)
+	now := time.Now()
+	secret, err := f.db.CreateScopedToken(f.ctx, "jam:"+jamTest, station.TokenDrive, devA, now.Add(time.Hour), f.users["admin"].ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	bound := caller{name: "the admin's jam token on A", decor: withBearer(secret)}
+	if err := f.db.CreateJam(f.ctx, station.Jam{ID: "jam_onb", Subject: "owner", DeviceID: devB, Model: "test", Prompt: "read what B shows", Status: "done", CreatedAt: now}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.db.Create(f.ctx, station.Hold{ID: "hld_b", DeviceID: devB, RigID: "rig_b", Subject: "owner", Scopes: []station.Scope{station.ScopeView, station.ScopeInput},
+		CreatedAt: now.Add(-time.Hour), ActiveAt: now.Add(-time.Hour), ExpiresAt: now.Add(-30 * time.Minute)}); err != nil {
+		t.Fatal(err)
+	}
+	onB := f.uploadAs(f.admin, []byte("PK the admin's own, on device B"), "b.zip", "hld_b")
+	other := strings.Repeat("ab", 32)
+	for _, c := range []struct {
+		method, path, body string
+		want               int
+	}{
+		// Jams: its own device's, and nothing of B's.
+		{"GET", "/v1/jams/" + jamTest, "", 200},
+		{"GET", "/v1/jams/jam_onb", "", 404},
+		{"GET", "/v1/jams/jam_onb/events", "", 404},
+		{"GET", "/jams/jam_onb", "", 404},
+		{"GET", "/jams/jam_onb/shots/1", "", 404},
+		// Records: none listed by key, none filed under B's hold, and
+		// its user's own record of B neither shared nor deleted.
+		{"GET", "/list/" + f.s.key.Public().Hex(), "", 401},
+		{"POST", "/v1/records/upload-auth", `{"sha256":"` + other + `","size":1,"hold":"hld_b"}`, 403},
+		{"POST", "/v1/records/upload-auth", `{"sha256":"` + other + `","size":1,"hold":"hld_a"}`, 200},
+		{"POST", "/records/public", "sha256=" + onB + "&public=1", 403},
+		{"POST", "/v1/records/" + onB + "/golden", `{"golden":true}`, 403},
+		{"DELETE", "/" + onB, "", 403},
+		{"POST", "/records/golden", "sha256=" + f.sha + "&make=golden", 303},
+	} {
+		if w := f.do(bound, c.method, c.path, c.body, false); w.Code != c.want {
+			t.Errorf("%s %s: %d, want %d", c.method, c.path, w.Code, c.want)
+		}
+	}
+	w := f.do(bound, "GET", "/v1/jams", "", false)
+	if !strings.Contains(w.Body.String(), jamTest) || strings.Contains(w.Body.String(), "jam_onb") {
+		t.Errorf("the jams it lists: %s", w.Body)
+	}
+	if b, err := f.db.Blob(f.ctx, onB); err != nil || b.Public || b.Golden {
+		t.Errorf("the record on B: %+v, %v", b, err)
+	}
 }

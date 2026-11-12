@@ -88,6 +88,12 @@ carries `X-Hold`, the id of the hold it rode on, and `X-Hold-Observer: 1`
 when that is someone else's; the page uses them to notice the device
 changing hands.
 
+A relayed answer is the rig's own words under the station's address.
+The station passes on no `Set-Cookie` of the rig's. Every relayed answer
+but `extras.js` carries `Content-Security-Policy: sandbox`, so one opened
+in a browser as a page has no origin and runs no script. Clients, `fetch`
+and WebSockets are not affected.
+
 The rig limits every hold to 120 requests and messages a second with a
 burst of 240, and to one MJPEG stream, one audio socket, one microphone
 socket, one BiDi socket and two input sockets at once; past that it
@@ -235,6 +241,13 @@ without a station credential of its own; it lasts five minutes and, as a
 bearer, travels in a header and never in a URL. `?download` adds a
 `Content-Disposition` with the file's name.
 
+A stored file never acts as one of the station's pages. Every file,
+thumbnail and unpacked file is sent with `Content-Security-Policy:
+sandbox` and `X-Content-Type-Options: nosniff`. Pictures (JPEG, PNG,
+WebP, GIF), video (MP4, WebM), sound (WAV, MPEG), zip, JSON and plain
+text open in place. A file of any other type, such as HTML or SVG, is
+sent as a download, with or without `?download`.
+
 `GET /v1/records` lists what the caller may read, newest first, narrowed
 by `?device=<rig>/<name>`, `?hold=<id>`, `?q=<words and #tags>` (every
 word against the name, type, uploader, hold, device, rig, hash and
@@ -251,6 +264,10 @@ letters, digits and `.`, `_` or `-`, lowercased, up to 40 characters
 and twenty per record; a leading `#` is dropped.
 `GET /list/<pubkey hex>` is Blossom's listing of what a key uploaded, for
 the owner or for a `t=list` event signed by that key.
+
+A rig's signature counts while the rig is enrolled. Once a rig is
+removed, its key no longer reads, lists or deletes what it uploaded;
+the records stay for the people who could read them.
 
 `DELETE /<sha256>` removes the bytes and the index entry, while the file
 event stays, for the owner, the uploader, or a `t=delete` event signed

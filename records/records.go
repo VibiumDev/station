@@ -174,7 +174,9 @@ func (s *Store) holdFor(ctx context.Context, p station.Principal, holdID string)
 		if err != nil {
 			return h, err
 		}
-		if h.Subject != p.Subject && !p.Admin {
+		// An admin files under anyone's hold, but an admin's token bound to
+		// a device only under holds of that device.
+		if h.Subject != p.Subject && (!p.Admin || p.Device != "" && h.DeviceID != p.Device) {
 			return h, refuse(http.StatusForbidden, "hold %s is not yours", holdID)
 		}
 		return h, nil
@@ -199,7 +201,7 @@ func (s *Store) holdFor(ctx context.Context, p station.Principal, holdID string)
 		return station.Hold{}, refuse(http.StatusBadRequest, "you hold %d devices; name the hold", len(held))
 	case len(hs) > 0:
 		return hs[0], nil
-	case p.Admin:
+	case p.Admin && p.Device == "":
 		// The owner may keep a file that belongs to no hold.
 		return station.Hold{}, nil
 	}
@@ -567,9 +569,24 @@ func (s *Store) mayRead(ctx context.Context, b station.Blob, p *station.Principa
 		}
 	}
 	if auth != nil && verb(auth) == "get" && tagValue(auth, "x") == b.SHA256 {
-		return auth.PubKey == s.Signer.PubKey() || auth.PubKey.Hex() == b.PubKey
+		return s.signedFor(ctx, auth, b.PubKey)
 	}
 	return false
+}
+
+// signedFor says whether an authorization speaks for what a key uploaded:
+// the station's own does, and the uploading rig's does while that rig is
+// enrolled. Removing a rig refuses its key from then on, here as on the
+// tunnel.
+func (s *Store) signedFor(ctx context.Context, auth *nostr.Event, pubkey string) bool {
+	if auth.PubKey == s.Signer.PubKey() {
+		return true
+	}
+	if auth.PubKey.Hex() != pubkey {
+		return false
+	}
+	_, err := s.Devices.RigByKey(ctx, auth.PubKey)
+	return err == nil
 }
 
 // owns says whether a blob is the principal's own: uploaded under their
@@ -579,9 +596,11 @@ func owns(p *station.Principal, b station.Blob) bool {
 }
 
 // mayChange says whether a principal may delete, share or refile a blob:
-// an admin's power, or their own, and never through a watch token.
+// an admin's power, or their own, and never through a watch token. A
+// token bound to a device changes that device's records alone, as it
+// reads them: its user's records of another device are out of its reach.
 func mayChange(p *station.Principal, b station.Blob) bool {
-	return !p.ReadOnly && (p.Manages() || owns(p, b))
+	return !p.ReadOnly && (p.Device == "" || p.Device == b.DeviceID) && (p.Manages() || owns(p, b))
 }
 
 // MayRead says whether a principal may fetch a blob.
@@ -592,14 +611,46 @@ func (s *Store) MayRead(ctx context.Context, b station.Blob, p station.Principal
 // mayDelete says who may remove a blob: an admin, the uploader, or a
 // t=delete authorization for it signed by the station or the uploading
 // rig.
-func (s *Store) mayDelete(b station.Blob, p *station.Principal, auth *nostr.Event) bool {
+func (s *Store) mayDelete(ctx context.Context, b station.Blob, p *station.Principal, auth *nostr.Event) bool {
 	if p != nil && mayChange(p, b) {
 		return true
 	}
 	if auth != nil && verb(auth) == "delete" && tagValue(auth, "x") == b.SHA256 {
-		return auth.PubKey == s.Signer.PubKey() || auth.PubKey.Hex() == b.PubKey
+		return s.signedFor(ctx, auth, b.PubKey)
 	}
 	return false
+}
+
+// inert are the media types a browser shows without running anything in
+// them: pictures, video, sound, archives and plain text.
+var inert = map[string]bool{
+	"image/jpeg": true, "image/png": true, "image/webp": true, "image/gif": true,
+	"video/mp4": true, "video/webm": true, "audio/wav": true, "audio/x-wav": true, "audio/mpeg": true,
+	"application/zip": true, "application/json": true, "text/plain": true,
+}
+
+func inertType(mediaType string) bool {
+	t, _, _ := strings.Cut(mediaType, ";")
+	return inert[strings.ToLower(strings.TrimSpace(t))]
+}
+
+// contain keeps a stored file from acting as a page of the station. Its
+// type is the uploader's word, and a file inside a recording has the name
+// the zip gave it, so an HTML or SVG file would run script under the
+// station's own origin. The sandbox directive takes that origin away,
+// beside whatever policy the response already carries. A type a browser
+// would render as a document goes out as a download.
+func contain(w http.ResponseWriter, mediaType string) {
+	h := w.Header()
+	policy := "sandbox"
+	if page := h.Get("Content-Security-Policy"); page != "" {
+		policy = page + "; sandbox"
+	}
+	h.Set("Content-Security-Policy", policy)
+	h.Set("X-Content-Type-Options", "nosniff")
+	if !inertType(mediaType) && h.Get("Content-Disposition") == "" {
+		h.Set("Content-Disposition", "attachment")
+	}
 }
 
 // ServeBlob is GET, HEAD and DELETE /<sha256>[.ext] (BUD-01, BUD-02). p
@@ -652,13 +703,13 @@ func (s *Store) ServeBlob(w http.ResponseWriter, r *http.Request, sha string, p 
 		w.Header().Set("Content-Type", b.Type)
 		w.Header().Set("ETag", `"`+sha+`"`)
 		w.Header().Set("Cache-Control", "private, max-age=3600")
-		w.Header().Set("X-Content-Type-Options", "nosniff")
-		if r.URL.Query().Has("download") {
+		if r.URL.Query().Has("download") || !inertType(b.Type) {
 			w.Header().Set("Content-Disposition", "attachment; filename=\""+strings.ReplaceAll(name, `"`, "")+"\"")
 		}
+		contain(w, b.Type)
 		http.ServeContent(w, r, name, b.CreatedAt, f)
 	case http.MethodDelete:
-		if !s.mayDelete(b, p, auth) {
+		if !s.mayDelete(ctx, b, p, auth) {
 			writeError(w, refuse(http.StatusForbidden, "not yours to delete"))
 			return
 		}
@@ -703,7 +754,7 @@ func (s *Store) Delete(ctx context.Context, p station.Principal, sha string) err
 	if err != nil {
 		return err
 	}
-	if !s.mayDelete(b, &p, nil) {
+	if !s.mayDelete(ctx, b, &p, nil) {
 		return refuse(http.StatusForbidden, "not yours to delete")
 	}
 	return s.remove(ctx, b, p.Subject, "delete")
@@ -838,8 +889,8 @@ func (s *Store) ServeList(w http.ResponseWriter, r *http.Request, pubkey string,
 		writeError(w, err)
 		return
 	}
-	allowed := p != nil && p.Admin
-	if auth != nil && verb(auth) == "list" && auth.PubKey.Hex() == pubkey {
+	allowed := p != nil && p.Admin && p.Device == "" // a token bound to a device lists nothing by key
+	if auth != nil && verb(auth) == "list" && auth.PubKey.Hex() == pubkey && s.signedFor(r.Context(), auth, pubkey) {
 		allowed = true
 	}
 	if !allowed {

@@ -161,6 +161,12 @@ func (rl *Relay) Serve(w http.ResponseWriter, r *http.Request, rigID, path strin
 		},
 		Transport:     rl.Tunnel.Transport(rigID),
 		FlushInterval: -1, // streams (MJPEG, events) flush as they come
+		// The rig's answer reaches the browser under the station's own
+		// address, where a cookie the rig set would be the station's.
+		ModifyResponse: func(res *http.Response) error {
+			res.Header.Del("Set-Cookie")
+			return nil
+		},
 		ErrorHandler: func(w http.ResponseWriter, r *http.Request, err error) {
 			if errors.Is(err, context.Canceled) {
 				return

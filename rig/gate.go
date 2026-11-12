@@ -170,6 +170,9 @@ type state struct {
 	Devices map[string]*holdState `json:"devices"` // by device id
 	Seqs    map[string]uint64     `json:"seqs"`    // by device id + "|" + station hex: the highest seq seen
 	Revoked map[string]time.Time  `json:"revoked"` // hold id: when
+	// Used is the grants already taken, by event id, and when each
+	// expires. It is kept so a restart does not take a spent grant again.
+	Used map[string]time.Time `json:"used,omitempty"`
 }
 
 func (g *Gate) now() time.Time {
@@ -215,11 +218,20 @@ func (g *Gate) load() {
 	if st.Revoked != nil {
 		g.st.Revoked = st.Revoked
 	}
+	for hex, until := range st.Used {
+		if id, err := nostr.IDFromHex(hex); err == nil {
+			g.seen[id] = until
+		}
+	}
 }
 
 func (g *Gate) save() {
 	if g.StatePath == "" {
 		return
+	}
+	g.st.Used = make(map[string]time.Time, len(g.seen))
+	for id, until := range g.seen {
+		g.st.Used[id.Hex()] = until
 	}
 	data, err := json.MarshalIndent(g.st, "", "  ")
 	if err != nil {
@@ -293,8 +305,14 @@ func (g *Gate) Check(ev nostr.Event, need station.Scope) (token.Grant, error) {
 	if now.Sub(cur.Since) > entry.MaxSessionDuration() {
 		return token.Grant{}, ErrSessionLength
 	}
-	if grant.ExpiresAt.After(cur.Until) {
-		cur.Until = grant.ExpiresAt
+	// The hold lasts as long as its latest grant, and never past the
+	// session the policy allows, whatever the grant says.
+	until := grant.ExpiresAt
+	if last := cur.Since.Add(entry.MaxSessionDuration()); until.After(last) {
+		until = last
+	}
+	if until.After(cur.Until) {
+		cur.Until = until
 	}
 	g.st.Devices[grant.DeviceID] = cur
 	g.st.Seqs[key] = grant.Seq

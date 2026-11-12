@@ -56,9 +56,11 @@ lock on the account:
 - **By login**, each miss after the first two lengthens the wait before
   the next try at that login is looked at: a second, then two, four,
   doubling up to 15 minutes, whatever address the tries come from.
-  Misses are forgotten by a successful sign-in or after a quiet quarter
-  hour. A guesser moving between addresses gets a couple of dozen
-  tries an hour; a person who mistypes twice feels nothing.
+  Misses are forgotten by a sign-in that passes both steps, or after a
+  quiet quarter hour. The right password alone forgets nothing, so
+  wrong codes add up however often the password is typed again. A
+  guesser moving between addresses gets a couple of dozen tries an
+  hour; a person who mistypes twice feels nothing.
 - **Device cookies.** A browser that signs all the way in gets a
   signed cookie naming its user, good for a year. Tries carrying that
   cookie skip the login's wait and are measured by the cookie instead,
@@ -69,6 +71,12 @@ lock on the account:
 
 Wrong passwords and wrong codes count alike. Every wrong answer waits
 half a second before it is refused.
+
+A try at a password is counted before the password is looked at, so
+tries sent together cannot get past the count. Two password checks run
+at a time and the rest wait their turn, since each takes 64 MiB. A login
+nobody has is checked against a hash all the same, so the time an answer
+takes does not say whether the login exists.
 
 ## Admins
 

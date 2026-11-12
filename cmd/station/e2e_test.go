@@ -6,6 +6,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -13,10 +14,12 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
 	"fiatjaf.com/nostr"
+	"github.com/coder/websocket"
 
 	"github.com/VibiumDev/station"
 	"github.com/VibiumDev/station/blob"
@@ -27,6 +30,7 @@ import (
 	"github.com/VibiumDev/station/relay"
 	"github.com/VibiumDev/station/signal"
 	"github.com/VibiumDev/station/sqlite"
+	"github.com/VibiumDev/station/token"
 	"github.com/VibiumDev/station/tunnel"
 )
 
@@ -326,7 +330,7 @@ var (
 	ruleManage = func(c caller) bool {
 		return c.signed && c.admin && (c.person || c.token == station.TokenAdmin)
 	}
-	ruleAdminRead = func(c caller) bool { return c.signed && c.admin }
+	ruleAdminRead = func(c caller) bool { return c.signed && c.admin && c.bound == "" }
 	// The admin's jam on A: its starter, admins and jam-level people act
 	// on it, never a watch token.
 	ruleJamAct = func(c caller) bool { return ruleBidiA(c) }
@@ -713,5 +717,120 @@ func TestNoSecretsLeakAndLockBites(t *testing.T) {
 	}
 	if w := f.do(by["jam user"], "GET", "/v1/devices", "", true); w.Code != http.StatusUnauthorized {
 		t.Errorf("a removed user's session: %d", w.Code)
+	}
+}
+
+// What a rig answers through the relay arrives under the station's own
+// address. It sets no cookie there, and but for the extras script it is
+// sandboxed, so a page the rig sends has no origin and runs nothing. The
+// viewer's own traffic is as it was: the stream, a snapshot and JSON
+// come back byte for byte, and a WebSocket still opens. The rig in turn
+// is never shown the browser's Origin or cookies: its own same-origin
+// check, which a Roadie makes on every socket, would refuse the station's.
+func TestRigAnswersCannotActAsTheStation(t *testing.T) {
+	f := newFullStation(t)
+	srv := httptest.NewServer(f.h)
+	defer srv.Close()
+	stream := "--frame\r\nContent-Type: image/jpeg\r\n\r\nJPEG-ONE\r\n--frame\r\nContent-Type: image/jpeg\r\n\r\nJPEG-TWO\r\n"
+	var shown atomic.Value // what of the browser's the rig was shown
+	rig := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if o, c := r.Header.Get("Origin"), r.Header.Get("Cookie"); o != "" || c != "" {
+			shown.Store(r.URL.Path + ": Origin " + o + ", Cookie " + c)
+		}
+		http.SetCookie(w, &http.Cookie{Name: sessionCookie, Value: "chosen-by-the-rig", Path: "/"})
+		switch r.URL.Path {
+		case "/viewer/extras.js":
+			w.Header().Set("Content-Type", "text/javascript")
+			w.Write([]byte("/* the rig's buttons */"))
+		case "/health":
+			w.Header().Set("Content-Type", "application/json")
+			w.Write([]byte(`{"ok":true}`))
+		case "/snapshot":
+			w.Header().Set("Content-Type", "image/jpeg")
+			w.Write([]byte("JPEG-BYTES"))
+		case "/stream":
+			w.Header().Set("Content-Type", "multipart/x-mixed-replace; boundary=frame")
+			w.Write([]byte(stream))
+		case "/audio":
+			// The same-origin check a Roadie makes.
+			c, err := websocket.Accept(w, r, nil)
+			if err != nil {
+				return
+			}
+			defer c.CloseNow()
+			if typ, data, err := c.Read(r.Context()); err == nil {
+				c.Write(r.Context(), typ, append([]byte("heard "), data...))
+			}
+		default:
+			w.Header().Set("Content-Type", "text/html")
+			w.Write([]byte(`<!doctype html><script src="extras.js"></script>`))
+		}
+	})
+	c := &tunnel.Client{URL: "ws" + strings.TrimPrefix(srv.URL, "http") + "/v1/tunnel", Key: f.rigKey, Station: f.s.key.Public(), Handler: rig, Logf: func(string, ...any) {},
+		Announce: func() ([]nostr.Event, error) {
+			devices, _ := json.Marshal([]station.Device{{ID: devA, Kind: "phone", Caps: []string{station.CapVideo}, Extras: "/viewer/extras.js"}})
+			ev := nostr.Event{Kind: token.KindRigAnnounce, CreatedAt: nostr.Now(), Tags: nostr.Tags{{"p", f.s.key.Public().Hex()}, {"name", "pi-a"}}, Content: string(devices)}
+			return []nostr.Event{ev}, ev.Sign(f.rigKey)
+		}}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go c.Run(ctx)
+	for i := 0; i < 200 && !f.s.tunnel.IsOnline("rig_a"); i++ {
+		time.Sleep(25 * time.Millisecond)
+	}
+	if !f.s.tunnel.IsOnline("rig_a") {
+		t.Fatal("the rig did not come online")
+	}
+	secret, err := f.db.CreateToken(f.ctx, "agent", station.TokenDrive, f.users["admin"].ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	agent := caller{name: "an admin's token", decor: func(r *http.Request) {
+		withBearer(secret)(r)
+		r.Header.Set("Origin", "https://another.example")
+		r.AddCookie(&http.Cookie{Name: "pet", Value: "cat"})
+	}}
+	for _, c := range []struct {
+		path, mediaType, body string
+		sandboxed             bool
+	}{
+		{"/api/anything", "text/html", `<!doctype html><script src="extras.js"></script>`, true},
+		{"/health", "application/json", `{"ok":true}`, true},
+		{"/screenshot", "image/jpeg", "JPEG-BYTES", true},
+		{"/stream", "multipart/x-mixed-replace; boundary=frame", stream, true},
+		{"/extras.js", "text/javascript", "/* the rig's buttons */", false},
+	} {
+		w := f.do(agent, "GET", "/v1/devices/"+devA+c.path, "", false)
+		h := w.Header()
+		if w.Code != 200 || h.Get("Content-Type") != c.mediaType || w.Body.String() != c.body {
+			t.Errorf("%s: %d %s %q", c.path, w.Code, h.Get("Content-Type"), w.Body)
+		}
+		if len(h.Values("Set-Cookie")) != 0 {
+			t.Errorf("%s: the rig's cookie came through: %q", c.path, h.Values("Set-Cookie"))
+		}
+		want := pageCSP
+		if c.sandboxed {
+			want += "; sandbox"
+		}
+		if got := strings.Join(h.Values("Content-Security-Policy"), " | "); got != want {
+			t.Errorf("%s: policy %q, want %q", c.path, got, want)
+		}
+	}
+	// A WebSocket through the relay, as the viewer opens for sound.
+	ws, resp, err := websocket.Dial(ctx, "ws"+strings.TrimPrefix(srv.URL, "http")+"/v1/devices/"+devA+"/audio",
+		&websocket.DialOptions{HTTPHeader: http.Header{"Authorization": {"Bearer " + secret}, "Origin": {srv.URL}, "Cookie": {"pet=cat"}}})
+	if err != nil {
+		t.Fatalf("the relayed WebSocket: %v", err)
+	}
+	defer ws.CloseNow()
+	if len(resp.Header.Values("Set-Cookie")) != 0 {
+		t.Errorf("the rig's cookie came through the upgrade: %q", resp.Header.Values("Set-Cookie"))
+	}
+	ws.Write(ctx, websocket.MessageText, []byte("this"))
+	if _, data, err := ws.Read(ctx); err != nil || string(data) != "heard this" {
+		t.Errorf("over the relayed WebSocket: %q, %v", data, err)
+	}
+	if got := shown.Load(); got != nil {
+		t.Errorf("the rig was shown the browser's own headers: %v", got)
 	}
 }

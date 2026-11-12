@@ -278,6 +278,7 @@ func (s *server) handler() http.Handler {
 		s.relayTo(w, r, p, dev.Extras, station.ScopeView)
 	}))
 	mux.Handle("/v1/devices/{rig}/{name}/api/{path...}", s.api(station.ActionView, func(w http.ResponseWriter, r *http.Request, p station.Principal) {
+		rigsAnswer(w)
 		s.relayTo(w, r, p, "/api/"+r.PathValue("path"), "")
 	}))
 	return secure(mux)
@@ -745,7 +746,19 @@ func (s *server) unreserve(w http.ResponseWriter, r *http.Request, p station.Pri
 // grant the station signs for the caller; scope is what the endpoint
 // needs, or empty for the rig's REST, where the rig's allowlist decides.
 func (s *server) relayed(rigPath string, scope station.Scope) handlerWithPrincipal {
-	return func(w http.ResponseWriter, r *http.Request, p station.Principal) { s.relayTo(w, r, p, rigPath, scope) }
+	return func(w http.ResponseWriter, r *http.Request, p station.Principal) {
+		rigsAnswer(w)
+		s.relayTo(w, r, p, rigPath, scope)
+	}
+}
+
+// rigsAnswer marks a response the rig will write. It arrives under the
+// station's own address with whatever type the rig gives it, so it is
+// sandboxed: opened as a page, it has no origin and runs no script. The
+// viewer reads these answers with fetch and WebSockets, which the policy
+// does not touch. The extras script is the one relayed answer left out.
+func rigsAnswer(w http.ResponseWriter) {
+	w.Header().Set("Content-Security-Policy", pageCSP+"; sandbox")
 }
 
 // relayTo signs a grant for the caller and relays. The holder gets its

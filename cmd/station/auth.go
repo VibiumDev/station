@@ -81,6 +81,8 @@ type auth struct {
 	// it, so they outlive restarts.
 	deviceKey []byte
 
+	// gateMu makes looking at an attempt and counting it one step.
+	gateMu   sync.Mutex
 	mu       sync.Mutex
 	sessions map[string]*session
 	// failures are the recent wrong passwords and codes by address, and
@@ -539,6 +541,58 @@ func (a *auth) pass(g gate) {
 	a.mu.Unlock()
 }
 
+// admit looks at an attempt and counts it as a miss in one step, before
+// its password is checked. Attempts sent together are then each measured
+// against the ones before, and no more than the lock allows reach the
+// hash. It returns when the login last missed, for uncount.
+func (a *auth) admit(g gate) (time.Time, bool) {
+	a.gateMu.Lock()
+	defer a.gateMu.Unlock()
+	if a.blocked(g) {
+		return time.Time{}, false
+	}
+	var last time.Time
+	a.mu.Lock()
+	if m := a.logins[g.login]; m != nil {
+		last = m.last
+	}
+	a.mu.Unlock()
+	a.fail(g.hard...)
+	if !g.vouched {
+		a.loginMiss(g.login)
+	}
+	return last, true
+}
+
+// uncount takes back the miss admit counted for an attempt whose password
+// was right, and leaves the misses before it as they were.
+func (a *auth) uncount(g gate, last time.Time) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	for _, k := range g.hard {
+		if f := a.failures[k]; len(f) > 1 {
+			a.failures[k] = f[:len(f)-1]
+		} else {
+			delete(a.failures, k)
+		}
+	}
+	if m := a.logins[g.login]; m != nil && !g.vouched {
+		if m.n--; m.n <= 0 {
+			delete(a.logins, g.login)
+		} else {
+			m.last = last
+		}
+	}
+}
+
+// decoy is a hash of a password nobody has. A login with no password to
+// check is checked against it, so an unknown login takes as long to
+// refuse as a known one and the time tells a guesser nothing.
+var decoy = sync.OnceValue(func() string {
+	hash, _ := hashPassword(randomID())
+	return hash
+})
+
 // deviceToken is a device cookie's value for a user: the user, a nonce
 // and a signature over both.
 func (a *auth) deviceToken(userID string) string {
@@ -569,19 +623,27 @@ func (a *auth) deviceOf(r *http.Request, userID string) (string, bool) {
 // login checks a login and password and starts a session at the stage the
 // user is at: a code due when they have an authenticator, setting one up
 // when they have none yet. Misses count against the address and, for a
-// browser without this user's device cookie, against the login.
+// browser without this user's device cookie, against the login. The right
+// password forgets none of them. Only the step after it does, or someone
+// with the password could guess at the code for ever by typing the
+// password again between guesses.
 func (a *auth) login(w http.ResponseWriter, r *http.Request, login, password, next string) (stage, bool) {
 	u, hash, err := a.db.Credentials(r.Context(), login)
 	g := a.gateFor(r, login, u.ID)
-	if a.blocked(g) {
+	last, ok := a.admit(g)
+	if !ok {
 		time.Sleep(2 * a.delay)
 		return 0, false
 	}
-	if err != nil || u.Locked || hash == "" || !checkPassword(hash, password) {
-		a.miss(g)
+	known := err == nil && !u.Locked && hash != ""
+	if !known {
+		hash = decoy()
+	}
+	if !checkPassword(hash, password) || !known {
+		time.Sleep(a.delay)
 		return 0, false
 	}
-	a.pass(g)
+	a.uncount(g, last)
 	a.drop(r)
 	st := stageCode
 	if !u.TwoFactor {

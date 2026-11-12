@@ -13,12 +13,13 @@ import (
 // not understand. The seeds run with every test; `go test -fuzz` digs.
 
 func FuzzSafeNext(f *testing.F) {
-	for _, s := range []string{"", "/", "/jams", "//evil", "/\\evil", "https://x", "/a\r\nb", "/\x00"} {
+	for _, s := range []string{"", "/", "/jams", "//evil", "/\\evil", "https://x", "/a\r\nb", "/\x00", "/\t/evil"} {
 		f.Add(s)
 	}
 	f.Fuzz(func(t *testing.T, s string) {
 		got := safeNext(s)
-		if got != "/" && (!strings.HasPrefix(got, "/") || strings.HasPrefix(got, "//") || strings.ContainsAny(got, "\\\r\n\x00")) {
+		if got != "/" && (!strings.HasPrefix(got, "/") || strings.HasPrefix(got, "//") ||
+			strings.ContainsFunc(got, func(r rune) bool { return r == '\\' || r < 0x20 || r == 0x7f })) {
 			t.Fatalf("safeNext(%q) = %q", s, got)
 		}
 	})

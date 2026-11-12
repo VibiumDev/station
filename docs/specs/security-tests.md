@@ -147,6 +147,7 @@ it, so the history is readable later.
 | 6 | Roadie's `auth_routes_test.go`, `allowlist_test.go`, `auth_test.go`, with `rig/rig_test.go` for the gate |
 | 7 | `cmd/station/fuzz_test.go`, `records/fuzz_test.go` |
 | 8 | `.github/workflows/ci.yml` runs the station's tests under `-race`; the matrix's completeness check |
+| Review | `TestRigAnswersCannotActAsTheStation` in `cmd/station/e2e_test.go`, `TestStoredFilesCannotActAsPages` in `cmd/station/records_e2e_test.go`, `TestServedFilesAreSandboxed` and `TestRemovedRigKeyIsRefused` in `records/records_test.go`, `TestHiddenArgumentsNeverReachVibium` in `jam/loop_test.go`, `TestUnpackLimitHoldsForAnyDeclaredSize` and `TestThumbnailStaysInsideItsRecording` in `records/thumb_test.go`, `TestRightPasswordDoesNotForgetWrongCodes`, `TestGuessesSentTogetherAreCountedFirst`, `TestPasswordChecksTakeTurns`, `TestNextWithATabGoesHome` and `TestSignInFromAnotherSiteIsRefused` in `cmd/station/signin_test.go`, `TestBoundTokenKeepsToItsDevice` in `cmd/station/holds_e2e_test.go`, `TestGateRefusesAHoldIDThatIsNoName`, `TestGateRefusesAGrantThatOutlivesAGrant` and `TestGateRemembersUsedGrantsAcrossARestart` in `rig/rig_test.go` |
 
 ## Found and fixed
 
@@ -207,3 +208,81 @@ Phases 2 to 5, on their first runs:
   it could not delete or share it. Records now carry the uploading
   user's id and `owns` matches by it; a watch token still changes
   nothing (`mayChange`).
+
+A review of the whole station by a second reader, after the phases:
+
+- A stored file was served in place under the media type its uploader
+  named, from the station's own address. A person at watch level could
+  upload an HTML page and a script, and the browser of an admin who
+  opened the link ran them as the admin. A file inside a recording did
+  the same by its name, and an SVG screenshot by its thumbnail. Every
+  stored file, thumbnail and unpacked file is sandboxed now. One a
+  browser would render as a document is sent as a download.
+- A jam's model was shown each tool with the parameters a jam needs,
+  but an argument it sent beyond those went to Vibium all the same.
+  Vibium saves a screenshot under any file name it is given, so a
+  prompt, or words on the device's screen, could overwrite a file on
+  the station's disk. Arguments outside the schema are dropped before
+  the call now.
+- A recording's thumbnail was read from the path its trace named for
+  the last frame, joined to the unpacked copy unchecked. An uploader
+  could name another person's picture in the store, or any picture on
+  the host, and get it back as their own thumbnail. A name that led to
+  a device file would have read without end. A frame is a plain file
+  name inside the recording now, a regular file, and at most 8 MiB.
+- A zip is unpacked up to twice the largest file the store takes. The
+  count was signed, and a first entry that declared 2^63 bytes turned
+  it negative, so the entries after it unpacked without limit. A
+  kilobyte of upload could put any amount on the disk. The size is
+  compared unsigned now, before it is counted.
+- The password step forgot the misses of its address and its login
+  each time the password was right. Someone who had a password could
+  guess at the code twice, type the password again, and go on without
+  a wait or a lock. Only a sign-in that passes both steps forgets the
+  misses now.
+- A wrong password was counted after it was checked. Guesses sent
+  together were all checked before the first was counted, so the lock
+  of five held nobody who sent twelve at once. Each check takes 64 MiB
+  with no limit on how many ran, which a small machine does not have
+  for a dozen. A try is counted before it is checked now, and two
+  checks run at a time. A login nobody has was refused without a
+  hash, faster than a real one; it is hashed against a decoy now.
+- `safeNext` let `/`, a tab and `/evil.example` through. The tab went
+  out in the Location header after the code step, and a browser drops
+  tabs from an address, which leaves `//evil.example`. It refuses every
+  control character now.
+- A jam's token was bound to its device on the device routes and for
+  reading records, and nowhere else. An admin's read every jam on the
+  station, listed every record by key, and could file a record under
+  another device's hold. Any user's could share or delete that user's
+  own records of another device. A bound token keeps to its device in
+  all of these now.
+- A removed rig could not upload or reconnect, but its key still read,
+  listed and deleted the records it had uploaded: the store matched
+  the signature to the record's key and never asked whether the rig was
+  still enrolled. It asks now.
+- The sign-in form took a post from any site. A page elsewhere could
+  post a login of its own and leave that login's session in the
+  visitor's browser in place of theirs, which signed them out. The
+  form takes a post from the station's own page, or from a client
+  that is no browser.
+- The relay passed a rig's answers to the browser as they came, under
+  the station's own address. A rig could set the station's cookies,
+  the session's among them, and send a page that ran script as the
+  person looking. The relay drops a rig's `Set-Cookie` now, and every
+  relayed answer but the extras script is sandboxed. The extras script
+  still runs in the viewer page with the station's origin: that part
+  is open.
+- A rig took a grant's hold id as it came, and named a recording's
+  files after it. A station that records could name a hold so that the
+  files landed outside the recordings folder, over the rig's own policy
+  file. A hold id is letters, digits, `_` and `-` now, at most 64, in a
+  grant and in a revocation.
+- A rig held a device until its latest grant expired, whatever the
+  grant said. One grant good for ten years kept every other station
+  out, across restarts. A grant that expires more than ten minutes and
+  the skew ahead is refused now, and a hold never lasts past the
+  session the policy allows.
+- A rig remembered used grants in memory only, so a spent grant passed
+  again after a restart, until it expired. The list is kept with the
+  rest of the rig's state now.

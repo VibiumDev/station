@@ -615,6 +615,11 @@ func (m *jams) get(ctx context.Context, p station.Principal, id string) (station
 			return j, false, err
 		}
 	}
+	// A token bound to a device sees that device's jams alone, whoever
+	// it acts as.
+	if p.Device != "" && j.DeviceID != p.Device {
+		return j, false, station.ErrNotFound
+	}
 	if !p.Admin && j.Subject != p.Subject && !m.s.auth.level(ctx, p, j.DeviceID).AtLeast(station.LevelWatch) {
 		return j, false, station.ErrNotFound
 	}
@@ -636,14 +641,18 @@ func (m *jams) act(ctx context.Context, p station.Principal, id string) (station
 }
 
 // visibleJams keeps the jams a principal may see: all for an admin, else
-// their own and those run on devices their teams may watch.
+// their own and those run on devices their teams may watch. A token bound
+// to a device sees that device's alone.
 func (s *server) visibleJams(ctx context.Context, p station.Principal, list []station.Jam) []station.Jam {
-	if p.Admin {
+	if p.Admin && p.Device == "" {
 		return list
 	}
 	out := []station.Jam{}
 	levels := map[string]station.Level{}
 	for _, j := range list {
+		if p.Device != "" && j.DeviceID != p.Device {
+			continue
+		}
 		l, ok := levels[j.DeviceID]
 		if !ok {
 			l = s.auth.level(ctx, p, j.DeviceID)

@@ -206,7 +206,10 @@ a phone the model gets screenshot, tap, long press, swipe, keys, type
 and the few others a screen allows, and on a future host with a
 document model it would get the map, find, click and fill set the CLI
 uses on a browser. Session, recording and file tools stay out of the
-model's reach on every kind, as they do in Vibium's own check. Vibium
+model's reach on every kind, as they do in Vibium's own check. A tool's
+schema is narrowed to the parameters a jam needs. An argument outside
+it is dropped before the call, so a model cannot name a file on the
+station's disk for a screenshot or for what it heard. Vibium
 is a static Go binary, so the station host needs one file beside the
 station, which the self-host guide and the Fly image add; the station
 finds it on the path or by a flag, and the Settings page says when it

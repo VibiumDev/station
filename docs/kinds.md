@@ -42,12 +42,12 @@ the file name.
 | `rig` | the rig id the station assigned | Matches what enrollment returned |
 | `dev` | the device id, `<rig id>/<device name>` | One of this rig's devices |
 | `sub` | who holds the hold: `owner`, `token:<name>` or a login | Logged |
-| `hold` | the hold id, `hld_<hex>` | The current hold, or a higher `seq` |
+| `hold` | the hold id, `hld_<hex>`: letters, digits, `_` and `-`, at most 64 | A plain id; the current hold, or a higher `seq` |
 | `seq` | the device's hold counter | Never lower than the one it has |
 | `scope` | one per tag: `view`, `input`, `bidi`, `admin` | Each operation's scope, and the rig policy allows it |
 | `stun` | STUN URLs, when the station has them | Nothing; the rig gathers candidates with them |
 | `turn` | the hold's TURN username (`<expiry>:<hold id>`), its credential, then the TURN URLs | Nothing; the rig gathers relay candidates with them. The credential lasts the hold's maximum time |
-| `expiration` | NIP-40, 10 minutes after `created_at` | Not expired, 30 s skew |
+| `expiration` | NIP-40, 10 minutes after `created_at` | Not expired, and no further ahead than 10 minutes, 30 s skew |
 | `nonce` | 8 random bytes, hex | Nothing; it keeps every grant's id distinct |
 
 `content` is empty. The event `id` is the replay nonce: a grant is accepted
