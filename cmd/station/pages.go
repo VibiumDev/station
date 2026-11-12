@@ -370,13 +370,15 @@ var pages = template.Must(template.New("").Funcs(template.FuncMap{"npub": npub, 
 <form method="post" action="/settings/jam-notes"><input type="hidden" name="csrf" value="{{.CSRF}}">
 <textarea class="notes" name="notes" rows="6" maxlength="{{.MaxNotes}}" aria-label="Notes for every jam on this station" placeholder="After a completed run or a passed check, leave the device on its home screen.">{{.JamNotes}}</textarea>
 <input type="submit" value="Save notes"></form>
-{{end}}<h2 class="h2">Enroll a rig {{template "help" "enroll"}}</h2>
-<p class="helptext" id="help-enroll" hidden>A rig is a machine with devices on it: a Raspberry Pi running Roadie with a phone wired to it. Enrolling joins it to this station. From then on the rig keeps a tunnel open to the station, the station lists the rig's devices, and holds on them go through the tunnel. An enrollment code is used once and expires after 15 minutes. Its last group is this station's key fingerprint, which the rig checks, so it enrolls with the station you meant. On the same network the rig finds the station by mDNS and the address can be left out.</p>
-{{if .NewCode}}<div class="card featured">On the rig, within 15 minutes (until {{.CodeExpires}}):
-<p class="secret">roadie enroll {{.PublicURL}} --code {{.NewCode}}</p>
-<p class="muted">On the same network the URL can be left out: the rig finds the station over mDNS. The code ends with this station's key fingerprint, {{.Fingerprint}}, which the rig checks.</p></div>{{end}}
+{{end}}<h2 class="h2" id="enroll">Enroll a rig {{template "help" "enroll"}}</h2>
+<p class="helptext" id="help-enroll" hidden>A rig is a machine with devices on it: a Raspberry Pi running Roadie with a phone wired to it. Enrolling joins it to this station. From then on the rig keeps a tunnel open to the station, the station lists the rig's devices, and holds on them go through the tunnel. An enrollment code is used once and expires after 15 minutes. Every code still open is listed here until it is used, cancelled or runs out, and Cancel, held for a moment, ends one at once. The station keeps codes hashed, so a code's text is shown only while the station that made it still runs. A code's last group is this station's key fingerprint, which the rig checks, so it enrolls with the station you meant. On the same network the rig finds the station by mDNS and the address can be left out.</p>
 <form class="row" method="post" action="/settings/codes"><input type="hidden" name="csrf" value="{{.CSRF}}">
-<input class="primary" type="submit" value="New enrollment code"> <span class="muted">{{.OpenCodes}} unused</span></form>
+<input class="primary" type="submit" value="New enrollment code"></form>
+{{range $i, $c := .OpenCodes}}<div class="card code{{if and (eq $i 0) $c.Code}} featured{{end}}">
+<div class="codehead"><span>{{if $c.Code}}On the rig, until {{$c.Until}}:{{else}}A code made at {{$c.Made}}, good until {{$c.Until}}.{{end}}</span>
+<form class="inline" method="post" action="/settings/codes/cancel"><input type="hidden" name="csrf" value="{{$.CSRF}}"><input type="hidden" name="id" value="{{$c.ID}}"><button class="small hold" type="button" data-hold title="Hold to cancel">Cancel</button></form></div>
+{{if $c.Code}}<p class="secret">roadie enroll {{$.PublicURL}} --code {{$c.Code}}</p>{{end}}</div>{{end}}
+{{if .OpenCodes}}<p class="muted">On the same network the URL can be left out: the rig finds the station over mDNS. A code ends with this station's key fingerprint, {{.Fingerprint}}, which the rig checks.</p>{{end}}
 
 <h2 class="h2">Rigs {{template "help" "rigs"}}</h2>
 <p class="helptext" id="help-rigs" hidden>The rigs enrolled here. Key is the rig's own public key, which signs everything the rig sends. Devices is what the rig announces each time it connects, so a change on the rig shows after its next connection. Remove refuses the rig's key from then on; to come back, it enrolls again with a new code.</p>

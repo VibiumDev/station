@@ -3,11 +3,14 @@ package main
 import (
 	"context"
 	"errors"
+	"net/http"
+	"regexp"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/VibiumDev/station"
+	"github.com/VibiumDev/station/enroll"
 	"github.com/VibiumDev/station/sqlite"
 )
 
@@ -151,5 +154,93 @@ func TestSettingsTeamsRender(t *testing.T) {
 	}
 	if html := out.String(); !strings.Contains(html, `<option value="watch" selected>watch</option>`) || !strings.Contains(html, `name="device" value="rig_a/iphone_1"`) {
 		t.Error("the access grid lacks the device's select")
+	}
+}
+
+// Settings lists every open enrollment code with its command. A new one
+// hides none of the others, Cancel ends one at once, and a code this run
+// did not make is listed without its text.
+func TestEnrollmentCodesStayListedAndCancel(t *testing.T) {
+	f := newFullStation(t)
+	ck, csrf := f.session(f.users["admin"].ID, stageSignedIn)
+	admin := caller{name: "admin", decor: withCookie(ck), csrf: csrf, signed: true, admin: true, person: true}
+	codeIn := regexp.MustCompile(`roadie enroll \S* ?--code ([0-9A-Za-z]{4}-[0-9A-Za-z]{4}-[0-9A-Za-z]{4})`)
+	idIn := regexp.MustCompile(`name="id" value="(\d+)"`)
+	create := func() {
+		t.Helper()
+		if w := f.do(admin, "POST", "/settings/codes", "", true); w.Code != http.StatusSeeOther || w.Header().Get("Location") != "/settings#enroll" {
+			t.Fatalf("a new code: %d %q", w.Code, w.Header().Get("Location"))
+		}
+	}
+	listed := func() (codes, ids []string, page string) {
+		page = f.do(admin, "GET", "/settings", "", true).Body.String()
+		for _, m := range codeIn.FindAllStringSubmatch(page, -1) {
+			codes = append(codes, m[1])
+		}
+		for _, m := range idIn.FindAllStringSubmatch(page, -1) {
+			ids = append(ids, m[1])
+		}
+		return
+	}
+	use := func(code string) error {
+		normalized, _, err := enroll.ParseCode(code)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return f.db.UseCode(f.ctx, normalized, time.Now())
+	}
+	if codes, ids, _ := listed(); len(codes)+len(ids) != 0 {
+		t.Fatalf("codes before any was made: %v %v", codes, ids)
+	}
+	create()
+	first, _, _ := listed()
+	if len(first) != 1 {
+		t.Fatalf("after one: %v", first)
+	}
+	time.Sleep(2 * time.Millisecond) // the list is by when each was made
+	create()
+	both, ids, page := listed()
+	// Cancel is held like the other buttons that take something away.
+	if strings.Count(page, `<button class="small hold" type="button" data-hold title="Hold to cancel">Cancel</button>`) != 2 {
+		t.Error("Cancel is not a held button on each code")
+	}
+	if len(both) != 2 || len(ids) != 2 || both[1] != first[0] || both[0] == first[0] {
+		t.Fatalf("after two, newest first: %v (ids %v), the first was %v", both, ids, first)
+	}
+	// Cancel the newest: it is gone from the page and no rig can use it.
+	if w := f.do(admin, "POST", "/settings/codes/cancel", "id="+ids[0], true); w.Code != http.StatusSeeOther {
+		t.Fatalf("cancel: %d %s", w.Code, w.Body)
+	}
+	if left, _, _ := listed(); len(left) != 1 || left[0] != first[0] {
+		t.Fatalf("after the cancel: %v", left)
+	}
+	if err := use(both[0]); !errors.Is(err, sqlite.ErrCode) {
+		t.Errorf("the cancelled code: %v", err)
+	}
+	// Cancelling it again, or something that was never a code, changes nothing.
+	for _, id := range []string{ids[0], "12", "x"} {
+		if w := f.do(admin, "POST", "/settings/codes/cancel", "id="+id, true); w.Code != http.StatusSeeOther {
+			t.Errorf("cancel %q: %d", id, w.Code)
+		}
+	}
+	if err := use(first[0]); err != nil {
+		t.Errorf("the other code after the cancel: %v", err)
+	}
+	if left, ids, _ := listed(); len(left)+len(ids) != 0 {
+		t.Errorf("a used code is still listed: %v", left)
+	}
+	// A code made elsewhere, as `station enroll` makes one: listed, with
+	// Cancel, without its text.
+	if err := f.db.SaveCode(f.ctx, "WXYZ-2345-ABCD", time.Now().Add(time.Minute)); err != nil {
+		t.Fatal(err)
+	}
+	codes, ids, page := listed()
+	if len(codes) != 0 || len(ids) != 1 || !strings.Contains(page, "A code made at") || strings.Contains(page, "WXYZ-2345") {
+		t.Errorf("a code this run did not make: codes %v ids %v", codes, ids)
+	}
+	// A code that has run out is not listed.
+	f.db.SaveCode(f.ctx, "WXYZ-9999-ABCD", time.Now().Add(-time.Second))
+	if _, ids, _ := listed(); len(ids) != 1 {
+		t.Errorf("an expired code is listed: %v", ids)
 	}
 }

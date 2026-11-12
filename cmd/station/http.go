@@ -31,6 +31,10 @@ import (
 
 // server is the single-player station's HTTP side.
 type server struct {
+	// codeText is the text of the enrollment codes this run made, by
+	// their hash, for Settings to show while they are open.
+	codeMu     sync.Mutex
+	codeText   map[string]string
 	cfg        *Config
 	dir        string
 	db         *sqlite.DB
@@ -191,6 +195,7 @@ func (s *server) handler() http.Handler {
 	mux.Handle("POST /settings/tokens", s.page(station.ActionManage, s.createToken))
 	mux.Handle("POST /settings/tokens/revoke", s.page(station.ActionManage, s.revokeToken))
 	mux.Handle("POST /settings/codes", s.page(station.ActionManage, s.createCode))
+	mux.Handle("POST /settings/codes/cancel", s.page(station.ActionManage, s.cancelCode))
 	mux.Handle("POST /settings/rigs/remove", s.page(station.ActionManage, s.removeRig))
 	mux.Handle("POST /settings/models", s.page(station.ActionManage, s.addModel))
 	mux.Handle("POST /settings/models/remove", s.page(station.ActionManage, s.removeModel))
@@ -930,9 +935,8 @@ func (s *server) settingsData(r *http.Request, p station.Principal, extra map[st
 	ctx := r.Context()
 	tokens, _ := s.db.Tokens(ctx)
 	rigs, _ := s.db.Rigs(ctx)
-	codes, _ := s.db.OpenCodes(ctx, time.Now())
 	data := map[string]any{
-		"Page": "settings", "Principal": p, "CSRF": s.auth.csrfToken(r), "Tokens": tokens, "Rigs": rigs, "OpenCodes": codes,
+		"Page": "settings", "Principal": p, "CSRF": s.auth.csrfToken(r), "Tokens": tokens, "Rigs": rigs, "OpenCodes": s.openCodes(ctx),
 		"Mode": s.mode, "PublicURL": s.publicURL, "TunnelURL": s.enroll.TunnelURL, "MDNS": s.mdns,
 		"Npub": npub(s.key.Public()), "Fingerprint": enroll.Fingerprint(s.key.Public()), "Allow": s.cfg.Allow,
 		"NoPassword": !s.auth.hasUsers(ctx), "TURN": s.turnInfo,
@@ -986,18 +990,68 @@ func (s *server) revokeToken(w http.ResponseWriter, r *http.Request, p station.P
 }
 
 func (s *server) createCode(w http.ResponseWriter, r *http.Request, p station.Principal) {
-	code, expires, err := s.newCode(r.Context())
-	if err != nil {
+	if _, _, err := s.newCode(r.Context()); err != nil {
 		s.render(w, "settings", s.settingsData(r, p, map[string]any{"Message": err.Error()}))
 		return
 	}
-	s.render(w, "settings", s.settingsData(r, p, map[string]any{"NewCode": code, "CodeExpires": expires.Format(time.Kitchen)}))
+	// The page lists the code with the others still open, so a reload
+	// makes no second one.
+	http.Redirect(w, r, "/settings#enroll", http.StatusSeeOther)
+}
+
+// cancelCode is POST /settings/codes/cancel: id, as the page lists it.
+func (s *server) cancelCode(w http.ResponseWriter, r *http.Request, p station.Principal) {
+	if err := s.db.CancelCode(r.Context(), r.FormValue("id"), time.Now()); err != nil && !errors.Is(err, sqlite.ErrCode) {
+		s.render(w, "settings", s.settingsData(r, p, map[string]any{"Message": err.Error()}))
+		return
+	}
+	// A code already used or run out is as gone as a cancelled one.
+	http.Redirect(w, r, "/settings#enroll", http.StatusSeeOther)
 }
 
 func (s *server) newCode(ctx context.Context) (string, time.Time, error) {
 	code := enroll.NewCode(s.key.Public())
 	expires := time.Now().Add(enroll.CodeLifetime)
-	return code, expires, s.db.SaveCode(ctx, code, expires)
+	if err := s.db.SaveCode(ctx, code, expires); err != nil {
+		return "", time.Time{}, err
+	}
+	s.codeMu.Lock()
+	if s.codeText == nil {
+		s.codeText = map[string]string{}
+	}
+	s.codeText[sqlite.CodeHash(code)] = code
+	s.codeMu.Unlock()
+	return code, expires, nil
+}
+
+// codeView is an open enrollment code as Settings lists it.
+type codeView struct {
+	ID    string
+	Code  string // empty when this station no longer has its text
+	Made  string
+	Until string
+}
+
+// openCodes lists the enrollment codes still usable, newest first. The
+// database keeps a code hashed, so its text is shown only while the
+// station that made it still runs; one made before a restart, or by
+// `station enroll`, is listed without it.
+func (s *server) openCodes(ctx context.Context) []codeView {
+	open, _ := s.db.OpenCodes(ctx, time.Now())
+	s.codeMu.Lock()
+	defer s.codeMu.Unlock()
+	live := map[string]bool{}
+	views := make([]codeView, 0, len(open))
+	for _, c := range open {
+		live[c.Hash] = true
+		views = append(views, codeView{ID: c.ID, Code: s.codeText[c.Hash], Made: c.Created.Local().Format(time.Kitchen), Until: c.Expires.Local().Format(time.Kitchen)})
+	}
+	for h := range s.codeText {
+		if !live[h] {
+			delete(s.codeText, h)
+		}
+	}
+	return views
 }
 
 func (s *server) removeRig(w http.ResponseWriter, r *http.Request, p station.Principal) {
