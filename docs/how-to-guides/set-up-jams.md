@@ -90,8 +90,8 @@ models**:
   default unless another say model is marked default.
 - With more than one voice installed, the `piper` row has a list of
   them. **Use** switches the voice, and the server loads it at once.
-- The **Piper** row says which voice is speaking and where, or why Piper
-  is not running. The server's own output is in `piper/server.log`.
+- The **Piper** row says where Piper's server runs and how many voices
+  it has, or why it is not running. The server's own output is in `piper/server.log`.
 
 A cloud voice is still a say model of its own, as in step 3. Marking it
 default makes jams speak with it instead.
