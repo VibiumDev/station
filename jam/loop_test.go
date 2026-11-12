@@ -18,6 +18,7 @@ var pixel, _ = base64.StdEncoding.DecodeString("iVBORw0KGgoAAAANSUhEUgAAAAEAAAAB
 type fakeTools struct {
 	mu    sync.Mutex
 	calls []string
+	sent  []map[string]any  // each call's arguments, in step with calls
 	fail  map[string]string // tool -> error text (isError)
 	dead  bool
 }
@@ -43,6 +44,7 @@ func (f *fakeTools) Call(ctx context.Context, name string, args map[string]any) 
 		return CallResult{}, ErrClosed
 	}
 	f.calls = append(f.calls, name)
+	f.sent = append(f.sent, args)
 	if msg, ok := f.fail[name]; ok {
 		return CallResult{IsError: true, Content: []Content{{Type: "text", Text: msg}}}, nil
 	}
@@ -199,6 +201,46 @@ func TestDeviceTools(t *testing.T) {
 	tools, _ = l.deviceTools(context.Background())
 	if tools[len(tools)-1].Name != "return_verdict" || len(tools) != 3 {
 		t.Errorf("check mode tools: %d", len(tools))
+	}
+}
+
+// A model may send what its schema never offered: a file name for a
+// screenshot, a page, a path for what it heard. Vibium would act on each,
+// on the station's own disk. None reaches it, and the transcript shows
+// the calls as they were made.
+func TestHiddenArgumentsNeverReachVibium(t *testing.T) {
+	model := &scripted{replies: []Reply{
+		toolReply(call("c1", "browser_screenshot", `{"filename":"/var/lib/station/station.db","page":"other"}`)),
+		toolReply(call("c2", "browser_tap", `{"x":1,"y":2,"page":"other"}`)),
+		toolReply(call("c3", "vibium_listen", `{"timeout":500,"path":"/var/lib/station/station.key","target":"/tmp/heard.wav"}`)),
+		toolReply(call("c4", "return_verdict", verdict)),
+	}}
+	tools := &fakeTools{}
+	emit, events := collect()
+	New(model, tools, Options{Prompt: "Is the phone on its home screen?", DeviceKind: "phone", Hears: true, Emit: emit}).Run(context.Background())
+	got := map[string]string{}
+	for i, name := range tools.calls {
+		for k := range tools.sent[i] {
+			if k == "filename" || k == "page" || k == "path" || k == "target" {
+				t.Errorf("%s reached Vibium with %s: %v", name, k, tools.sent[i])
+			}
+		}
+		if len(tools.sent[i]) > 0 {
+			raw, _ := json.Marshal(tools.sent[i])
+			got[name] = string(raw)
+		}
+	}
+	if got["browser_tap"] != `{"x":1,"y":2}` || got["vibium_listen"] != `{"timeout":500}` || got["browser_screenshot"] != "" {
+		t.Errorf("what the tools were sent: %v", got)
+	}
+	shown := ""
+	for _, e := range events() {
+		if e.Kind == "call" {
+			shown += e.Tool + " " + string(e.Args) + "\n"
+		}
+	}
+	if shown != "browser_screenshot {}\nbrowser_tap {\"x\":1,\"y\":2}\nvibium_listen {\"timeout\":500}\n" {
+		t.Errorf("the transcript's calls:\n%s", shown)
 	}
 }
 

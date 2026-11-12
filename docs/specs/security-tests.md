@@ -147,7 +147,7 @@ it, so the history is readable later.
 | 6 | Roadie's `auth_routes_test.go`, `allowlist_test.go`, `auth_test.go`, with `rig/rig_test.go` for the gate |
 | 7 | `cmd/station/fuzz_test.go`, `records/fuzz_test.go` |
 | 8 | `.github/workflows/ci.yml` runs the station's tests under `-race`; the matrix's completeness check |
-| Review | `TestStoredFilesCannotActAsPages` in `cmd/station/records_e2e_test.go`, `TestServedFilesAreSandboxed` in `records/records_test.go` |
+| Review | `TestStoredFilesCannotActAsPages` in `cmd/station/records_e2e_test.go`, `TestServedFilesAreSandboxed` in `records/records_test.go`, `TestHiddenArgumentsNeverReachVibium` in `jam/loop_test.go` |
 
 ## Found and fixed
 
@@ -218,3 +218,9 @@ A review of the whole station by a second reader, after the phases:
   the same by its name, and an SVG screenshot by its thumbnail. Every
   stored file, thumbnail and unpacked file is sandboxed now. One a
   browser would render as a document is sent as a download.
+- A jam's model was shown each tool with the parameters a jam needs,
+  but an argument it sent beyond those went to Vibium all the same.
+  Vibium saves a screenshot under any file name it is given, so a
+  prompt, or words on the device's screen, could overwrite a file on
+  the station's disk. Arguments outside the schema are dropped before
+  the call now.
