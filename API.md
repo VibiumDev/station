@@ -88,6 +88,12 @@ carries `X-Hold`, the id of the hold it rode on, and `X-Hold-Observer: 1`
 when that is someone else's; the page uses them to notice the device
 changing hands.
 
+A relayed answer is the rig's own words under the station's address.
+The station passes on no `Set-Cookie` of the rig's. Every relayed answer
+but `extras.js` carries `Content-Security-Policy: sandbox`, so one opened
+in a browser as a page has no origin and runs no script. Clients, `fetch`
+and WebSockets are not affected.
+
 The rig limits every hold to 120 requests and messages a second with a
 burst of 240, and to one MJPEG stream, one audio socket, one microphone
 socket, one BiDi socket and two input sockets at once; past that it
