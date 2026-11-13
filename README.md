@@ -15,23 +15,19 @@ input, so the rig always has the last word.
 
 ```mermaid
 flowchart TB
-    P["People<br/>a browser: pages and the viewer"]
-    A["Agents and scripts<br/>an API token: REST, WebDriver BiDi"]
-    S["Station<br/>sign-in, users and teams, holds and grants,<br/>jam sessions, Record Store, TURN relay"]
-    M["AI models<br/>OpenAI, Anthropic, Gemini, xAI or local;<br/>Piper speaks on the station"]
-    R1["Rig: Roadie on a Pi<br/>checks every grant"]
-    R2["Rig: Roadie on a Pi<br/>checks every grant"]
-    D1["Phone"]
-    D2["Phone"]
+    A["Agents<br/>with an API token"]
+    P["People<br/>in a browser"]
+    S["Station"]
+    M["AI models"]
+    R["Rig<br/>Roadie on a Pi"]
+    D["Phone"]
 
-    P -- "HTTPS" --> S
-    A -- "HTTPS" --> S
-    S -- "jam sessions" --> M
-    S <-- "tunnel: one WebSocket,<br/>opened by the rig" --> R1
-    S <-- "tunnel" --> R2
-    R1 --- D1
-    R2 --- D2
-    P -. "WebRTC: video, sound and input,<br/>direct or through TURN" .- R1
+    A --> S
+    P --> S
+    S --> M
+    S <-- "tunnel" --> R
+    R --- D
+    P -. "WebRTC" .- R
 ```
 
 - **People** sign in to the station and open a device in the viewer. Video,
