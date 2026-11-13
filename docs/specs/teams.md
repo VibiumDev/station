@@ -118,7 +118,8 @@ their own account. At the expiry the account stops as if it were locked:
   sessions, their holds (with a revocation to the rig) and the jams they
   started. This covers holds taken before the expiry was set or moved.
 
-Moving the expiry later, or clearing it, lets the user back in. Their
+Locking a user ends the same things at once. Moving the expiry later,
+or clearing it, lets the user back in. Their
 tokens work again; sessions ended at the expiry stay ended.
 
 ## Data

@@ -708,9 +708,16 @@ func TestNoSecretsLeakAndLockBites(t *testing.T) {
 			}
 		}
 	}
-	// Lock the drive user: their session, their tokens and the pages all stop.
+	// Lock the drive user: their session, their tokens, the device they
+	// hold and the pages all stop.
+	if w := f.do(by["drive user"], "POST", "/v1/devices/"+devA+"/hold", `{"scopes":["view","input"]}`, true); w.Code != http.StatusOK {
+		t.Fatalf("a hold before the lock: %d %s", w.Code, w.Body)
+	}
 	if err := f.s.setLocked(f.ctx, f.admin, drive.ID, true); err != nil {
 		t.Fatal(err)
+	}
+	if held, _ := f.db.Held(f.ctx); slices.ContainsFunc(held, func(h station.Hold) bool { return h.Subject == drive.Login }) {
+		t.Error("a locked user still holds the device")
 	}
 	for _, who := range []string{"drive user", "drive user's drive token", "drive user's watch token", "drive user's admin token"} {
 		if w := f.do(by[who], "GET", "/v1/devices", "", true); w.Code != http.StatusUnauthorized {

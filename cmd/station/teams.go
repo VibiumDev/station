@@ -185,9 +185,11 @@ func (s *server) setLocked(ctx context.Context, p station.Principal, userID stri
 	what := "unlocked"
 	if locked {
 		what = "locked"
-		s.auth.dropUser(userID)
 	}
 	s.db.Audit(ctx, station.AuditEntry{Subject: p.Subject, Action: "user", Detail: what + " " + u.Login})
+	if locked {
+		s.endStopped(ctx, time.Now())
+	}
 	return nil
 }
 
@@ -212,23 +214,23 @@ func (s *server) setExpiry(ctx context.Context, p station.Principal, userID stri
 	}
 	s.db.Audit(ctx, station.AuditEntry{Subject: p.Subject, Action: "user", Detail: detail})
 	if u.Expired(time.Now()) {
-		s.endExpired(ctx, time.Now())
+		s.endStopped(ctx, time.Now())
 	}
 	return nil
 }
 
-// endExpired ends what expired users still have open: their sessions, the
-// holds taken for them or their tokens, and the jams they started. Sign-in,
-// their tokens and new holds already refuse them; this catches what was
-// open when the time came, or before an admin moved it.
-func (s *server) endExpired(ctx context.Context, now time.Time) {
+// endStopped ends what locked and expired users still have open: their
+// sessions, the holds taken for them or their tokens, and the jams they
+// started. Sign-in, their tokens and new holds already refuse them; this
+// catches what was open when they were locked or their time came.
+func (s *server) endStopped(ctx context.Context, now time.Time) {
 	users, err := s.db.Users(ctx)
 	if err != nil {
 		return
 	}
 	whose := map[string]station.User{} // a hold's subject, to the user it acts for
 	for _, u := range users {
-		if u.Expired(now) {
+		if u.Stopped(now) {
 			s.auth.dropUser(u.ID)
 			whose[u.Login] = u
 		}
@@ -268,6 +270,9 @@ func (s *server) endExpired(ctx context.Context, now time.Time) {
 			continue
 		}
 		why := u.Login + "'s account expired"
+		if u.Locked {
+			why = u.Login + " was locked"
+		}
 		if jamID != "" {
 			s.jams.stop(jamID, why)
 		}
