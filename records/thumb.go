@@ -239,6 +239,9 @@ func (s *Store) Thumbnail(ctx context.Context, b station.Blob) ([]byte, string, 
 		defer f.Close()
 		data, err := io.ReadAll(io.LimitReader(f, maxThumbnail))
 		return data, b.Type, err
+	case IsWAV(b.Type):
+		data, err := s.waveform(b)
+		return data, "image/png", err
 	case b.Type != "application/zip":
 		return nil, "", ErrNoThumbnail
 	}
@@ -285,6 +288,7 @@ func (s *Store) removeUnpacked(sha string) {
 		os.RemoveAll(s.unpackDir(sha))
 		os.RemoveAll(s.unpackDir(sha) + ".tmp")
 		os.RemoveAll(s.stripDir(sha))
+		os.Remove(s.wavePath(sha))
 	}
 }
 
