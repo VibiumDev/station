@@ -94,6 +94,7 @@ Then:
 |---|---|
 | Run a station on your own server | [Self-host a station](docs/how-to-guides/self-host.md) |
 | Run one on Fly.io | [Deploy to Fly.io](docs/how-to-guides/deploy-to-fly.md) |
+| Sign in, enroll a rig and check it all works | [First steps](docs/how-to-guides/first-steps.md) |
 | Set up chat and voices | [Set Up Jams](docs/how-to-guides/set-up-jams.md) |
 | Point an agent at a device | [Reach a device through the station](docs/tutorials/agent-through-the-station.md) |
 | Use the API | [API.md](API.md) |
