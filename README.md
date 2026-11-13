@@ -15,19 +15,17 @@ input, so the rig always has the last word.
 
 ```mermaid
 flowchart TB
-    A["Agents<br/>with an API token"]
-    P["People<br/>in a browser"]
+    C["People and agents<br/>a browser or an API token"]
     S["Station"]
     M["AI models"]
     R["Rig<br/>Roadie on a Pi"]
     D["Phone"]
 
-    A --> S
-    P --> S
+    C --> S
     S --> M
     S <-- "tunnel" --> R
     R --- D
-    P -. "WebRTC" .- R
+    C -. "WebRTC" .- R
 ```
 
 - **People** sign in to the station and open a device in the viewer. Video,
@@ -37,7 +35,8 @@ flowchart TB
   through the station.
 - **Agents** use an API token. The station relays REST calls and WebDriver
   BiDi to the rig, so Vibium, Claude Code or a script can drive a device
-  as if it were local.
+  as if it were local. Vibium also joins over WebRTC, like the viewer, to
+  record the device's video.
 - **Jam sessions** start from a prompt on the station's front page. An AI
   chat model you set up on Settings carries it out on a device through
   Vibium's tools, and can speak to the device and listen to it.
