@@ -56,6 +56,20 @@ listen are in builds made after 2026-11-11: take a later nightly from
 Vibium's [releases](https://github.com/VibiumDev/vibium/releases) the
 same way.
 
+To use a Vibium you built yourself, such as one from a branch that has no
+nightly yet, build it from your Vibium checkout with this clone's script
+and install it the same way:
+
+```bash
+ARCHES=arm64 scripts/vibium-local.sh ../vibium   # amd64 on a PC
+sudo install -m 755 deploy/vibium/vibium-linux-arm64 /usr/local/bin/vibium
+vibium --version                                  # vibium v26.8.21-local.<commit>
+```
+
+Install it under `/usr/local/bin` rather than pointing `--vibium` into
+your checkout: the service's sandbox (`ProtectHome=yes`) keeps the station
+out of home directories.
+
 Vibium needs no browser for this: a jam's session is the station's own
 device, reached through `/session`. The station looks for Vibium when it
 starts, so restart the station after installing or replacing it.
@@ -286,7 +300,10 @@ docker build -t vibium-station .
 ```
 
 The image holds the same binaries and the Vibium nightly that step 1
-describes, with the data directory at `/data`. A public station:
+describes, with the data directory at `/data`. To put a Vibium you built
+in it instead, run `scripts/vibium-local.sh` first and add
+`--build-arg VIBIUM_LOCAL=1`
+([details](deploy-to-fly.md#use-a-vibium-you-built)). A public station:
 
 ```bash
 docker run -d --name station --restart unless-stopped \
