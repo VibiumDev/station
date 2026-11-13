@@ -324,3 +324,49 @@ func TestJamNotes(t *testing.T) {
 		t.Errorf("a missing user: %q %v", notes, err)
 	}
 }
+
+// An account's expiry is kept, read back, cleared, and added to a database
+// from before expiries.
+func TestUserExpiry(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "station.db")
+	d, err := Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx := context.Background()
+	if err := d.PutUser(ctx, station.User{ID: "usr_a", Login: "a@example.com"}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := d.db.Exec(`ALTER TABLE users DROP COLUMN expires_at`); err != nil {
+		t.Fatal(err)
+	}
+	d.Close()
+	if d, err = Open(path); err != nil {
+		t.Fatal(err)
+	}
+	defer d.Close()
+	u, err := d.User(ctx, "usr_a")
+	if err != nil || !u.ExpiresAt.IsZero() || u.Expired(time.Now()) {
+		t.Fatalf("after the migration: %+v %v", u, err)
+	}
+	at := time.Date(2030, 6, 1, 17, 0, 0, 0, time.UTC)
+	u.ExpiresAt = at
+	if err := d.PutUser(ctx, u); err != nil {
+		t.Fatal(err)
+	}
+	if u, _ = d.User(ctx, "usr_a"); !u.ExpiresAt.Equal(at) {
+		t.Errorf("kept %s, want %s", u.ExpiresAt, at)
+	}
+	if !u.Expired(at) || u.Expired(at.Add(-time.Second)) || !u.Stopped(at) || u.Stopped(at.Add(-time.Second)) {
+		t.Error("an account expires at its expiry, not before")
+	}
+	users, _ := d.Users(ctx)
+	if len(users) != 1 || !users[0].ExpiresAt.Equal(at) {
+		t.Errorf("listed: %+v", users)
+	}
+	u.ExpiresAt = time.Time{}
+	d.PutUser(ctx, u)
+	if u, _ = d.User(ctx, "usr_a"); !u.ExpiresAt.IsZero() {
+		t.Errorf("cleared, still %s", u.ExpiresAt)
+	}
+}

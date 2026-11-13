@@ -59,7 +59,9 @@ To set a station up step by step, see
 
 Other users never get a password from anyone. An admin adds them on
 Settings and passes on the setup link, where they choose their own and
-add an authenticator.
+add an authenticator. An account can also be given an expiry, for a trial or a
+demo: at that time it stops working as if it were locked, and loses any
+device it holds.
 
 ## Modes
 

@@ -63,6 +63,7 @@ test voice assistants, voice agents and any app where sound matters.
 
 - Sign-in with a password and an authenticator app, or a tailnet identity
 - Users and teams: regular users see only the devices their teams were given
+- Accounts that expire on a date, for a trial or a demo
 - One person or agent in control of a device at a time, and one watching
 - Chat: an LLM you set up does what you ask on a device
 - Two-way sound, with speech on the station (Piper) or in the cloud

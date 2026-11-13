@@ -152,11 +152,12 @@ func principalOf(u station.User, subject string) station.Principal {
 	if subject == "" {
 		subject = u.Login
 	}
-	return station.Principal{Subject: subject, Admin: u.Admin, User: u.ID, Teams: u.Teams}
+	return station.Principal{Subject: subject, Admin: u.Admin, User: u.ID, Teams: u.Teams, Expires: u.ExpiresAt}
 }
 
 // user finds the user a token acts as: its own, or the owner for a token
-// from before tokens had owners. A locked user's tokens are no good.
+// from before tokens had owners. A locked or expired user's tokens are no
+// good.
 func (a *auth) tokenUser(ctx context.Context, tok sqlite.APIToken) (station.User, error) {
 	var u station.User
 	var err error
@@ -165,7 +166,7 @@ func (a *auth) tokenUser(ctx context.Context, tok sqlite.APIToken) (station.User
 	} else {
 		u, err = a.db.UserByLogin(ctx, station.OwnerLogin)
 	}
-	if err != nil || u.Locked {
+	if err != nil || u.Stopped(time.Now()) {
 		return station.User{}, station.ErrUnauthenticated
 	}
 	return u, nil
@@ -190,7 +191,7 @@ func (a *auth) identityUser(ctx context.Context, login, name string, tags []stri
 			}
 			return u, true
 		}
-		if !u.Admin && !u.Locked {
+		if !u.Admin && !u.Stopped(time.Now()) {
 			u.Admin = true // --allow is the operator's word
 		}
 	} else if err != nil {
@@ -200,7 +201,7 @@ func (a *auth) identityUser(ctx context.Context, login, name string, tags []stri
 		u.Name = name
 	}
 	a.db.PutUser(ctx, u)
-	return u, !u.Locked
+	return u, !u.Stopped(time.Now())
 }
 
 // Authenticate finds the principal: a bearer token, the session cookie, or
@@ -225,8 +226,8 @@ func (a *auth) Authenticate(r *http.Request) (station.Principal, error) {
 	if s := a.sessionOf(r); s != nil {
 		u, err := a.db.User(ctx, s.user)
 		switch {
-		case err != nil || u.Locked:
-			a.drop(r) // the user is gone or locked: so is the session
+		case err != nil || u.Stopped(time.Now()):
+			a.drop(r) // the user is gone, locked or expired: so is the session
 		case s.stage == stageCode:
 			return station.Principal{}, errCodeDue
 		case s.stage == stageSetup:
@@ -281,7 +282,7 @@ func (a *auth) sessionUser(r *http.Request) (*session, station.User, bool) {
 		return nil, station.User{}, false
 	}
 	u, err := a.db.User(r.Context(), s.user)
-	if err != nil || u.Locked {
+	if err != nil || u.Stopped(time.Now()) {
 		a.drop(r)
 		return nil, station.User{}, false
 	}
@@ -635,7 +636,7 @@ func (a *auth) login(w http.ResponseWriter, r *http.Request, login, password, ne
 		time.Sleep(2 * a.delay)
 		return 0, false
 	}
-	known := err == nil && !u.Locked && hash != ""
+	known := err == nil && !u.Stopped(time.Now()) && hash != ""
 	if !known {
 		hash = decoy()
 	}

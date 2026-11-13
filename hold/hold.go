@@ -73,7 +73,14 @@ type Request struct {
 	// anyone asking for control takes over at once, so a watcher never
 	// stands in the way.
 	Watch bool
+	// Until, when set, is when the subject's access ends, such as an
+	// account's expiry: a hold taken for them ends by then, no grant
+	// lasts past it, and once it has passed nothing is granted.
+	Until time.Time
 }
+
+// ErrAccessEnded says the request's Until has passed.
+var ErrAccessEnded = errors.New("access has ended")
 
 // Result is what a request got: the hold the grant is on, the grant, and
 // whether the requester only observes someone else's hold.
@@ -158,6 +165,9 @@ func (m *Manager) Take(ctx context.Context, req Request) (Result, error) {
 		scopes = append([]station.Scope{station.ScopeView}, scopes...)
 	}
 	now := m.now()
+	if !req.Until.IsZero() && !now.Before(req.Until) {
+		return Result{}, ErrAccessEnded
+	}
 	cur, err := m.Holds.Current(ctx, dev.ID)
 	switch {
 	case errors.Is(err, station.ErrNoHold):
@@ -183,7 +193,7 @@ func (m *Manager) Take(ctx context.Context, req Request) (Result, error) {
 		}
 		m.claim(cur.ID)
 		cur.ActiveAt = now
-		return m.issue(ctx, rig, dev, cur, scopes, false)
+		return m.issue(ctx, rig, dev, cur, scopes, false, req.Until)
 	case cur.Subject == req.Subject:
 		// The holder wants more than the hold has: a new hold.
 		if err := m.end(ctx, cur, "replaced by its holder", false); err != nil {
@@ -212,22 +222,27 @@ func (m *Manager) Take(ctx context.Context, req Request) (Result, error) {
 		if err := m.watch(cur.ID, req.Subject, now); err != nil {
 			return Result{}, err
 		}
-		return m.issue(ctx, rig, dev, cur, []station.Scope{station.ScopeView}, true)
+		return m.issue(ctx, rig, dev, cur, []station.Scope{station.ScopeView}, true, req.Until)
+	}
+	ends := now.Add(m.max())
+	if !req.Until.IsZero() && req.Until.Before(ends) {
+		ends = req.Until
 	}
 	hold, err := m.Holds.Create(ctx, station.Hold{
 		ID: station.NewID("hld"), DeviceID: dev.ID, RigID: rig.ID, Subject: req.Subject, Scopes: scopes,
-		CreatedAt: now, ActiveAt: now, ExpiresAt: now.Add(m.max()),
+		CreatedAt: now, ActiveAt: now, ExpiresAt: ends,
 	})
 	if err != nil {
 		return Result{}, err
 	}
 	m.audit(ctx, station.AuditEntry{Subject: req.Subject, Action: "hold", DeviceID: dev.ID, HoldID: hold.ID,
 		Detail: fmt.Sprintf("seq %d, scopes %v", hold.Seq, station.ScopeStrings(scopes))})
-	return m.issue(ctx, rig, dev, hold, scopes, false)
+	return m.issue(ctx, rig, dev, hold, scopes, false, req.Until)
 }
 
-// issue signs a grant on the hold and stores it.
-func (m *Manager) issue(ctx context.Context, rig station.Rig, dev station.Device, hold station.Hold, scopes []station.Scope, observer bool) (Result, error) {
+// issue signs a grant on the hold and stores it. The grant ends with the
+// hold, or at until when that is sooner.
+func (m *Manager) issue(ctx context.Context, rig station.Rig, dev station.Device, hold station.Hold, scopes []station.Scope, observer bool, until time.Time) (Result, error) {
 	now := m.now()
 	g := token.Grant{
 		Rig: rig.PubKey, RigID: rig.ID, DeviceID: dev.ID, Subject: hold.Subject, HoldID: hold.ID, Seq: hold.Seq,
@@ -235,6 +250,9 @@ func (m *Manager) issue(ctx context.Context, rig station.Rig, dev station.Device
 	}
 	if g.ExpiresAt.After(hold.ExpiresAt) {
 		g.ExpiresAt = hold.ExpiresAt
+	}
+	if !until.IsZero() && g.ExpiresAt.After(until) {
+		g.ExpiresAt = until
 	}
 	if m.ICE != nil {
 		g.ICE = m.ICE(hold)

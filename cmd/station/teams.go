@@ -31,6 +31,8 @@ func signInWords(u station.User, invite time.Time) string {
 	switch {
 	case u.Locked:
 		return "locked"
+	case u.Expired(time.Now()):
+		return "expired"
 	case !invite.IsZero():
 		return "setup link until " + invite.Local().Format("Jan 2 15:04")
 	case u.TwoFactor:
@@ -118,6 +120,7 @@ func (s *server) teamsData(ctx context.Context, p station.Principal, data map[st
 		rows = append(rows, row)
 	}
 	data["Users"], data["Teams"], data["AccessRows"], data["TokenUsers"] = uviews, tviews, rows, logins
+	data["Zone"] = time.Now().Format("MST") // what an expiry is typed in when the page's script does not run
 	data["Levels"] = []station.Level{station.LevelNone, station.LevelWatch, station.LevelDrive, station.LevelJam}
 }
 
@@ -182,10 +185,101 @@ func (s *server) setLocked(ctx context.Context, p station.Principal, userID stri
 	what := "unlocked"
 	if locked {
 		what = "locked"
-		s.auth.dropUser(userID)
 	}
 	s.db.Audit(ctx, station.AuditEntry{Subject: p.Subject, Action: "user", Detail: what + " " + u.Login})
+	if locked {
+		s.endStopped(ctx, time.Now())
+	}
 	return nil
+}
+
+// setExpiry sets when a user's account expires, or with a zero time makes
+// it last. An admin cannot set an expiry on their own account. A time that
+// has passed ends what the user has open at once.
+func (s *server) setExpiry(ctx context.Context, p station.Principal, userID string, at time.Time) error {
+	if userID == p.User && !at.IsZero() {
+		return errLockout
+	}
+	u, err := s.db.User(ctx, userID)
+	if err != nil {
+		return err
+	}
+	u.ExpiresAt = at.Truncate(time.Second)
+	if err := s.db.PutUser(ctx, u); err != nil {
+		return err
+	}
+	detail := u.Login + " no longer expires"
+	if !at.IsZero() {
+		detail = u.Login + " expires " + u.ExpiresAt.UTC().Format(time.RFC3339)
+	}
+	s.db.Audit(ctx, station.AuditEntry{Subject: p.Subject, Action: "user", Detail: detail})
+	if u.Expired(time.Now()) {
+		s.endStopped(ctx, time.Now())
+	}
+	return nil
+}
+
+// endStopped ends what locked and expired users still have open: their
+// sessions, the holds taken for them or their tokens, and the jams they
+// started. Sign-in, their tokens and new holds already refuse them; this
+// catches what was open when they were locked or their time came.
+func (s *server) endStopped(ctx context.Context, now time.Time) {
+	users, err := s.db.Users(ctx)
+	if err != nil {
+		return
+	}
+	whose := map[string]station.User{} // a hold's subject, to the user it acts for
+	for _, u := range users {
+		if u.Stopped(now) {
+			s.auth.dropUser(u.ID)
+			whose[u.Login] = u
+		}
+	}
+	if len(whose) == 0 {
+		return
+	}
+	byID := map[string]station.User{}
+	for _, u := range whose {
+		byID[u.ID] = u
+	}
+	tokens, _ := s.db.Tokens(ctx)
+	for _, t := range tokens {
+		id := t.UserID
+		if id == "" { // a token from before tokens had owners acts as the owner
+			if o, ok := whose[station.OwnerLogin]; ok {
+				id = o.ID
+			}
+		}
+		if u, ok := byID[id]; ok {
+			whose["token:"+t.Name] = u
+		}
+	}
+	held, err := s.db.Held(ctx)
+	if err != nil {
+		return
+	}
+	for _, h := range held {
+		u, ok := whose[h.Subject]
+		jamID := jamOfSubject(h.Subject)
+		if !ok && jamID != "" {
+			if j, err := s.db.Jam(ctx, jamID); err == nil {
+				u, ok = whose[j.Subject]
+			}
+		}
+		if !ok {
+			continue
+		}
+		why := u.Login + "'s account expired"
+		if u.Locked {
+			why = u.Login + " was locked"
+		}
+		if jamID != "" {
+			s.jams.stop(jamID, why)
+		}
+		if err := s.holds.Release(ctx, h.ID, h.Subject); err == nil {
+			s.db.Audit(ctx, station.AuditEntry{Subject: "station", Action: "hold", DeviceID: h.DeviceID, HoldID: h.ID, Detail: "ended: " + why})
+		}
+	}
 }
 
 // resetSignIn forgets a user's password, authenticator and backup codes,
@@ -282,12 +376,65 @@ func (s *server) teamsForm(w http.ResponseWriter, r *http.Request, p station.Pri
 }
 
 func (s *server) addUserForm(w http.ResponseWriter, r *http.Request, p station.Principal) {
+	expires, err := formExpiry(r)
+	if err != nil {
+		s.teamsForm(w, r, p, err)
+		return
+	}
 	u, link, err := s.addUser(r.Context(), p, r.FormValue("login"), r.FormValue("name"), r.FormValue("admin") == "on")
 	if err != nil {
 		s.teamsForm(w, r, p, err)
 		return
 	}
+	if !expires.IsZero() {
+		if err := s.setExpiry(r.Context(), p, u.ID, expires); err != nil {
+			s.teamsForm(w, r, p, err)
+			return
+		}
+	}
 	s.render(w, "settings", s.settingsData(r, p, map[string]any{"SetupURL": link, "SetupLogin": u.Login}))
+}
+
+// userExpiryForm is POST /settings/users/expires: user, and the expiry to
+// set, or clear=1 for an account that doesn't expire.
+func (s *server) userExpiryForm(w http.ResponseWriter, r *http.Request, p station.Principal) {
+	var expires time.Time
+	var err error
+	if r.FormValue("clear") != "1" {
+		if expires, err = formExpiry(r); err == nil && expires.IsZero() {
+			err = errors.New("pick a day for the account to expire, or press Clear")
+		}
+	}
+	if err == nil {
+		err = s.setExpiry(r.Context(), p, r.FormValue("user"), expires)
+	}
+	s.teamsForm(w, r, p, err)
+}
+
+// formExpiry is the expiry a form asks for: expires_utc, which the page's
+// script fills in from the viewer's own clock, or else expires_date and
+// expires_time (12:01 AM when empty) on the station's clock. No date
+// means none.
+func formExpiry(r *http.Request) (time.Time, error) {
+	if v := strings.TrimSpace(r.FormValue("expires_utc")); v != "" {
+		t, err := time.Parse(time.RFC3339, v)
+		if err != nil {
+			return time.Time{}, errors.New("the expiry is not a date and time")
+		}
+		return t, nil
+	}
+	if day := strings.TrimSpace(r.FormValue("expires_date")); day != "" {
+		clock := strings.TrimSpace(r.FormValue("expires_time"))
+		if clock == "" {
+			clock = "00:01"
+		}
+		t, err := time.ParseInLocation("2006-01-02 15:04", day+" "+clock, time.Local)
+		if err != nil {
+			return time.Time{}, errors.New("the expiry is not a date and time")
+		}
+		return t, nil
+	}
+	return time.Time{}, nil
 }
 
 func (s *server) userRoleForm(w http.ResponseWriter, r *http.Request, p station.Principal) {
@@ -368,15 +515,23 @@ func (s *server) createUser(w http.ResponseWriter, r *http.Request, p station.Pr
 	var body struct {
 		Login, Name string
 		Admin       bool
+		Expires     time.Time
 	}
 	if err := decodeBody(r, &body); err != nil {
-		apiError(w, http.StatusBadRequest, "a JSON body with login is needed")
+		apiError(w, http.StatusBadRequest, "a JSON body with login is needed; expires, if given, in RFC 3339")
 		return
 	}
 	u, link, err := s.addUser(r.Context(), p, body.Login, body.Name, body.Admin)
 	if err != nil {
 		teamsError(w, err)
 		return
+	}
+	if !body.Expires.IsZero() {
+		if err := s.setExpiry(r.Context(), p, u.ID, body.Expires); err != nil {
+			teamsError(w, err)
+			return
+		}
+		u, _ = s.db.User(r.Context(), u.ID)
 	}
 	w.WriteHeader(http.StatusCreated)
 	apiJSON(w, invitedUser{User: u, SetupURL: link})
@@ -393,13 +548,22 @@ func (s *server) resetUser(w http.ResponseWriter, r *http.Request, p station.Pri
 
 func (s *server) updateUser(w http.ResponseWriter, r *http.Request, p station.Principal) {
 	var body struct {
-		Name   *string
-		Admin  *bool
-		Locked *bool
+		Name    *string
+		Admin   *bool
+		Locked  *bool
+		Expires *string // RFC 3339, or "" for never
 	}
 	if err := decodeBody(r, &body); err != nil {
-		apiError(w, http.StatusBadRequest, "a JSON body with name, admin or locked")
+		apiError(w, http.StatusBadRequest, "a JSON body with name, admin, locked or expires")
 		return
+	}
+	var expires time.Time
+	if body.Expires != nil && *body.Expires != "" {
+		var err error
+		if expires, err = time.Parse(time.RFC3339, *body.Expires); err != nil {
+			apiError(w, http.StatusBadRequest, "expires is a date and time in RFC 3339, such as 2026-12-01T17:00:00Z, or \"\" for never")
+			return
+		}
 	}
 	ctx, id := r.Context(), r.PathValue("id")
 	u, err := s.db.User(ctx, id)
@@ -422,6 +586,12 @@ func (s *server) updateUser(w http.ResponseWriter, r *http.Request, p station.Pr
 	}
 	if body.Locked != nil {
 		if err = s.setLocked(ctx, p, id, *body.Locked); err != nil {
+			teamsError(w, err)
+			return
+		}
+	}
+	if body.Expires != nil {
+		if err = s.setExpiry(ctx, p, id, expires); err != nil {
 			teamsError(w, err)
 			return
 		}

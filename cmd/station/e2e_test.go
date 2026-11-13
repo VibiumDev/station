@@ -9,9 +9,11 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 	"sync/atomic"
@@ -326,6 +328,9 @@ var (
 	ruleControlB = func(c caller) bool { return ruleReadB(c) && c.token != station.TokenWatch }
 	// A change about no device in particular: anyone signed in but a watch token.
 	ruleChange = func(c caller) bool { return c.signed && c.token != station.TokenWatch }
+	// Uploading a record: drive access to some device, in person or by a
+	// drive or admin token. Watching is read-only.
+	ruleUpload = func(c caller) bool { return ruleChange(c) && (c.admin || c.levelA.AtLeast(station.LevelDrive)) }
 	// The station's management: admins in person or by admin token.
 	ruleManage = func(c caller) bool {
 		return c.signed && c.admin && (c.person || c.token == station.TokenAdmin)
@@ -416,6 +421,7 @@ func (f *fullStation) rows() []row {
 		{"POST", "/settings/users", "/settings/users", "login=new@example.com", ruleManage, false, false},
 		{"POST", "/settings/users/role", "/settings/users/role", "user=none&admin=1", ruleManage, false, false},
 		{"POST", "/settings/users/lock", "/settings/users/lock", "user=none&locked=1", ruleManage, false, false},
+		{"POST", "/settings/users/expires", "/settings/users/expires", "user=none&clear=1", ruleManage, false, false},
 		{"POST", "/settings/users/reset", "/settings/users/reset", "user=none", ruleManage, false, false},
 		{"POST", "/settings/users/remove", "/settings/users/remove", "user=none", ruleManage, false, false},
 		{"POST", "/settings/teams", "/settings/teams", "name=t", ruleManage, false, false},
@@ -466,7 +472,7 @@ func (f *fullStation) rows() []row {
 		{"GET", "/v1/devices/{rig}/{name}/extras.js", "/v1/devices/" + A + "/extras.js", "", ruleReadA, false, false},
 		{"GET", "/v1/devices/{rig}/{name}/api/{path...}", "/v1/devices/" + A + "/api/hid/status", "", ruleReadA, false, false},
 		{"GET", "/v1/records", "/v1/records", "", ruleSigned, false, false},
-		{"POST", "/v1/records/upload-auth", "/v1/records/upload-auth", `{"sha256":"` + f.sha + `","size":1}`, ruleChange, false, false},
+		{"POST", "/v1/records/upload-auth", "/v1/records/upload-auth", `{"sha256":"` + f.sha + `","size":1}`, ruleUpload, false, false},
 		{"POST", "/v1/records/{sha}/download-auth", "/v1/records/" + f.sha + "/download-auth", "", ruleReadA, false, false},
 		{"POST", "/v1/records/{sha}/golden", "/v1/records/" + f.sha + "/golden", `{"golden":true}`, ruleOwnRecord, false, false},
 		{"PUT", "/v1/records/{sha}/tags", "/v1/records/" + f.sha + "/tags", `{"tags":["a"]}`, ruleOwnRecord, false, false},
@@ -705,9 +711,16 @@ func TestNoSecretsLeakAndLockBites(t *testing.T) {
 			}
 		}
 	}
-	// Lock the drive user: their session, their tokens and the pages all stop.
+	// Lock the drive user: their session, their tokens, the device they
+	// hold and the pages all stop.
+	if w := f.do(by["drive user"], "POST", "/v1/devices/"+devA+"/hold", `{"scopes":["view","input"]}`, true); w.Code != http.StatusOK {
+		t.Fatalf("a hold before the lock: %d %s", w.Code, w.Body)
+	}
 	if err := f.s.setLocked(f.ctx, f.admin, drive.ID, true); err != nil {
 		t.Fatal(err)
+	}
+	if held, _ := f.db.Held(f.ctx); slices.ContainsFunc(held, func(h station.Hold) bool { return h.Subject == drive.Login }) {
+		t.Error("a locked user still holds the device")
 	}
 	for _, who := range []string{"drive user", "drive user's drive token", "drive user's watch token", "drive user's admin token"} {
 		if w := f.do(by[who], "GET", "/v1/devices", "", true); w.Code != http.StatusUnauthorized {
@@ -839,5 +852,157 @@ func TestRigAnswersCannotActAsTheStation(t *testing.T) {
 	}
 	if got := shown.Load(); got != nil {
 		t.Errorf("the rig was shown the browser's own headers: %v", got)
+	}
+}
+
+// An account with an expiry works until then, no hold or grant outlasts
+// it, and at that time it stops as if locked: sign-in, sessions, tokens
+// and the device it holds. An admin can move the expiry or clear it.
+func TestUserExpiry(t *testing.T) {
+	f := newFullStation(t)
+	by := map[string]caller{}
+	for _, c := range f.callers() {
+		by[c.name] = c
+	}
+	drive := f.users["drive"]
+	tokens := []string{"drive user's watch token", "drive user's drive token", "drive user's admin token"}
+
+	// Set through the API, a few minutes ahead.
+	at := time.Now().Add(3 * time.Minute).Truncate(time.Second).UTC()
+	w := f.do(by["admin"], "PUT", "/v1/users/"+drive.ID, `{"expires":"`+at.Format(time.RFC3339)+`"}`, true)
+	var put struct{ Expires time.Time }
+	if json.Unmarshal(w.Body.Bytes(), &put); w.Code != http.StatusOK || !put.Expires.Equal(at) {
+		t.Fatalf("setting it: %d %s", w.Code, w.Body)
+	}
+	if w := f.do(by["admin"], "PUT", "/v1/users/"+drive.ID, `{"expires":"next tuesday"}`, true); w.Code != http.StatusBadRequest {
+		t.Errorf("a bad expiry: %d", w.Code)
+	}
+	// Until then it works, and a hold it takes ends by the expiry.
+	w = f.do(by["drive user"], "POST", "/v1/devices/"+devA+"/hold", `{"scopes":["view","input"]}`, true)
+	if w.Code != http.StatusOK {
+		t.Fatalf("a hold before the expiry: %d %s", w.Code, w.Body)
+	}
+	var got struct {
+		Hold struct {
+			Subject string
+			Expires time.Time
+		}
+	}
+	json.Unmarshal(w.Body.Bytes(), &got)
+	if !got.Hold.Expires.Equal(at) {
+		t.Errorf("the grant ends %s, want the expiry %s", got.Hold.Expires, at)
+	}
+	for _, who := range tokens {
+		if w := f.do(by[who], "GET", "/v1/devices", "", true); w.Code != http.StatusOK {
+			t.Errorf("%s before the expiry: %d", who, w.Code)
+		}
+	}
+	if page := f.do(by["drive user"], "GET", "/account", "", true).Body.String(); !strings.Contains(page, "<th>Expires</th>") {
+		t.Error("the Account page does not say when the account expires")
+	}
+	page := f.do(by["admin"], "GET", "/settings/access", "", true).Body.String()
+	if !strings.Contains(page, `data-utc="`+at.Format(time.RFC3339)+`"`) || !strings.Contains(page, "<th>Expires</th>") {
+		t.Error("Settings does not show the expiry")
+	}
+
+	// Moved into the past from the page: what it has open ends at once.
+	past := time.Now().Add(-time.Minute).UTC().Format(time.RFC3339)
+	if w := f.do(by["admin"], "POST", "/settings/users/expires", "user="+drive.ID+"&expires_utc="+url.QueryEscape(past), true); w.Code != http.StatusSeeOther {
+		t.Fatalf("moving it: %d %s", w.Code, w.Body)
+	}
+	held, _ := f.db.Held(f.ctx)
+	for _, h := range held {
+		if h.Subject == got.Hold.Subject {
+			t.Errorf("the expired user still holds %s", h.DeviceID)
+		}
+	}
+	for _, who := range append([]string{"drive user"}, tokens...) {
+		if w := f.do(by[who], "GET", "/v1/devices", "", true); w.Code != http.StatusUnauthorized {
+			t.Errorf("%s after the expiry: %d", who, w.Code)
+		}
+	}
+	if w := f.do(by["admin"], "GET", "/settings/access", "", true); !strings.Contains(w.Body.String(), `<td data-l="Sign-in">expired<span class="sub">`) {
+		t.Error("Settings does not say the account expired")
+	}
+	// An admin cannot set one on their own account.
+	if w := f.do(by["admin"], "POST", "/settings/users/expires", "user="+f.admin.User+"&expires_utc="+url.QueryEscape(at.Format(time.RFC3339)), true); !strings.Contains(w.Body.String(), errLockout.Error()) {
+		t.Errorf("an expiry on one's own account: %d", w.Code)
+	}
+	// Clear: the account works again, through its tokens at once.
+	if w := f.do(by["admin"], "POST", "/settings/users/expires", "user="+drive.ID+"&clear=1", true); w.Code != http.StatusSeeOther {
+		t.Fatalf("clearing it: %d %s", w.Code, w.Body)
+	}
+	if w := f.do(by["drive user's drive token"], "GET", "/v1/devices", "", true); w.Code != http.StatusOK {
+		t.Errorf("a token after Clear: %d", w.Code)
+	}
+	if u, _ := f.db.User(f.ctx, drive.ID); !u.ExpiresAt.IsZero() {
+		t.Errorf("still expires %s", u.ExpiresAt)
+	}
+	// Added with an expiry from the page, in the station's own time when
+	// the page's script did not run: a day alone means 12:01 AM.
+	day := time.Now().Add(72 * time.Hour).Local()
+	w = f.do(by["admin"], "POST", "/settings/users", "login=demo%40example.com&expires_date="+day.Format("2006-01-02")+"&expires_time=", true)
+	demo, err := f.db.UserByLogin(f.ctx, "demo@example.com")
+	want := time.Date(day.Year(), day.Month(), day.Day(), 0, 1, 0, 0, time.Local)
+	if err != nil || !demo.ExpiresAt.Equal(want) {
+		t.Errorf("a user added with an expiry: %s, want %s, %v (%d)", demo.ExpiresAt, want, err, w.Code)
+	}
+	// Without a date, the account does not expire.
+	f.do(by["admin"], "POST", "/settings/users", "login=lasting%40example.com&expires_date=&expires_time=00%3A01", true)
+	if u, err := f.db.UserByLogin(f.ctx, "lasting@example.com"); err != nil || !u.ExpiresAt.IsZero() {
+		t.Errorf("a user added with no date: %s %v", u.ExpiresAt, err)
+	}
+	page = f.do(by["admin"], "GET", "/settings/access", "", true).Body.String()
+	if !strings.Contains(page, `name="expires_time" value="00:01"`) || !strings.Contains(page, `data-tz>`) || !strings.Contains(page, `data-clear-expiry`) {
+		t.Error("the add form should offer a day, a time of 12:01 AM, the time zone and Clear")
+	}
+}
+
+// A jam an expired user started loses its device with them, though its
+// hold is in the jam's name.
+func TestUserExpiryEndsTheirJamsHold(t *testing.T) {
+	f := newFullStation(t)
+	drive := f.users["drive"]
+	jam := station.Jam{ID: station.NewID("jam"), Subject: drive.Login, DeviceID: devA, Prompt: "look", Status: "running", CreatedAt: time.Now()}
+	if err := f.db.CreateJam(f.ctx, jam); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.s.holds.Take(f.ctx, hold.Request{DeviceID: devA, Subject: jamSubject(jam.ID), Scopes: []station.Scope{station.ScopeBidi}}); err != nil {
+		t.Fatal(err)
+	}
+	other := station.Jam{ID: station.NewID("jam"), Subject: f.users["jam"].Login, DeviceID: devB, Prompt: "look", Status: "running", CreatedAt: time.Now()}
+	f.db.CreateJam(f.ctx, other)
+	if _, err := f.s.holds.Take(f.ctx, hold.Request{DeviceID: devB, Subject: jamSubject(other.ID), Scopes: []station.Scope{station.ScopeBidi}}); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.s.setExpiry(f.ctx, f.admin, drive.ID, time.Now().Add(-time.Second)); err != nil {
+		t.Fatal(err)
+	}
+	held, _ := f.db.Held(f.ctx)
+	var left []string
+	for _, h := range held {
+		left = append(left, h.Subject)
+	}
+	if slices.Contains(left, jamSubject(jam.ID)) || !slices.Contains(left, jamSubject(other.ID)) {
+		t.Errorf("holds left: %v; the expired user's jam should have lost its device, the other jam not", left)
+	}
+}
+
+// Everyone picks their own theme on their Account page; it is kept in
+// their browser, so Settings, which only admins open, has none.
+func TestAppearanceOnAccount(t *testing.T) {
+	f := newFullStation(t)
+	for _, c := range f.callers() {
+		switch c.name {
+		case "watch user", "drive user", "admin":
+			if page := f.do(c, "GET", "/account", "", true).Body.String(); !strings.Contains(page, `id="themePick"`) {
+				t.Errorf("%s's Account page has no theme picker", c.name)
+			}
+		}
+		if c.name == "admin" {
+			if page := f.do(c, "GET", "/settings", "", true).Body.String(); strings.Contains(page, `id="themePick"`) {
+				t.Error("Settings still has the theme picker")
+			}
+		}
 	}
 }

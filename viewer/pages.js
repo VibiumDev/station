@@ -127,6 +127,68 @@
         });
       });
     }
+    // Times in the viewer's own time zone, with its name. An expiry form
+    // shows its day and time on the viewer's clock and sends them as UTC,
+    // so the station's own time zone does not matter.
+    var two = function (n) { return (n < 10 ? '0' : '') + n; };
+    var zone = '', zoneName = '';
+    try {
+      zoneName = Intl.DateTimeFormat().resolvedOptions().timeZone || '';
+      new Intl.DateTimeFormat([], {timeZoneName: 'short'}).formatToParts(new Date()).forEach(function (p) {
+        if (p.type === 'timeZoneName') zone = p.value;
+      });
+    } catch (e) {}
+    Array.prototype.forEach.call(document.querySelectorAll('[data-tz]'), function (el) {
+      if (!zone) return;
+      el.textContent = zone;
+      el.title = zoneName ? 'Your time zone, ' + zoneName : 'Your time zone';
+    });
+    Array.prototype.forEach.call(document.querySelectorAll('time[data-local]'), function (t) {
+      var d = new Date(t.getAttribute('datetime'));
+      if (isNaN(d)) return;
+      var o = {month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', timeZoneName: 'short'};
+      if (d.getFullYear() !== new Date().getFullYear()) o.year = 'numeric';
+      t.textContent = d.toLocaleString([], o);
+    });
+    Array.prototype.forEach.call(document.querySelectorAll('form[data-expiry]'), function (f) {
+      var day = f.querySelector('input[type=date]'), clock = f.querySelector('input[type=time]'), utc = f.querySelector('input[name=expires_utc]');
+      if (!day || !clock || !utc) return;
+      var was = new Date(day.getAttribute('data-utc') || '');
+      if (!isNaN(was)) {
+        day.value = was.getFullYear() + '-' + two(was.getMonth() + 1) + '-' + two(was.getDate());
+        clock.value = two(was.getHours()) + ':' + two(was.getMinutes());
+      }
+      var clear = f.querySelector('[data-clear-expiry]');
+      if (clear) clear.addEventListener('click', function () { day.value = ''; clock.value = '00:01'; });
+      f.addEventListener('submit', function () {
+        var d = new Date(day.value + 'T' + (clock.value || '00:01'));
+        utc.value = day.value && !isNaN(d) ? d.toISOString() : '';
+      });
+    });
+    // A floating menu is placed under its button, to the button's right
+    // edge or, with data-float="left", its left, and above it when there
+    // is no room below. It follows the page as it scrolls.
+    var place = function (d) {
+      var menu = d.querySelector('.menu'), r = d.querySelector('summary').getBoundingClientRect();
+      var w = menu.offsetWidth, h = menu.offsetHeight;
+      var left = d.getAttribute('data-float') === 'left' ? r.left : r.right - w;
+      left = Math.max(8, Math.min(left, window.innerWidth - w - 8));
+      var top = r.bottom + 6;
+      if (top + h > window.innerHeight - 8 && r.top - h - 6 > 8) top = r.top - h - 6;
+      menu.style.left = left + 'px';
+      menu.style.top = top + 'px';
+    };
+    var floats = document.querySelectorAll('details[data-float]');
+    Array.prototype.forEach.call(floats, function (d) {
+      d.addEventListener('toggle', function () {
+        if (d.open) place(d); else d.querySelector('.menu').style.left = '';
+      });
+    });
+    var follow = function () {
+      Array.prototype.forEach.call(floats, function (d) { if (d.open) place(d); });
+    };
+    window.addEventListener('scroll', follow, true);
+    window.addEventListener('resize', follow);
     // A row's ⋯ menu closes on a click anywhere else.
     document.addEventListener('click', function (e) {
       Array.prototype.forEach.call(document.querySelectorAll('details.more[open]'), function (d) {

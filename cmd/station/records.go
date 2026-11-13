@@ -57,8 +57,16 @@ func (s *server) blossomList(w http.ResponseWriter, r *http.Request) {
 
 // uploadAuth is POST /v1/records/upload-auth: {"sha256", "size", "type",
 // "name", "hold"} gives a signed Blossom authorization to upload that
-// one file, good for five minutes, and where to send it.
+// one file, good for five minutes, and where to send it. Watching is
+// read-only: it takes drive access to some device.
 func (s *server) uploadAuth(w http.ResponseWriter, r *http.Request, p station.Principal) {
+	if !p.Admin {
+		u, err := s.db.User(r.Context(), p.User)
+		if err != nil || tokenRank(s.tokenCeiling(r.Context(), u)) < tokenRank(station.TokenDrive) {
+			apiError(w, http.StatusForbidden, "watch access is read-only: uploading a record takes drive access to a device")
+			return
+		}
+	}
 	var req records.UploadRequest
 	if err := json.NewDecoder(io.LimitReader(r.Body, 4096)).Decode(&req); err != nil {
 		apiError(w, http.StatusBadRequest, "a JSON body with sha256 and size is needed")

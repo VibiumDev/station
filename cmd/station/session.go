@@ -95,7 +95,7 @@ func (s *server) serveSession(w http.ResponseWriter, r *http.Request, p station.
 		return
 	}
 	before, _ := s.db.Current(ctx, devID) // whose the device was, if anyone's
-	res, err := s.holds.Take(ctx, hold.Request{DeviceID: devID, Subject: p.Subject, Scopes: scopes, Recall: person(p)})
+	res, err := s.holds.Take(ctx, hold.Request{DeviceID: devID, Subject: p.Subject, Until: p.Expires, Scopes: scopes, Recall: person(p)})
 	var queued *hold.Queued
 	switch {
 	case errors.As(err, &queued):
