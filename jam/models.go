@@ -39,6 +39,13 @@ type ModelConfig struct {
 // runs: a Piper model with no address of its own.
 func (c ModelConfig) OwnPiper() bool { return c.Provider == "piper-server" && c.BaseURL == "" }
 
+// OwnSherpa says the model listens through the sherpa-onnx server the
+// station runs: a sherpa-onnx model with no address of its own.
+func (c ModelConfig) OwnSherpa() bool { return c.Provider == "sherpa-server" && c.BaseURL == "" }
+
+// Own says the model runs in a server the station starts itself.
+func (c ModelConfig) Own() bool { return c.OwnPiper() || c.OwnSherpa() }
+
 // HasKey says whether a key is set.
 func (c ModelConfig) HasKey() bool { return c.APIKey != "" }
 
@@ -64,6 +71,13 @@ func (c ModelConfig) Env() []string {
 		env := []string{"VIBIUM_SAY_PROVIDER=piper-server", "VIBIUM_SAY_VOICE=" + c.Model}
 		if c.BaseURL != "" {
 			env = append(env, "VIBIUM_PIPER_URL="+c.BaseURL)
+		}
+		return env
+	}
+	if c.Provider == "sherpa-server" {
+		env := []string{"VIBIUM_LISTEN_PROVIDER=sherpa-server", "VIBIUM_LISTEN_MODEL=" + c.Model}
+		if c.BaseURL != "" {
+			env = append(env, "VIBIUM_SHERPA_URL="+c.BaseURL)
 		}
 		return env
 	}
@@ -156,7 +170,7 @@ func (s *Store) List() ([]ModelConfig, error) {
 			if out[i].Role != role {
 				continue
 			}
-			if first < 0 || out[i].OwnPiper() && !out[first].OwnPiper() {
+			if first < 0 || out[i].Own() && !out[first].Own() {
 				first = i
 			}
 			if out[i].Default {
@@ -249,12 +263,19 @@ func (c ModelConfig) Validate() error {
 		if p.ID == "piper-server" {
 			return errors.New("the model is the voice's name, such as en_US-lessac-medium")
 		}
+		if p.ID == "sherpa-server" {
+			return errors.New("the model is the name of the model the server loaded, such as zipformer-en")
+		}
 		return errors.New("the model needs the provider's name for it")
 	}
-	if p.BaseURL == "" && c.BaseURL == "" && p.ID != "piper-server" {
+	if p.BaseURL == "" && c.BaseURL == "" && p.ID != "piper-server" && p.ID != "sherpa-server" {
 		return errors.New("this provider needs a base URL")
 	}
-	if c.BaseURL != "" && !strings.HasPrefix(c.BaseURL, "http://") && !strings.HasPrefix(c.BaseURL, "https://") {
+	if p.ID == "sherpa-server" {
+		if c.BaseURL != "" && !strings.HasPrefix(c.BaseURL, "ws://") && !strings.HasPrefix(c.BaseURL, "wss://") {
+			return errors.New("a sherpa-onnx server's address starts with ws:// or wss://")
+		}
+	} else if c.BaseURL != "" && !strings.HasPrefix(c.BaseURL, "http://") && !strings.HasPrefix(c.BaseURL, "https://") {
 		return errors.New("the base URL starts with http:// or https://")
 	}
 	if c.ReasoningEffort != "" {

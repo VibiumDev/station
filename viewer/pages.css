@@ -471,7 +471,7 @@ details[data-float] > .menu { position: fixed; top: 0; right: auto; left: -9999p
 .tabs a:hover { color: var(--text); }
 .tabs a[aria-current="page"] { color: var(--text); font-weight: 600; border-bottom-color: var(--accent); }
 .pill.inuse { color: var(--accent); border-color: color-mix(in srgb, var(--accent) 45%, transparent); padding: 1px 8px; font-size: 12px; vertical-align: 1px; }
-.piperline { margin: 10px 0 0; font-size: 14px; }
+.ownline { margin: 10px 0 0; font-size: 14px; }
 .sayprobe { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; margin: 0 0 10px; font-size: 14px; }
 .sayprobe input[type=text] { width: min(60vw, 320px); }
 .sayprobe .status { color: var(--text-2); font-family: var(--sans); }

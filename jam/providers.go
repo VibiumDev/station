@@ -58,6 +58,11 @@ var Providers = []Provider{
 	// name; Vibium sends it text and gets a WAV. With no base URL it is
 	// the server the station runs itself.
 	{ID: "piper-server", Label: "Piper server", Roles: []string{RoleSay}},
+	// A sherpa-onnx streaming server, which keeps a speech-to-text model
+	// loaded. Vibium sends it audio over a WebSocket and gets the words.
+	// With no base URL it is the server the station runs itself, and the
+	// model is the name of the model's folder.
+	{ID: "sherpa-server", Label: "sherpa-onnx server", Roles: []string{RoleListen}},
 }
 
 // ProviderByID finds a provider.

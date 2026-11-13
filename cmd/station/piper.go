@@ -58,7 +58,7 @@ func findPiper(flag, dataDir string) (string, error) {
 		if c == "" {
 			continue
 		}
-		python, err := piperPython(c)
+		python, err := pythonBehind(c)
 		if err == nil {
 			return python, nil
 		}
@@ -69,9 +69,9 @@ func findPiper(flag, dataDir string) (string, error) {
 	return "", errors.New("Piper is not installed: no --piper, no STATION_PIPER, no " + filepath.Join(dataDir, "piper", "venv") + " and no piper on PATH")
 }
 
-// piperPython is the interpreter behind a path: the path itself when it
+// pythonBehind is the interpreter behind a path: the path itself when it
 // is a Python, else the one its #! line names.
-func piperPython(path string) (string, error) {
+func pythonBehind(path string) (string, error) {
 	st, err := os.Stat(path)
 	if err != nil {
 		return "", err

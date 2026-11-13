@@ -41,16 +41,16 @@ func TestPiperPython(t *testing.T) {
 		return p
 	}
 	python := write("python3.13", "")
-	if got, err := piperPython(python); err != nil || got != python {
+	if got, err := pythonBehind(python); err != nil || got != python {
 		t.Errorf("a Python: %q %v", got, err)
 	}
 	script := write("piper", "#!"+python+"\nimport piper\n")
-	if got, err := piperPython(script); err != nil || got != python {
+	if got, err := pythonBehind(script); err != nil || got != python {
 		t.Errorf("the piper program: %q %v", got, err)
 	}
 	if real, err := exec.LookPath("python3"); err == nil {
 		viaEnv := write("piper-env", "#!/usr/bin/env python3\n")
-		if got, err := piperPython(viaEnv); err != nil || got != real {
+		if got, err := pythonBehind(viaEnv); err != nil || got != real {
 			t.Errorf("through env: %q %v", got, err)
 		}
 	}
@@ -60,7 +60,7 @@ func TestPiperPython(t *testing.T) {
 		"a directory":    dir,
 		"nothing there":  filepath.Join(dir, "gone"),
 	} {
-		if got, err := piperPython(path); err == nil {
+		if got, err := pythonBehind(path); err == nil {
 			t.Errorf("%s: %q", name, got)
 		}
 	}
@@ -176,7 +176,7 @@ func TestAIPartsOnSettings(t *testing.T) {
 	if strings.Contains(listen, "piper") || !strings.Contains(listen, "<b>stt</b> <span class=\"pill inuse\">in use</span>") {
 		t.Error("Listen: stt alone, in use")
 	}
-	for role, want := range map[string]string{"agent": "anthropic", "say": "piper-server", "listen": "openai"} {
+	for role, want := range map[string]string{"agent": "anthropic", "say": "piper-server", "listen": "sherpa-server"} {
 		p := part(role)
 		if !strings.Contains(p, `<input type="hidden" name="role" value="`+role+`">`) || !strings.Contains(p, `<option value="`+want+`">`) {
 			t.Errorf("%s: its form lacks the role or %s", role, want)
@@ -185,7 +185,7 @@ func TestAIPartsOnSettings(t *testing.T) {
 			t.Errorf("%s: no help with a guide link", role)
 		}
 	}
-	if strings.Contains(say, `value="anthropic"`) || strings.Contains(listen, `value="piper-server"`) {
+	if strings.Contains(say, `value="anthropic"`) || strings.Contains(say, `value="sherpa-server"`) || strings.Contains(listen, `value="piper-server"`) {
 		t.Error("a part offers a provider its role cannot use")
 	}
 }

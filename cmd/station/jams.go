@@ -476,6 +476,11 @@ func (m *jams) env(secret string, _ jam.ModelConfig) []string {
 				continue // not answering now: Vibium says so when asked to speak
 			}
 		}
+		if c.OwnSherpa() {
+			if c.BaseURL = m.s.sherpa.URL(); c.BaseURL == "" {
+				continue // the same, when asked to listen
+			}
+		}
 		env = append(env, c.Env()...)
 	}
 	return env

@@ -409,6 +409,7 @@ func (f *fullStation) rows() []row {
 		{"POST", "/settings/codes", "/settings/codes", "", ruleManage, false, false},
 		{"POST", "/settings/codes/cancel", "/settings/codes/cancel", "id=1", ruleManage, false, false},
 		{"POST", "/settings/piper/voice", "/settings/piper/voice", "voice=en_US-x", ruleManage, false, false},
+		{"POST", "/settings/sherpa/model", "/settings/sherpa/model", "model=en-x", ruleManage, false, false},
 		{"POST", "/settings/say/preview", "/settings/say/preview", "name=none&text=", ruleManage, false, false},
 		{"POST", "/settings/rigs/remove", "/settings/rigs/remove", "rig=rig_none", ruleManage, false, false},
 		{"POST", "/settings/models", "/settings/models", "", ruleManage, false, false},

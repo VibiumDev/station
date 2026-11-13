@@ -309,6 +309,7 @@ func serve(args []string) int {
 	recordsMaxAge := fs.Duration("records-max-age", 30*24*time.Hour, "how long the Record Store keeps a file (0: for ever)")
 	vibiumPath := fs.String("vibium", "", "the Vibium binary jams drive devices with (default: $STATION_VIBIUM, or vibium on PATH)")
 	piperPath := fs.String("piper", "", "the Python that has piper-tts[http], whose server the station runs for jams to speak (default: $STATION_PIPER, piper/venv/bin/python in the data directory, or piper on PATH)")
+	sherpaPath := fs.String("sherpa", "", "the Python that has sherpa-onnx and websockets, with which the station runs a speech-to-text server for jams to listen (default: $STATION_SHERPA, sherpa/venv/bin/python in the data directory, or sherpa-onnx-cli on PATH)")
 	fs.Usage = func() { usage(); fmt.Println(); fs.PrintDefaults() }
 	fs.Parse(args)
 
@@ -593,8 +594,34 @@ func serve(args []string) int {
 		close(s.piper.done)
 	} else {
 		s.piper.python = python
-		s.jams.models.Builtin = s.piper.builtin
 		go s.piper.run(ctx)
+	}
+	// The station's own sherpa-onnx, when it is installed: a
+	// speech-to-text model kept loaded, listed the same way.
+	s.sherpa = &sherpaRunner{dir: filepath.Join(dir, "sherpa"), logPath: filepath.Join(dir, "sherpa", "server.log"), ready: 5 * time.Minute,
+		logf: func(f string, a ...any) { fmt.Printf(f+"\n", a...) }, again: make(chan struct{}, 1), done: make(chan struct{})}
+	s.sherpa.preferred = func() string {
+		if c, err := s.jams.models.Get(sherpaModel); err == nil && c.OwnSherpa() {
+			return c.Model
+		}
+		return ""
+	}
+	if python, err := findSherpa(*sherpaPath, dir); err != nil {
+		s.sherpa.missing = err.Error()
+		close(s.sherpa.done)
+	} else {
+		s.sherpa.python = python
+		go s.sherpa.run(ctx)
+	}
+	s.jams.models.Builtin = func() []jam.ModelConfig {
+		var own []jam.ModelConfig
+		if s.piper.python != "" {
+			own = append(own, s.piper.builtin()...)
+		}
+		if s.sherpa.python != "" {
+			own = append(own, s.sherpa.builtin()...)
+		}
+		return own
 	}
 	if mode == "lan" && !*noMDNS {
 		_, port, _ := net.SplitHostPort(ln.Addr().String())
@@ -691,8 +718,9 @@ func serve(args []string) int {
 	}
 	sdnotify.Ready()
 	err = srv.Serve(ln)
-	stop() // a station that could not serve ends Piper's server too
+	stop() // a station that could not serve ends its speech servers too
 	<-s.piper.done
+	<-s.sherpa.done
 	if err != nil && !errors.Is(err, http.ErrServerClosed) {
 		fmt.Fprintln(os.Stderr, err)
 		return 1
