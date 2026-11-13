@@ -2,7 +2,8 @@
 
 These steps take a station that has just started, on a host of your own
 ([Self-host a station](self-host.md)) or on Fly.io
-([Deploy to Fly.io](deploy-to-fly.md)), to a phone you can drive.
+([Deploy to Fly.io](deploy-to-fly.md)), to a phone you can drive and
+share with others.
 
 A few commands run on the station's machine, and they are written
 differently on each:
@@ -86,6 +87,29 @@ names what failed.
 
 To type a prompt and have an LLM carry it out on the phone, with speech
 in and out, see [Set Up Jams](set-up-jams.md).
+
+## 5. Let someone else use the phone
+
+A regular user sees nothing until one of their teams is given a device.
+On **Settings → Access**:
+
+1. **Teams**: add a team, such as `Acme`.
+2. **Users**: add each person, with their email address as the login and
+   their name. For a trial or a demo, give the account a date under
+   **Expires**, and at that time it stops working on its own (the time
+   starts at 12:01 AM). **Add user** shows a setup link once, good for 24
+   hours. Send it through a channel you trust.
+3. **Teams**: add each of them to the team.
+4. **Device access**: give the team a level on the phone. **Watch** only
+   watches, **drive** also takes control from the viewer, and **jam** also
+   starts jam sessions.
+
+Tell each person to open the link within 24 hours, choose a password,
+scan the QR code with an authenticator app, and keep the backup codes the
+station shows. Then they open **Devices** and pick the phone.
+
+To stop someone sooner, hold **Lock** in the **⋯** menu on their row, which
+also takes the phone from them at once. **Remove** deletes the account.
 
 ## If you're locked out
 

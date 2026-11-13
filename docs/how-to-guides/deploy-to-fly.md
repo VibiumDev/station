@@ -30,12 +30,13 @@ Store and the screenshots of jams:
 
 - The Record Store keeps up to 2 GB by default. Each recording is also
   kept unpacked, so the store takes about twice its limit on disk.
-- One gigabyte is enough for the rest, and for a station that keeps few
-  recordings.
-- For a full Record Store, create a larger volume (`--size 5`), or add
-  a lower `--records-max-total`, such as `256M`, to the `[processes]`
-  line in step 3. On a station that has recordings, a lower limit
-  removes the oldest of them past it at the next start.
+- When rigs record their sessions (`roadie enroll --record`), which
+  keeps video and sound, make the volume `--size 5` so the store can
+  fill up.
+- One gigabyte is enough for a station that keeps few recordings, or
+  add a lower `--records-max-total`, such as `256M`, to the
+  `[processes]` line in step 3. On a station that has recordings, a
+  lower limit removes the oldest of them past it at the next start.
 
 ## 2. Set the owner's password
 
@@ -50,8 +51,15 @@ set back to the secret at the next start.
 
 ## 3. Write the configuration
 
-Edit [`deploy/fly/fly.toml`](../../deploy/fly/fly.toml) in your clone
-and change four things in it:
+Copy [`deploy/fly/fly.toml`](../../deploy/fly/fly.toml) to a file of
+your app's own, so that the sample, and any other app you deploy from
+the same clone, keeps its settings:
+
+```bash
+cp deploy/fly/fly.toml fly.NAME.toml
+```
+
+Then change four things in the copy:
 
 - `app`: your NAME.
 - `primary_region`: your REGION.
@@ -70,7 +78,7 @@ running so that the rigs' tunnels stay up, and mounts the volume at
 From the repository root:
 
 ```bash
-fly deploy -c deploy/fly/fly.toml --dockerfile Dockerfile --remote-only --ha=false -a NAME
+fly deploy -c fly.NAME.toml --dockerfile Dockerfile --remote-only --ha=false -a NAME
 ```
 
 `--ha=false` keeps the app to one machine, which both the volume and the
@@ -123,7 +131,7 @@ station.example.com -a NAME` shows how far it has got. A wildcard
 certificate, or one issued before any traffic reaches the app, needs
 the `_acme-challenge` CNAME that the same output lists.
 
-Then tell the station its new name. In `fly.toml`, change `--public-url`
+Then tell the station its new name. In `fly.NAME.toml`, change `--public-url`
 to `https://station.example.com` and deploy again. Leave
 `--turn-public-ip` as it is, because TURN is reached by address rather
 than by name, and TLS still ends at Fly's edge, so the station's own

@@ -41,3 +41,6 @@ go.work.sum
 
 # A Vibium built by scripts/vibium-local.sh for the image
 deploy/vibium/vibium-*
+
+# A copy of deploy/fly/fly.toml for one app (see deploy-to-fly.md)
+fly.*.toml
