@@ -33,8 +33,8 @@ flowchart TB
 
 ## Voice, both ways
 
-A station carries each device's sound in both directions, so people and
-agents can talk to a device and hear it answer. That makes it a place to
+A station carries each device's sound in both directions at once (full
+duplex), so people and agents can talk to a device and hear it answer. That makes it a place to
 test voice assistants, voice agents and any app where sound matters.
 
 - In the viewer, you hear the device and talk to it with your own
