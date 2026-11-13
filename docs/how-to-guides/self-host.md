@@ -127,7 +127,7 @@ the same tailnet reach each other directly, and when WebRTC fails the
 viewer falls back to the MJPEG stream relayed through the station.
 
 An identity on `--allow` becomes an admin the first time it opens the
-station, as a user of its own under Users on Settings. To take that
+station, as a user of its own under Users on the Settings page's Access tab. To take that
 access away, remove or lock the user there and take the login out of
 `--allow`. The list is saved in `config.json`: a changed `--allow`
 replaces it at the next start, but leaving the flag out keeps the saved
@@ -232,8 +232,8 @@ shown once:
 sudo -u station station token create laptop --data-dir /var/lib/station
 ```
 
-A rig enrolls with a one-time code, from the Settings page or the
-command line:
+A rig enrolls with a one-time code, from the Rigs tab of the Settings
+page or the command line:
 
 ```bash
 sudo -u station station enroll --data-dir /var/lib/station
@@ -401,7 +401,8 @@ restarted the station.
   ```
 
 - A lost authenticator: sign in with a backup code, or have another
-  admin hold Reset sign-in on your row under Users on Settings. For an
+  admin hold Reset sign-in on your row under Users, on the Access tab
+  of Settings. For an
   owner with neither, this sets a password and forgets the
   authenticator and the backup codes, so the next sign-in sets up an
   authenticator again.

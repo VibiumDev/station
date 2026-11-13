@@ -467,9 +467,16 @@ func (m *jams) env(secret string, _ jam.ModelConfig) []string {
 		}
 	}
 	for _, role := range []string{jam.RoleListen, jam.RoleSay} {
-		if c, ok := m.models.Default(role); ok {
-			env = append(env, c.Env()...)
+		c, ok := m.models.Default(role)
+		if !ok {
+			continue
 		}
+		if c.OwnPiper() {
+			if c.BaseURL = m.s.piper.URL(); c.BaseURL == "" {
+				continue // not answering now: Vibium says so when asked to speak
+			}
+		}
+		env = append(env, c.Env()...)
 	}
 	return env
 }

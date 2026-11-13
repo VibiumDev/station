@@ -395,11 +395,16 @@ func (f *fullStation) rows() []row {
 		{"POST", "/account/jam-notes", "/account/jam-notes", "notes=x", rulePerson, false, false},
 		{"POST", "/account/tokens/revoke", "/account/tokens/revoke", "name=none", rulePerson, false, false},
 		{"GET", "/settings", "/settings", "", ruleManage, false, false},
+		{"GET", "/settings/ai", "/settings/ai", "", ruleManage, false, false},
+		{"GET", "/settings/rigs", "/settings/rigs", "", ruleManage, false, false},
+		{"GET", "/settings/access", "/settings/access", "", ruleManage, false, false},
 		{"POST", "/settings/name", "/settings/name", "name=x", ruleManage, false, false},
 		{"POST", "/settings/tokens", "/settings/tokens", "name=t&level=watch", ruleManage, false, false},
 		{"POST", "/settings/tokens/revoke", "/settings/tokens/revoke", "name=none", ruleManage, false, false},
 		{"POST", "/settings/codes", "/settings/codes", "", ruleManage, false, false},
 		{"POST", "/settings/codes/cancel", "/settings/codes/cancel", "id=1", ruleManage, false, false},
+		{"POST", "/settings/piper/voice", "/settings/piper/voice", "voice=en_US-x", ruleManage, false, false},
+		{"POST", "/settings/say/preview", "/settings/say/preview", "name=none&text=", ruleManage, false, false},
 		{"POST", "/settings/rigs/remove", "/settings/rigs/remove", "rig=rig_none", ruleManage, false, false},
 		{"POST", "/settings/models", "/settings/models", "", ruleManage, false, false},
 		{"POST", "/settings/models/remove", "/settings/models/remove", "name=none", ruleManage, false, false},
@@ -692,10 +697,12 @@ func TestNoSecretsLeakAndLockBites(t *testing.T) {
 			t.Errorf("/account carries %q", leak)
 		}
 	}
-	w = f.do(by["admin"], "GET", "/settings", "", true)
-	for _, leak := range []string{secret, hash, codes[0]} {
-		if strings.Contains(w.Body.String(), leak) {
-			t.Errorf("/settings carries %q", leak)
+	for _, tab := range settingsTabs {
+		w = f.do(by["admin"], "GET", tab.URL, "", true)
+		for _, leak := range []string{secret, hash, codes[0]} {
+			if strings.Contains(w.Body.String(), leak) {
+				t.Errorf("%s carries %q", tab.URL, leak)
+			}
 		}
 	}
 	// Lock the drive user: their session, their tokens and the pages all stop.

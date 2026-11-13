@@ -61,6 +61,9 @@ installs a station as a sandboxed systemd service on a Linux host of your
 own, and
 [docs/how-to-guides/deploy-to-fly.md](docs/how-to-guides/deploy-to-fly.md)
 puts one on Fly.io.
+[docs/how-to-guides/set-up-jams.md](docs/how-to-guides/set-up-jams.md)
+sets up the models a jam uses, including speech through a local Piper
+server.
 
 The first run makes the station's key and prints its `npub`. Tailnet mode
 joins your tailnet as a node named `station` through `tsnet` and prints a
@@ -91,8 +94,8 @@ a browser.
 
 Then enroll a rig:
 
-1. On the station's Settings page (or `station enroll`), make an
-   enrollment code. It is single use, lasts 15 minutes, and ends with the
+1. On the station's Settings page, on the Rigs tab (or with
+   `station enroll`), make an enrollment code. It is single use, lasts 15 minutes, and ends with the
    station key's fingerprint.
 2. On the rig: `roadie enroll https://<station> --code ABCD-1234-7F3A`. On
    the same LAN the URL can be left out; the station advertises itself over
@@ -151,6 +154,7 @@ events do today, and what they leave open.
 | `--records-max-total` | `2G` | How much it keeps before the oldest files go; `0` for no limit |
 | `--records-max-age` | `720h` | How long it keeps a file; `0` for ever |
 | `--vibium` | `$STATION_VIBIUM`, else `vibium` on `PATH` | The Vibium binary a jam drives devices with, through `vibium mcp` |
+| `--piper` | `$STATION_PIPER`, else `piper/venv/bin/python` in the data directory, else `piper` on `PATH` | The Python that has `piper-tts[http]`: the station runs Piper's server with it, so jams speak with a voice from `piper/` in the data directory |
 | `--turn` | `auto` | Run the TURN server: `on`, `off`, or `auto` (on in public mode) |
 | `--turn-listen` | `:3478` | TURN's UDP address; `fly-global-services:3478` on Fly.io |
 | `--turn-public-ip` | the `--public` host's address | The public address TURN and its relays are reached at |

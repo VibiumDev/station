@@ -278,7 +278,7 @@ func (s *server) teamsForm(w http.ResponseWriter, r *http.Request, p station.Pri
 		s.render(w, "settings", s.settingsData(r, p, map[string]any{"Message": err.Error()}))
 		return
 	}
-	http.Redirect(w, r, "/settings#teams", http.StatusSeeOther)
+	http.Redirect(w, r, "/settings/access#teams", http.StatusSeeOther)
 }
 
 func (s *server) addUserForm(w http.ResponseWriter, r *http.Request, p station.Principal) {

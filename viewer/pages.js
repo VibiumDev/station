@@ -94,6 +94,51 @@
       // A frame the station cannot give leaves the row to the others.
       strip.addEventListener('error', function (e) { if (e.target.tagName === 'IMG') e.target.remove(); }, true);
     });
+    // A voice's ▶ on Settings says the words in the box with that voice,
+    // through its real server or API, and plays them here.
+    var probe = document.querySelector('form[data-preview-form]');
+    if (probe) {
+      var status = probe.querySelector('.status');
+      probe.addEventListener('submit', function (e) { e.preventDefault(); });
+      Array.prototype.forEach.call(document.querySelectorAll('button[data-preview]'), function (btn) {
+        btn.addEventListener('click', function () {
+          var body = new FormData(probe);
+          body.set('name', btn.getAttribute('data-preview'));
+          // Piper's row plays the voice picked in its list.
+          var pick = btn.form && btn.form.querySelector('select[name=voice]');
+          var who = pick ? pick.value : btn.getAttribute('data-preview');
+          if (pick) body.set('voice', pick.value);
+          btn.disabled = true;
+          status.textContent = 'Playing it with ' + who + '…';
+          var t0 = Date.now();
+          fetch('/settings/say/preview', {method: 'POST', body: body, credentials: 'same-origin'})
+            .then(function (r) {
+              if (!r.ok) return r.text().then(function (msg) { throw new Error(msg.trim() || ('HTTP ' + r.status)); });
+              return r.blob();
+            })
+            .then(function (wav) {
+              status.textContent = who + ' answered in ' + ((Date.now() - t0) / 1000).toFixed(1) + ' s.';
+              var a = new Audio(URL.createObjectURL(wav));
+              a.addEventListener('ended', function () { URL.revokeObjectURL(a.src); });
+              return a.play();
+            })
+            .catch(function (err) { status.textContent = err.message; })
+            .then(function () { btn.disabled = false; });
+        });
+      });
+    }
+    // A row's ⋯ menu closes on a click anywhere else.
+    document.addEventListener('click', function (e) {
+      Array.prototype.forEach.call(document.querySelectorAll('details.more[open]'), function (d) {
+        if (!d.contains(e.target)) d.open = false;
+      });
+    });
+    // Piper's voice list: Use shows once another voice is picked.
+    Array.prototype.forEach.call(document.querySelectorAll('select[data-current]'), function (sel) {
+      var use = sel.form && sel.form.querySelector('button[type=submit]');
+      if (!use) return;
+      sel.addEventListener('change', function () { use.hidden = sel.value === sel.getAttribute('data-current'); });
+    });
     // A select that files its form as soon as it changes, such as how
     // many records a page shows.
     Array.prototype.forEach.call(document.querySelectorAll('select[data-submit]'), function (sel) {

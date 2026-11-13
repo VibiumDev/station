@@ -14,17 +14,50 @@ type Provider struct {
 	BaseURL     string // the default; "" means the model must name one
 	KeyVar      string
 	KeyRequired bool
-	Effort      bool // takes a reasoning effort
+	Effort      bool     // takes a reasoning effort
+	Roles       []string // the roles Vibium can use it in
 }
+
+// For says whether a provider can have a role.
+func (p Provider) For(role string) bool {
+	for _, r := range p.Roles {
+		if r == role {
+			return true
+		}
+	}
+	return false
+}
+
+// ProvidersFor is the table for one role, in the same order.
+func ProvidersFor(role string) []Provider {
+	var out []Provider
+	for _, p := range Providers {
+		if p.For(role) {
+			out = append(out, p)
+		}
+	}
+	return out
+}
+
+// Roles a provider of chat models has: Vibium speaks and listens only
+// through OpenAI among them.
+var (
+	agentOnly = []string{RoleAgent}
+	allRoles  = []string{RoleAgent, RoleListen, RoleSay}
+)
 
 // Providers is the table, in the order the Settings page offers them.
 var Providers = []Provider{
-	{ID: "openai", Label: "OpenAI", BaseURL: "https://api.openai.com/v1", KeyVar: "OPENAI_API_KEY", KeyRequired: true, Effort: true},
-	{ID: "anthropic", Label: "Anthropic", BaseURL: "https://api.anthropic.com/v1", KeyVar: "ANTHROPIC_API_KEY", KeyRequired: true},
-	{ID: "google", Label: "Google Gemini", BaseURL: "https://generativelanguage.googleapis.com/v1beta", KeyVar: "GOOGLE_API_KEY", KeyRequired: true},
-	{ID: "xai", Label: "xAI", BaseURL: "https://api.x.ai/v1", KeyVar: "XAI_API_KEY", KeyRequired: true, Effort: true},
-	{ID: "openai-compatible", Label: "OpenAI-compatible server", KeyVar: "OPENAI_API_KEY", Effort: true},
-	{ID: "local", Label: "Local server", BaseURL: "http://127.0.0.1:8080/v1", KeyVar: "OPENAI_API_KEY", Effort: true},
+	{ID: "openai", Label: "OpenAI", BaseURL: "https://api.openai.com/v1", KeyVar: "OPENAI_API_KEY", KeyRequired: true, Effort: true, Roles: allRoles},
+	{ID: "anthropic", Label: "Anthropic", BaseURL: "https://api.anthropic.com/v1", KeyVar: "ANTHROPIC_API_KEY", KeyRequired: true, Roles: agentOnly},
+	{ID: "google", Label: "Google Gemini", BaseURL: "https://generativelanguage.googleapis.com/v1beta", KeyVar: "GOOGLE_API_KEY", KeyRequired: true, Roles: agentOnly},
+	{ID: "xai", Label: "xAI", BaseURL: "https://api.x.ai/v1", KeyVar: "XAI_API_KEY", KeyRequired: true, Effort: true, Roles: agentOnly},
+	{ID: "openai-compatible", Label: "OpenAI-compatible server", KeyVar: "OPENAI_API_KEY", Effort: true, Roles: agentOnly},
+	{ID: "local", Label: "Local server", BaseURL: "http://127.0.0.1:8080/v1", KeyVar: "OPENAI_API_KEY", Effort: true, Roles: agentOnly},
+	// A Piper server, which keeps a voice loaded. The model is the voice's
+	// name; Vibium sends it text and gets a WAV. With no base URL it is
+	// the server the station runs itself.
+	{ID: "piper-server", Label: "Piper server", Roles: []string{RoleSay}},
 }
 
 // ProviderByID finds a provider.

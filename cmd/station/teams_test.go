@@ -168,12 +168,12 @@ func TestEnrollmentCodesStayListedAndCancel(t *testing.T) {
 	idIn := regexp.MustCompile(`name="id" value="(\d+)"`)
 	create := func() {
 		t.Helper()
-		if w := f.do(admin, "POST", "/settings/codes", "", true); w.Code != http.StatusSeeOther || w.Header().Get("Location") != "/settings#enroll" {
+		if w := f.do(admin, "POST", "/settings/codes", "", true); w.Code != http.StatusSeeOther || w.Header().Get("Location") != "/settings/rigs#enroll" {
 			t.Fatalf("a new code: %d %q", w.Code, w.Header().Get("Location"))
 		}
 	}
 	listed := func() (codes, ids []string, page string) {
-		page = f.do(admin, "GET", "/settings", "", true).Body.String()
+		page = f.do(admin, "GET", "/settings/rigs", "", true).Body.String()
 		for _, m := range codeIn.FindAllStringSubmatch(page, -1) {
 			codes = append(codes, m[1])
 		}

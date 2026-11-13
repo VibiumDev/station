@@ -78,7 +78,8 @@ station's in-memory queue of holds require. The first deploy builds the
 image on Fly and takes a few minutes; `fly logs -a NAME` shows the
 station starting, and on the first start it prints `Owner's password
 set from STATION_PASSWORD`. The image carries the Vibium binary too, for
-jams: once the station is up, a model added on Settings turns Jams on.
+jams: once the station is up, adding an agent model on the AI tab of
+Settings turns on jam sessions.
 
 The image installs a Vibium nightly build (`VIBIUM_NIGHTLY` in the
 [`Dockerfile`](../../Dockerfile)), checked against that build's own
@@ -95,11 +96,11 @@ password is the secret from step 2. The first sign-in shows a QR code.
 Scan it with an authenticator app and type the six-digit code the app
 shows. The station then lists ten backup codes, once. Keep them.
 
-Settings shows the station's name, its key and the TURN line, which
-should carry the public address from step 1.
+Settings shows the station's name, and under Network its key and the
+TURN line, which should carry the public address from step 1.
 
-Then enroll a rig: make an enrollment code on Settings and run these on
-the rig, a Pi where Roadie runs as a service:
+Then enroll a rig: make an enrollment code on the Rigs tab of Settings
+and run these on the rig, a Pi where Roadie runs as a service:
 
 ```bash
 sudo -u roadie roadie enroll https://NAME.fly.dev --code ABCD-1234-7F3A
@@ -108,9 +109,9 @@ sudo systemctl restart roadie
 
 The device then shows as online on the Devices page.
 
-To prove the relay path end to end, make an API token on Settings and
-run the probe from your machine, which uses relay-only media by
-default:
+To prove the relay path end to end, make an API token on the Access tab
+of Settings and run the probe from your machine, which uses relay-only
+media by default:
 
 ```bash
 go run ./cmd/station-probe -station https://NAME.fly.dev -token stk_... -device RIG/DEVICE
@@ -173,4 +174,5 @@ carry the new name.
   proxy. Five misses from one address lock that address out for up to
   15 minutes.
 - **A lost authenticator**: a backup code signs you in once. Another
-  admin can hold Reset sign-in on your row under Users on Settings.
+  admin can hold Reset sign-in on your row under Users, on the Access
+  tab of Settings.
