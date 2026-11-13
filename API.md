@@ -203,7 +203,8 @@ curl -s -X PUT -H "Authorization: Nostr eyJ…" -H 'Content-Type: application/zi
 
 `POST /v1/records/upload-auth` takes `sha256` and `size`, and optionally
 `type`, `name` and `hold`; the token must be one that can control
-devices. The hold is the one named, which must be the caller's own.
+devices, and its user needs drive access to at least one device, since
+watch access is read-only (403 otherwise). The hold is the one named, which must be the caller's own.
 Without one the station takes the caller's current hold, or the newest
 of the last day when none is current, and refuses when the caller holds
 several devices at once; the owner may upload with no hold at all. The

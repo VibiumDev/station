@@ -328,6 +328,9 @@ var (
 	ruleControlB = func(c caller) bool { return ruleReadB(c) && c.token != station.TokenWatch }
 	// A change about no device in particular: anyone signed in but a watch token.
 	ruleChange = func(c caller) bool { return c.signed && c.token != station.TokenWatch }
+	// Uploading a record: drive access to some device, in person or by a
+	// drive or admin token. Watching is read-only.
+	ruleUpload = func(c caller) bool { return ruleChange(c) && (c.admin || c.levelA.AtLeast(station.LevelDrive)) }
 	// The station's management: admins in person or by admin token.
 	ruleManage = func(c caller) bool {
 		return c.signed && c.admin && (c.person || c.token == station.TokenAdmin)
@@ -469,7 +472,7 @@ func (f *fullStation) rows() []row {
 		{"GET", "/v1/devices/{rig}/{name}/extras.js", "/v1/devices/" + A + "/extras.js", "", ruleReadA, false, false},
 		{"GET", "/v1/devices/{rig}/{name}/api/{path...}", "/v1/devices/" + A + "/api/hid/status", "", ruleReadA, false, false},
 		{"GET", "/v1/records", "/v1/records", "", ruleSigned, false, false},
-		{"POST", "/v1/records/upload-auth", "/v1/records/upload-auth", `{"sha256":"` + f.sha + `","size":1}`, ruleChange, false, false},
+		{"POST", "/v1/records/upload-auth", "/v1/records/upload-auth", `{"sha256":"` + f.sha + `","size":1}`, ruleUpload, false, false},
 		{"POST", "/v1/records/{sha}/download-auth", "/v1/records/" + f.sha + "/download-auth", "", ruleReadA, false, false},
 		{"POST", "/v1/records/{sha}/golden", "/v1/records/" + f.sha + "/golden", `{"golden":true}`, ruleOwnRecord, false, false},
 		{"PUT", "/v1/records/{sha}/tags", "/v1/records/" + f.sha + "/tags", `{"tags":["a"]}`, ruleOwnRecord, false, false},

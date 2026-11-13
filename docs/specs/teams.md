@@ -37,7 +37,7 @@ a team at one of three levels, each including the ones before it:
 
 | Level | May |
 |---|---|
-| `watch` | Open the watching page, see the device's jams and records |
+| `watch` | Open the watching page, see the device's jams and records; read-only, so no uploads |
 | `drive` | Take the device and drive it from the viewer |
 | `jam` | Start jams and drive the device with an agent over the API |
 
