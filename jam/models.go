@@ -261,7 +261,7 @@ func (c ModelConfig) Validate() error {
 	}
 	if strings.TrimSpace(c.Model) == "" {
 		if p.ID == "piper-server" {
-			return errors.New("the model is the voice's name, such as en_US-lessac-medium")
+			return errors.New("the model is the voice's name, such as en_US-bryce-medium")
 		}
 		if p.ID == "sherpa-server" {
 			return errors.New("the model is the name of the model the server loaded, such as zipformer-en")

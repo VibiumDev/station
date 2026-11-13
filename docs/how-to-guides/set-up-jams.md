@@ -171,16 +171,23 @@ it.
    `/etc/default/station`. A `piper` program on the station's `PATH` is
    found too.
 
-2. Download one or more voices into the same folder:
+2. Download one or more voices into the same folder. These two are a
+   man's voice and a woman's, both free for any use:
 
    ```bash
    sudo -u station /var/lib/station/piper/venv/bin/python -m piper.download_voices \
-     --download-dir /var/lib/station/piper en_US-lessac-medium
+     --download-dir /var/lib/station/piper en_US-bryce-medium en_US-kristin-medium
    ```
 
    Each voice is two files, `NAME.onnx` and `NAME.onnx.json`. The
    [Piper voices](https://huggingface.co/rhasspy/piper-voices) page lists
    them all.
+
+   A voice has the license of the recordings it was trained on, and
+   each voice's `MODEL_CARD` on that page names it. The recordings behind
+   `bryce` and `kristin` are in the public domain. Some other voices
+   can't be used commercially, such as `ryan`, and `lessac` is for
+   research only.
 
 3. Restart the station: `sudo systemctl restart station`.
 
@@ -190,6 +197,8 @@ voice, and restarts the server if it stops. On the **AI** tab, under
 
 - A voice named `piper` is listed without you adding it. It is in use
   unless you chose another voice.
+- Piper speaks with `en_US-bryce-medium` when that voice is installed.
+  Without it, Piper speaks with the first installed voice by name.
 - If more than one Piper voice is installed, the `piper` row has a list
   of them. Pick one and press ▶ to hear it, then **Use** to switch jam
   sessions to it. The server loads the new voice right away.

@@ -12,6 +12,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -30,12 +31,28 @@ import (
 // piperModel is the name the station's own Piper has on Settings.
 const piperModel = "piper"
 
+// piperDefaultVoice is the voice loaded when the owner chose none and it
+// is installed. Its recordings are in the public domain, so it is free
+// for any use, which some other voices are not.
+const piperDefaultVoice = "en_US-bryce-medium"
+
+// pickVoice is the voice to load: the owner's choice, else the default,
+// else the first by name. voices are the installed ones, and not empty.
+func pickVoice(voices []string, chosen string) string {
+	for _, want := range []string{chosen, piperDefaultVoice} {
+		if want != "" && slices.Contains(voices, want) {
+			return want
+		}
+	}
+	return voices[0]
+}
+
 type piperRunner struct {
 	python    string // the interpreter that has piper-tts with its server
 	voicesDir string
 	logPath   string
 	logf      func(string, ...any)
-	preferred func() string // the voice to load first, if it is installed
+	preferred func() string // the voice the owner chose, or ""
 	ready     time.Duration // how long a start may take to answer
 
 	mu      sync.Mutex
@@ -172,14 +189,7 @@ func (p *piperRunner) run(ctx context.Context) {
 			}
 			continue
 		}
-		voice := voices[0]
-		if want := p.preferred(); want != "" {
-			for _, v := range voices {
-				if v == want {
-					voice = want
-				}
-			}
-		}
+		voice := pickVoice(voices, p.preferred())
 		started := time.Now()
 		err := p.serve(ctx, voice)
 		if ctx.Err() != nil {

@@ -70,6 +70,25 @@ func TestPiperPython(t *testing.T) {
 	}
 }
 
+func TestPickVoice(t *testing.T) {
+	some := []string{"en_US-amy-low", "en_US-danny-low"}
+	all := []string{"en_US-amy-low", piperDefaultVoice, "en_US-danny-low"}
+	for _, c := range []struct {
+		voices       []string
+		chosen, want string
+	}{
+		{some, "", "en_US-amy-low"},
+		{all, "", piperDefaultVoice},
+		{all, "en_US-danny-low", "en_US-danny-low"},
+		{all, "en_US-removed", piperDefaultVoice},
+		{some, "en_US-removed", "en_US-amy-low"},
+	} {
+		if got := pickVoice(c.voices, c.chosen); got != c.want {
+			t.Errorf("of %v with %q chosen: %s, want %s", c.voices, c.chosen, got, c.want)
+		}
+	}
+}
+
 func TestPiperRunner(t *testing.T) {
 	real, err := exec.LookPath("python3")
 	if err != nil {
