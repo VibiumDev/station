@@ -17,7 +17,7 @@ RUN CGO_ENABLED=0 go build -trimpath -ldflags="-s -w -X main.version=${VERSION}"
 # vibium-linux-<arch>, from scripts/vibium-local.sh.
 FROM alpine:3.22 AS vibium
 ARG TARGETARCH
-ARG VIBIUM_NIGHTLY=nightly-2026.11.10-dev.20261110220518-01f5372
+ARG VIBIUM_NIGHTLY=nightly-2026.11.12-dev.20261112015632-bf3355b
 ARG VIBIUM_LOCAL=0
 COPY deploy/vibium/ /local/
 RUN apk add --no-cache curl \

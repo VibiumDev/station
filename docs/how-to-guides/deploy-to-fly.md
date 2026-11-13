@@ -84,8 +84,9 @@ Settings turns on jam sessions.
 The image installs a Vibium nightly build (`VIBIUM_NIGHTLY` in the
 [`Dockerfile`](../../Dockerfile)), checked against that build's own
 checksums. With it a jam on a phone can tap, swipe, long press, type
-text and send its record. Say and listen are in builds made after
-2026-11-11. To use a later nightly from Vibium's
+text, send its record, and speak and listen. Speaking through the
+station's own Piper needs a Vibium with Piper server support, which no
+nightly has yet: see below. To use a later nightly from Vibium's
 [releases](https://github.com/VibiumDev/vibium/releases), add
 `--build-arg VIBIUM_NIGHTLY=<its tag>` to `fly deploy`.
 

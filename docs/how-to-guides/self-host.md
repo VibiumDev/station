@@ -34,14 +34,40 @@ with the same two binaries, the systemd unit and the sample `fly.toml`;
 Jams, the prompt on the station's front page, drive devices through
 `vibium mcp`, so the station also needs the Vibium binary, on its
 `PATH` or named with `--vibium` (or `STATION_VIBIUM` in
-`/etc/default/station`). A jam on a phone needs a Vibium newer than the
-last release, 26.8.21. That release cannot tap, swipe, long press or
-type text on a phone, and cannot send a jam's record to the station. Use
-a nightly build, which is a static binary for each platform:
+`/etc/default/station`). There are three ways to get it. Whichever you
+use, install it under `/usr/local/bin`: the service's sandbox
+(`ProtectHome=yes`) keeps the station out of home directories.
+
+### Vibium: a tagged release
+
+Releases ship their binaries as npm packages, `@vibium/linux-arm64` and
+`@vibium/linux-x64`. The station needs only the binary inside, so Node is
+not needed:
+
+```bash
+ARCH=arm64   # or x64 on a PC
+VERSION=26.8.21
+PKG=https://registry.npmjs.org/@vibium/linux-$ARCH
+curl -fsSLo vibium.tgz $PKG/-/linux-$ARCH-$VERSION.tgz
+curl -fsSL $PKG/$VERSION | grep -o '"integrity":"[^"]*"'
+echo "sha512-$(openssl dgst -sha512 -binary vibium.tgz | base64 -w0)"
+tar xzf vibium.tgz package/bin/vibium
+sudo install -m 755 package/bin/vibium /usr/local/bin/vibium
+vibium --version
+```
+
+The two integrity strings must be the same. Release 26.8.21 cannot tap,
+swipe, long press or type text on a phone, and cannot send a jam's record
+to the station, so use a nightly until a later release is out.
+
+### Vibium: a nightly
+
+Nightly builds are static binaries on Vibium's GitHub
+[releases](https://github.com/VibiumDev/vibium/releases):
 
 ```bash
 ARCH=arm64   # or amd64
-NIGHTLY=nightly-2026.11.10-dev.20261110220518-01f5372
+NIGHTLY=nightly-2026.11.12-dev.20261112015632-bf3355b
 curl -fLO https://github.com/VibiumDev/vibium/releases/download/$NIGHTLY/vibium-linux-$ARCH
 curl -fLO https://github.com/VibiumDev/vibium/releases/download/$NIGHTLY/SHA256SUMS
 sha256sum vibium-linux-$ARCH
@@ -51,24 +77,20 @@ vibium --version
 ```
 
 The two checksums printed must be the same. With this build a jam on a
-phone can tap, swipe, long press, type text and send its record. Say and
-listen are in builds made after 2026-11-11: take a later nightly from
-Vibium's [releases](https://github.com/VibiumDev/vibium/releases) the
-same way.
+phone can tap, swipe, long press, type text, send its record, and speak
+and listen. Speaking through the station's own Piper needs a Vibium with
+Piper server support, which no nightly has yet: build your own for that.
 
-To use a Vibium you built yourself, such as one from a branch that has no
-nightly yet, build it from your Vibium checkout with this clone's script
-and install it the same way:
+### Vibium: your own build
+
+To use a Vibium you built, such as one from a branch, build it from your
+Vibium checkout with this clone's script:
 
 ```bash
 ARCHES=arm64 scripts/vibium-local.sh ../vibium   # amd64 on a PC
 sudo install -m 755 deploy/vibium/vibium-linux-arm64 /usr/local/bin/vibium
 vibium --version                                  # vibium v26.8.21-local.<commit>
 ```
-
-Install it under `/usr/local/bin` rather than pointing `--vibium` into
-your checkout: the service's sandbox (`ProtectHome=yes`) keeps the station
-out of home directories.
 
 Vibium needs no browser for this: a jam's session is the station's own
 device, reached through `/session`. The station looks for Vibium when it
