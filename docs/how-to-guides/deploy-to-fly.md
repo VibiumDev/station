@@ -30,12 +30,13 @@ Store and the screenshots of jams:
 
 - The Record Store keeps up to 2 GB by default. Each recording is also
   kept unpacked, so the store takes about twice its limit on disk.
-- One gigabyte is enough for the rest, and for a station that keeps few
-  recordings.
-- For a full Record Store, create a larger volume (`--size 5`), or add
-  a lower `--records-max-total`, such as `256M`, to the `[processes]`
-  line in step 3. On a station that has recordings, a lower limit
-  removes the oldest of them past it at the next start.
+- When rigs record their sessions (`roadie enroll --record`), which
+  keeps video and sound, make the volume `--size 5` so the store can
+  fill up.
+- One gigabyte is enough for a station that keeps few recordings, or
+  add a lower `--records-max-total`, such as `256M`, to the
+  `[processes]` line in step 3. On a station that has recordings, a
+  lower limit removes the oldest of them past it at the next start.
 
 ## 2. Set the owner's password
 
@@ -50,8 +51,15 @@ set back to the secret at the next start.
 
 ## 3. Write the configuration
 
-Edit [`deploy/fly/fly.toml`](../../deploy/fly/fly.toml) in your clone
-and change four things in it:
+Copy [`deploy/fly/fly.toml`](../../deploy/fly/fly.toml) to a file of
+your app's own, so that the sample, and any other app you deploy from
+the same clone, keeps its settings:
+
+```bash
+cp deploy/fly/fly.toml fly.NAME.toml
+```
+
+Then change four things in the copy:
 
 - `app`: your NAME.
 - `primary_region`: your REGION.
@@ -70,7 +78,7 @@ running so that the rigs' tunnels stay up, and mounts the volume at
 From the repository root:
 
 ```bash
-fly deploy -c deploy/fly/fly.toml --dockerfile Dockerfile --remote-only --ha=false -a NAME
+fly deploy -c fly.NAME.toml --dockerfile Dockerfile --remote-only --ha=false -a NAME
 ```
 
 `--ha=false` keeps the app to one machine, which both the volume and the
@@ -81,45 +89,19 @@ set from STATION_PASSWORD`. The image carries the Vibium binary too, for
 jams: once the station is up, adding an agent model on the AI tab of
 Settings turns on jam sessions.
 
-The image installs a Vibium nightly build (`VIBIUM_NIGHTLY` in the
-[`Dockerfile`](../../Dockerfile)), checked against that build's own
-checksums. With it a jam on a phone can tap, swipe, long press, type
-text and send its record. Say and listen are in builds made after
-2026-11-11. To use a later nightly from Vibium's
-[releases](https://github.com/VibiumDev/vibium/releases), add
-`--build-arg VIBIUM_NIGHTLY=<its tag>` to `fly deploy`.
+The image includes a Vibium nightly for jam sessions.
+[Set Up Jams](set-up-jams.md#1-vibium) covers another nightly or your own
+build, with a build argument added to the command above.
 
 ## 5. Check it
 
-Open `https://NAME.fly.dev` and sign in. The login is `owner` and the
-password is the secret from step 2. The first sign-in shows a QR code.
-Scan it with an authenticator app and type the six-digit code the app
-shows. The station then lists ten backup codes, once. Keep them.
+Open `https://NAME.fly.dev` and sign in as `owner`, with the secret from
+step 2. On **Settings**, under **Network**, the TURN line should carry the
+IPv4 address from step 1.
 
-Settings shows the station's name, and under Network its key and the
-TURN line, which should carry the public address from step 1.
-
-Then enroll a rig: make an enrollment code on the Rigs tab of Settings
-and run these on the rig, a Pi where Roadie runs as a service:
-
-```bash
-sudo -u roadie roadie enroll https://NAME.fly.dev --code ABCD-1234-7F3A
-sudo systemctl restart roadie
-```
-
-The device then shows as online on the Devices page.
-
-To prove the relay path end to end, make an API token on the Access tab
-of Settings and run the probe from your machine, which uses relay-only
-media by default:
-
-```bash
-go run ./cmd/station-probe -station https://NAME.fly.dev -token stk_... -device RIG/DEVICE
-```
-
-The probe takes the device, streams over WebRTC through TURN, taps the
-screen, checks that the picture changed, and releases the device; a
-non-zero exit names what failed.
+Then follow [First Steps on a New Station](first-steps.md): set up your
+authenticator, enroll a rig, and check the whole path with
+`station-probe`, which on Fly.io sends the media through TURN.
 
 ## 6. Use your own domain
 
@@ -149,7 +131,7 @@ station.example.com -a NAME` shows how far it has got. A wildcard
 certificate, or one issued before any traffic reaches the app, needs
 the `_acme-challenge` CNAME that the same output lists.
 
-Then tell the station its new name. In `fly.toml`, change `--public-url`
+Then tell the station its new name. In `fly.NAME.toml`, change `--public-url`
 to `https://station.example.com` and deploy again. Leave
 `--turn-public-ip` as it is, because TURN is reached by address rather
 than by name, and TLS still ends at Fly's edge, so the station's own
@@ -173,6 +155,5 @@ carry the new name.
   `Fly-Client-IP`, since every connection reaches the station from Fly's
   proxy. Five misses from one address lock that address out for up to
   15 minutes.
-- **A lost authenticator**: a backup code signs you in once. Another
-  admin can hold Reset sign-in on your row under Users, on the Access
-  tab of Settings.
+- **Locked out**: see
+  [If you're locked out](first-steps.md#if-youre-locked-out).
