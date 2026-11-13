@@ -104,8 +104,12 @@
         btn.addEventListener('click', function () {
           var body = new FormData(probe);
           body.set('name', btn.getAttribute('data-preview'));
+          // Piper's row plays the voice picked in its list.
+          var pick = btn.form && btn.form.querySelector('select[name=voice]');
+          var who = pick ? pick.value : btn.getAttribute('data-preview');
+          if (pick) body.set('voice', pick.value);
           btn.disabled = true;
-          status.textContent = 'Saying it with ' + btn.getAttribute('data-preview') + '…';
+          status.textContent = 'Playing it with ' + who + '…';
           var t0 = Date.now();
           fetch('/settings/say/preview', {method: 'POST', body: body, credentials: 'same-origin'})
             .then(function (r) {
@@ -113,7 +117,7 @@
               return r.blob();
             })
             .then(function (wav) {
-              status.textContent = btn.getAttribute('data-preview') + ' answered in ' + ((Date.now() - t0) / 1000).toFixed(1) + ' s.';
+              status.textContent = who + ' answered in ' + ((Date.now() - t0) / 1000).toFixed(1) + ' s.';
               var a = new Audio(URL.createObjectURL(wav));
               a.addEventListener('ended', function () { URL.revokeObjectURL(a.src); });
               return a.play();
@@ -123,6 +127,12 @@
         });
       });
     }
+    // Piper's voice list: Use shows once another voice is picked.
+    Array.prototype.forEach.call(document.querySelectorAll('select[data-current]'), function (sel) {
+      var use = sel.form && sel.form.querySelector('button[type=submit]');
+      if (!use) return;
+      sel.addEventListener('change', function () { use.hidden = sel.value === sel.getAttribute('data-current'); });
+    });
     // A select that files its form as soon as it changes, such as how
     // many records a page shows.
     Array.prototype.forEach.call(document.querySelectorAll('select[data-submit]'), function (sel) {

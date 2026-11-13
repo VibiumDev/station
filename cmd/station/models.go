@@ -27,11 +27,11 @@ func (s *server) modelsData(data map[string]any) {
 	// The page's three parts, each its own list with the one in use.
 	parts := []aiPart{
 		{Role: jam.RoleAgent, Title: "Agent", Add: "Add an agent model",
-			About: "The brain of a jam: it reasons, reads the screenshots and calls the tools. A jam uses the one in use unless another is picked when it starts."},
+			About: "The AI chat model that runs jam sessions."},
 		{Role: jam.RoleSay, Title: "Say", Add: "Add a voice",
-			About: "Speaks into the device when a jam says something. Piper speaks on this machine with no key; a cloud voice needs its key."},
+			About: "Text to speech, for when a jam session talks to the device."},
 		{Role: jam.RoleListen, Title: "Listen", Add: "Add a listen model",
-			About: "Turns the device's sound into text when a jam listens."},
+			About: "Speech to text, for when a jam session listens to the device."},
 	}
 	for i := range parts {
 		parts[i].Providers = jam.ProvidersFor(parts[i].Role)
@@ -107,6 +107,14 @@ func (s *server) sayPreview(w http.ResponseWriter, r *http.Request, p station.Pr
 			http.Error(w, "Piper is not running on this station.", http.StatusServiceUnavailable)
 			return
 		}
+		// The voice picked in the list, which need not be the one in use.
+		if v := r.FormValue("voice"); v != "" {
+			if !slices.Contains(s.piper.Voices(), v) {
+				http.Error(w, "No such Piper voice.", http.StatusNotFound)
+				return
+			}
+			c.Model = v
+		}
 	}
 	ctx, cancel := context.WithTimeout(r.Context(), 90*time.Second)
 	defer cancel()
@@ -175,9 +183,9 @@ type aiPart struct {
 	Providers               []jam.Provider
 }
 
-// piperVoice is POST /settings/piper/voice: the voice the station's own
-// Piper speaks with. The server loads it at once, so the first jam to
-// speak with it does not wait.
+// piperVoice is POST /settings/piper/voice: jam sessions speak with the
+// station's own Piper, in this voice. The server loads the voice at once,
+// so the first session to speak with it does not wait.
 func (s *server) piperVoice(w http.ResponseWriter, r *http.Request, p station.Principal) {
 	voice := r.FormValue("voice")
 	if !slices.Contains(s.piper.Voices(), voice) {
@@ -189,25 +197,26 @@ func (s *server) piperVoice(w http.ResponseWriter, r *http.Request, p station.Pr
 		s.render(w, "settings", s.settingsData(r, p, map[string]any{"Message": "The station's Piper is not running."}))
 		return
 	}
-	c.Model, c.Builtin = voice, false
+	c.Model, c.Builtin, c.Default = voice, false, true
 	if err := s.jams.models.Save(c); err != nil {
 		s.render(w, "settings", s.settingsData(r, p, map[string]any{"Message": err.Error()}))
 		return
 	}
 	s.db.Audit(r.Context(), station.AuditEntry{Subject: p.Subject, Action: "model", Detail: "piper speaks with " + voice})
 	go s.piper.warm(voice)
-	http.Redirect(w, r, "/settings#ai", http.StatusSeeOther)
+	http.Redirect(w, r, "/settings/ai#ai-say", http.StatusSeeOther)
 }
 
 // removeModel is POST /settings/models/remove.
 func (s *server) removeModel(w http.ResponseWriter, r *http.Request, p station.Principal) {
 	name := r.FormValue("name")
+	c, _ := s.jams.models.Get(name)
 	if err := s.jams.models.Remove(name); err != nil {
 		s.render(w, "settings", s.settingsData(r, p, map[string]any{"Message": err.Error()}))
 		return
 	}
 	s.db.Audit(r.Context(), station.AuditEntry{Subject: p.Subject, Action: "model", Detail: "removed " + name})
-	http.Redirect(w, r, "/settings", http.StatusSeeOther)
+	http.Redirect(w, r, "/settings/ai#ai-"+c.Role, http.StatusSeeOther)
 }
 
 // defaultModel is POST /settings/models/default.
@@ -218,7 +227,8 @@ func (s *server) defaultModel(w http.ResponseWriter, r *http.Request, p station.
 		return
 	}
 	s.db.Audit(r.Context(), station.AuditEntry{Subject: p.Subject, Action: "model", Detail: name + " made default"})
-	http.Redirect(w, r, "/settings", http.StatusSeeOther)
+	c, _ := s.jams.models.Get(name)
+	http.Redirect(w, r, "/settings/ai#ai-"+c.Role, http.StatusSeeOther)
 }
 
 // modelKey is POST /settings/models/key: a new key for a model.
@@ -252,7 +262,7 @@ func (s *server) setJams(w http.ResponseWriter, r *http.Request, p station.Princ
 		state = "on"
 	}
 	s.db.Audit(r.Context(), station.AuditEntry{Subject: p.Subject, Action: "jams", Detail: "turned " + state})
-	http.Redirect(w, r, "/settings", http.StatusSeeOther)
+	http.Redirect(w, r, "/settings/ai#jams", http.StatusSeeOther)
 }
 
 // setJamVideo is POST /settings/jam-video: whether a jam's record holds
@@ -272,5 +282,5 @@ func (s *server) setJamVideo(w http.ResponseWriter, r *http.Request, p station.P
 		state = "on"
 	}
 	s.db.Audit(r.Context(), station.AuditEntry{Subject: p.Subject, Action: "jams", Detail: "video turned " + state})
-	http.Redirect(w, r, "/settings", http.StatusSeeOther)
+	http.Redirect(w, r, "/settings/ai#jams", http.StatusSeeOther)
 }

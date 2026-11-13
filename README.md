@@ -94,8 +94,8 @@ a browser.
 
 Then enroll a rig:
 
-1. On the station's Settings page (or `station enroll`), make an
-   enrollment code. It is single use, lasts 15 minutes, and ends with the
+1. On the station's Settings page, on the Rigs tab (or with
+   `station enroll`), make an enrollment code. It is single use, lasts 15 minutes, and ends with the
    station key's fingerprint.
 2. On the rig: `roadie enroll https://<station> --code ABCD-1234-7F3A`. On
    the same LAN the URL can be left out; the station advertises itself over

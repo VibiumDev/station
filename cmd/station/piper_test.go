@@ -9,6 +9,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -151,7 +152,7 @@ func TestAIPartsOnSettings(t *testing.T) {
 	}
 	ck, csrf := f.session(f.users["admin"].ID, stageSignedIn)
 	admin := caller{name: "admin", decor: withCookie(ck), csrf: csrf, signed: true, admin: true, person: true}
-	html := f.do(admin, "GET", "/settings", "", true).Body.String()
+	html := f.do(admin, "GET", "/settings/ai", "", true).Body.String()
 	part := func(role string) string {
 		i := strings.Index(html, `<section class="aipart" id="ai-`+role+`">`)
 		if i < 0 {
@@ -169,7 +170,7 @@ func TestAIPartsOnSettings(t *testing.T) {
 		t.Error("Agent: gpt should be in use, the others offered with Use")
 	}
 	// Piper, on this machine, is in use where no voice was marked.
-	if !strings.Contains(say, "<b>piper</b> <span class=\"pill inuse\">in use</span>") || !strings.Contains(say, "<b>tts</b><span") {
+	if !strings.Contains(say, "<b>piper</b> <span class=\"pill inuse\">in use</span>") || !strings.Contains(say, "<b>tts</b>\n") {
 		t.Error("Say: piper should be in use over tts")
 	}
 	if strings.Contains(listen, "piper") || !strings.Contains(listen, "<b>stt</b> <span class=\"pill inuse\">in use</span>") {
@@ -192,13 +193,16 @@ func TestAIPartsOnSettings(t *testing.T) {
 // A voice's preview asks its own server or API and answers the WAV.
 func TestSayPreview(t *testing.T) {
 	wav := []byte("RIFF....WAVEfmt the rest of a sound file")
+	var mu sync.Mutex
 	var got []map[string]any
 	var auth []string
 	fake := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var body map[string]any
 		json.NewDecoder(r.Body).Decode(&body)
 		body["path"] = r.URL.Path
+		mu.Lock()
 		got, auth = append(got, body), append(auth, r.Header.Get("Authorization"))
+		mu.Unlock()
 		if body["input"] == "fail" {
 			http.Error(w, `{"error":{"message":"bad key"}}`, http.StatusUnauthorized)
 			return
@@ -249,8 +253,55 @@ func TestSayPreview(t *testing.T) {
 		}
 	}
 	// The page offers ▶ on each voice and the words to say.
-	html := f.do(admin, "GET", "/settings", "", true).Body.String()
+	html := f.do(admin, "GET", "/settings/ai", "", true).Body.String()
 	if !strings.Contains(html, `data-preview="lessac"`) || !strings.Contains(html, `data-preview="tts"`) || !strings.Contains(html, `name="text" value="Come here, Watson." maxlength="50"`) {
 		t.Error("no preview on the page")
+	}
+
+	// The station's own Piper with two voices: ▶ plays the one picked in
+	// its list, before Use makes jam sessions speak with it.
+	dir := t.TempDir()
+	for _, v := range []string{"en_US-a", "en_US-b"} {
+		os.WriteFile(filepath.Join(dir, v+".onnx"), nil, 0o600)
+		os.WriteFile(filepath.Join(dir, v+".onnx.json"), nil, 0o600)
+	}
+	f.s.piper = &piperRunner{voicesDir: dir, url: fake.URL, voice: "en_US-a"}
+	f.s.jams.models.Builtin = f.s.piper.builtin
+	if err := f.s.jams.models.SetDefault("tts"); err != nil {
+		t.Fatal(err)
+	}
+	html = f.do(admin, "GET", "/settings/ai", "", true).Body.String()
+	row := html[strings.Index(html, "<b>piper</b>"):]
+	row = row[:strings.Index(row, "</li>")]
+	sel, play, use := strings.Index(row, `<select name="voice"`), strings.Index(row, `data-preview="piper"`), strings.Index(row, `>Use</button>`)
+	if sel < 0 || play < sel || use < play || strings.Contains(row, "data-current") || strings.Contains(row, "in use") {
+		t.Errorf("Piper's row, not in use, should be the voices, then ▶, then Use: %s", row)
+	}
+	if w := f.do(admin, "POST", "/settings/say/preview", "name=piper&voice=en_US-b&text=hi", true); w.Code != 200 {
+		t.Fatalf("Piper, another voice: %d %s", w.Code, w.Body)
+	}
+	mu.Lock()
+	if g := got[len(got)-1]; g["voice"] != "en_US-b" {
+		t.Errorf("Piper was asked %v, want en_US-b", g)
+	}
+	mu.Unlock()
+	if w := f.do(admin, "POST", "/settings/say/preview", "name=piper&voice=..%2Fx&text=hi", true); w.Code != http.StatusNotFound {
+		t.Errorf("a voice not installed: %d", w.Code)
+	}
+	if c, _ := f.s.jams.models.Get("tts"); !c.Default {
+		t.Error("a preview changed the voice in use")
+	}
+	if w := f.do(admin, "POST", "/settings/piper/voice", "voice=en_US-b", true); w.Code != http.StatusSeeOther || w.Header().Get("Location") != "/settings/ai#ai-say" {
+		t.Fatalf("Use: %d %q", w.Code, w.Header().Get("Location"))
+	}
+	if c, _ := f.s.jams.models.Get("piper"); !c.Default || c.Model != "en_US-b" {
+		t.Errorf("Use should put piper in use with en_US-b: %+v", c)
+	}
+	if c, _ := f.s.jams.models.Get("tts"); c.Default {
+		t.Error("tts is still in use")
+	}
+	html = f.do(admin, "GET", "/settings/ai", "", true).Body.String()
+	if !strings.Contains(html, `data-current="en_US-b"`) || !strings.Contains(html, `type="submit" hidden>Use</button>`) {
+		t.Error("Piper in use should mark its voice and hide Use")
 	}
 }

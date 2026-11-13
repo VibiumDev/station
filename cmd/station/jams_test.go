@@ -89,7 +89,7 @@ func TestJamVideoSwitch(t *testing.T) {
 	}
 	row := func() string {
 		t.Helper()
-		data := map[string]any{"Page": "settings", "Principal": owner, "CSRF": "c", "Name": "Station", "Named": true, "JamsPossible": true, "JamVideo": s.jams.video()}
+		data := map[string]any{"Page": "settings", "Tab": "ai", "Principal": owner, "CSRF": "c", "Name": "Station", "Named": true, "JamsPossible": true, "JamVideo": s.jams.video()}
 		var out strings.Builder
 		if err := pages.ExecuteTemplate(&out, "settings", data); err != nil {
 			t.Fatal(err)
@@ -268,11 +268,11 @@ func TestJamNotesOnThePages(t *testing.T) {
 	}
 	// Settings and Account each show their notes in a box that posts
 	// to its own place, once jams are possible.
-	settings := render("settings", map[string]any{"Page": "settings", "JamsPossible": true, "JamNotes": "Be <brief>."})
+	settings := render("settings", map[string]any{"Page": "settings", "Tab": "ai", "JamsPossible": true, "JamNotes": "Be <brief>."})
 	if !strings.Contains(settings, `action="/settings/jam-notes"`) || !strings.Contains(settings, `maxlength="4000"`) || !strings.Contains(settings, "Be &lt;brief&gt;.</textarea>") {
 		t.Error("Settings has no notes box holding the notes")
 	}
-	if strings.Contains(render("settings", map[string]any{"Page": "settings"}), "/settings/jam-notes") {
+	if strings.Contains(render("settings", map[string]any{"Page": "settings", "Tab": "ai"}), "/settings/jam-notes") {
 		t.Error("Settings offers notes with no jams")
 	}
 	account := render("account", map[string]any{"Page": "account", "User": station.User{Login: "ann@example.com"}, "JamsPossible": true, "JamNotes": "Mine."})

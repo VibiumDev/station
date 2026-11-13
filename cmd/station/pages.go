@@ -6,6 +6,8 @@ import (
 
 	"fiatjaf.com/nostr"
 	"fiatjaf.com/nostr/nip19"
+
+	"github.com/VibiumDev/station/jam"
 )
 
 func npub(pk nostr.PubKey) string { return nip19.EncodeNpub(pk) }
@@ -31,7 +33,7 @@ func platformName(p string) string {
 // shared stylesheet and theme switch come from the viewer package, so a
 // Roadie's pages are the same. The mark reads Vibium everywhere; a
 // station's own name, when set, is the small line under it.
-var pages = template.Must(template.New("").Funcs(template.FuncMap{"npub": npub, "dict": dict, "platform": platformName, "initial": initial, "brief": brief}).Parse(`
+var pages = template.Must(template.New("").Funcs(template.FuncMap{"npub": npub, "dict": dict, "platform": platformName, "initial": initial, "brief": brief, "providerName": providerName}).Parse(`
 {{define "head"}}<!DOCTYPE html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>{{.Title}} · {{if .Named}}{{.Name}}{{else}}Vibium Station{{end}}</title><link rel="icon" type="image/png" href="/favicon.png"><link rel="apple-touch-icon" href="/apple-touch-icon.png">
@@ -329,124 +331,22 @@ var pages = template.Must(template.New("").Funcs(template.FuncMap{"npub": npub, 
 
 {{define "settings"}}{{template "head" (dict "Title" "Settings" "Name" .Name "Named" .Named)}}{{template "header" .}}
 <main class="wrap">
+<nav class="tabs" aria-label="Settings">{{range .Tabs}}<a href="{{.URL}}"{{if eq .ID $.Tab}} aria-current="page"{{end}}>{{.Title}}</a>{{end}}</nav>
 {{if .Message}}<div class="msg" role="alert">{{.Message}}</div>{{end}}
+{{if eq .Tab "general"}}{{template "settings-general" .}}{{else if eq .Tab "ai"}}{{template "settings-ai" .}}{{else if eq .Tab "rigs"}}{{template "settings-rigs" .}}{{else}}{{template "settings-access" .}}{{end}}
+</main>{{template "foot" .}}{{end}}
 
-<h2 class="h2">Name {{template "help" "name"}}</h2>
+{{define "settings-general"}}<h2 class="h2">Name {{template "help" "name"}}</h2>
 <p class="helptext" id="help-name" hidden>What this station is called: under the Vibium mark in the sidebar and in the tab title here, and what a rig records when it enrolls. The <code>--name</code> flag sets it too.</p>
 <form class="row" method="post" action="/settings/name"><input type="hidden" name="csrf" value="{{.CSRF}}">
 <input type="text" name="name" value="{{.Name}}" aria-label="Station name" maxlength="60" required> <input type="submit" value="Save"></form>
 
-<h2 class="h2">AI {{template "help" "ai"}}</h2>
-<div class="helptext" id="help-ai" hidden>
-<p>A model provider turns on Jams: a prompt on the front page that drives the station's devices. Bring your own keys: each model here is a name of your choosing, a role, a provider, the provider's name for the model, and its API key, which is seen once as it is typed and kept in a file only the station's user can read, under <code>ai/</code> in the data directory, in Vibium's own <code>ai.env</code> format.</p>
-<p><b>Agent, Say and Listen.</b> Each part keeps as many models as you add, and one of them is in use: the one a jam takes, marked <i>in use</i>. <b>Use</b> puts another in its place. An agent model is the brain of a jam: it reasons, sees the screenshots and calls the tools, and a jam may pick another at its start. A say model speaks into the device and a listen model turns its sound into text; Vibium makes those calls itself, and their settings go to Vibium, never the agent's key.</p>
-<p><b>Piper.</b> Piper speaks on this machine with no key. When Piper is installed with a voice, the station runs Piper's server itself, keeps the voice loaded, and lists it under Say as <i>piper</i>, in use unless another voice is marked; with more than one voice installed, its row picks which. A Piper server elsewhere is a voice with provider <i>Piper server</i>, the voice's name as its model and the server's address as its base URL.</p>
-<p><b>Saving.</b> An agent model is asked for one word when it is saved, so a wrong key or an unknown model is seen here and not in a failed session. Saving a name again changes its settings and keeps its key unless a new one is typed. A model named <i>host</i> is the station's own environment, when it carries Vibium's variables, and is set there.</p>
-<p><b>Jams.</b> On by itself once an agent model is set, which puts Jams in the sidebar and the prompt on the front page; off keeps the keys and puts the devices back on the front page. Sessions drive devices through <code>vibium mcp</code>, so the station needs the Vibium binary on its PATH or named with <code>--vibium</code>.</p>
-</div>
-<p class="muted">A model provider turns on Jams: a prompt on the front page that drives the station's devices. Bring your own keys.</p>
-{{range .AIParts}}{{$part := .}}<section class="aipart" id="ai-{{.Role}}"><h3>{{.Title}} {{template "help" (print "ai-" .Role)}}</h3>
-<div class="helptext" id="help-ai-{{.Role}}" hidden>
-{{if eq .Role "agent"}}<p>Each model is a file in <code>{{$.AIDir}}</code>, in Vibium's <code>ai.env</code> format, its key readable only by the station's user. <b>Add an agent model</b> takes OpenAI, Anthropic, Google Gemini, xAI, or any server that speaks OpenAI's API, such as a local one; saving asks the model for one word, so a wrong key shows here. A model set in the station's environment is listed as <i>host</i>. <a href="https://github.com/VibiumDev/station/blob/main/docs/how-to-guides/set-up-jams.md#2-an-agent-model">Set Up Jams: an agent model</a>.</p>
-{{else if eq .Role "say"}}<p>Piper's voices are the <code>.onnx</code> files in <code>{{if $.Piper.Dir}}{{$.Piper.Dir}}{{else}}piper/ in the data directory{{end}}</code>. To add one, put its <code>NAME.onnx</code> and <code>NAME.onnx.json</code> there and restart the station; the <i>piper</i> row then offers it. The Piper line below says whether Piper runs, and its output is in <code>server.log</code> in that folder. A cloud voice, OpenAI's, is a file in <code>{{$.AIDir}}</code> like an agent model. <a href="https://github.com/VibiumDev/station/blob/main/docs/how-to-guides/set-up-jams.md#4-speak-with-piper-on-this-machine">Set Up Jams: Piper</a>, <a href="https://github.com/VibiumDev/station/blob/main/docs/how-to-guides/set-up-jams.md#3-voices-listen-and-say">cloud voices</a>.</p>
-{{else}}<p>A listen model is a file in <code>{{$.AIDir}}</code>. OpenAI's <code>gpt-transcribe</code> is the one offered today; listening on this machine is not offered yet. Its settings go to Vibium with each jam, never the agent's key. <a href="https://github.com/VibiumDev/station/blob/main/docs/how-to-guides/set-up-jams.md#3-voices-listen-and-say">Set Up Jams: listen and say</a>.</p>{{end}}
-</div>
-<p class="muted">{{.About}}</p>
-{{if and (eq .Role "say") .Models}}<form class="sayprobe" data-preview-form><input type="hidden" name="csrf" value="{{$.CSRF}}"><label>Hear <input type="text" name="text" value="Come here, Watson." maxlength="50" aria-label="Words to hear, up to 50 characters"></label> <span class="muted">with ▶ on a voice</span> <span class="status" role="status"></span></form>{{end}}
-{{if .Models}}<div class="tablewrap"><table><thead><tr><th>Model</th><th>Provider</th><th>Key</th><th></th></tr></thead><tbody>
-{{range .Models}}{{$m := .}}<tr{{if .Default}} class="inuse"{{end}}><td data-l="Model"><b>{{.Name}}</b>{{if .Default}} <span class="pill inuse">in use</span>{{end}}<span class="sub">{{.Model}}{{if .ReasoningEffort}} · {{.ReasoningEffort}}{{end}}</span></td>
-<td data-l="Provider">{{.Provider}}{{if .OwnPiper}}<span class="sub">on this station</span>{{else if .BaseURL}}<span class="sub">{{.BaseURL}}</span>{{end}}</td>
-<td data-l="Key">{{if .Host}}<span class="muted">from the environment</span>{{else if eq .Provider "piper-server"}}<span class="muted">not needed</span>{{else if .HasKey}}set{{else}}<span class="muted">none</span>{{end}}</td>
-<td class="act">{{if and (eq .Role "say") (or (eq .Provider "piper-server") (eq .Provider "openai"))}}<button class="small icon" type="button" data-preview="{{.Name}}" title="Hear {{.Name}}" aria-label="Hear {{.Name}}">{{template "icon-play"}}</button> {{end}}{{if .OwnPiper}}{{if gt (len $.Piper.Voices) 1}}<form class="inline" method="post" action="/settings/piper/voice"><input type="hidden" name="csrf" value="{{$.CSRF}}"><select name="voice" aria-label="Piper voice">{{range $.Piper.Voices}}<option{{if eq . $m.Model}} selected{{end}}>{{.}}</option>{{end}}</select> <button class="small" type="submit">Use voice</button></form> {{end}}{{end}}{{if and (not .Default) (not .Host)}}<form class="inline" method="post" action="/settings/models/default"><input type="hidden" name="csrf" value="{{$.CSRF}}"><input type="hidden" name="name" value="{{.Name}}"><button class="small" type="submit">Use</button></form> {{end}}{{if and (not .Host) (not .OwnPiper)}}{{if ne .Provider "piper-server"}}<form class="inline" method="post" action="/settings/models/key"><input type="hidden" name="csrf" value="{{$.CSRF}}"><input type="hidden" name="name" value="{{.Name}}"><input type="password" name="key" placeholder="new key" aria-label="New key for {{.Name}}" autocomplete="off"> <button class="small" type="submit">Replace key</button></form> {{end}}<form class="inline" method="post" action="/settings/models/remove"><input type="hidden" name="csrf" value="{{$.CSRF}}"><input type="hidden" name="name" value="{{.Name}}"><button class="small hold" type="button" data-hold title="Hold to remove">Remove</button></form>{{end}}</td></tr>{{end}}
-</tbody></table></div>{{else}}<p class="muted">None yet.</p>{{end}}
-{{if eq .Role "say"}}<p class="piperline"><b>Piper:</b> {{if $.Piper.URL}}running at <code>{{$.Piper.URL}}</code>, {{len $.Piper.Voices}} {{if eq (len $.Piper.Voices) 1}}voice{{else}}voices{{end}} in <code>{{$.Piper.Dir}}</code>{{else if $.Piper.Python}}<span class="muted">{{if $.Piper.Missing}}{{$.Piper.Missing}}{{else}}starting{{end}}</span>{{else}}<span class="muted">not installed. Install it and a voice as the guide shows, and the station runs it.</span>{{end}}</p>{{end}}
-<details class="addmodel"><summary class="btn small">{{.Add}}</summary>
-<form class="card modelform" method="post" action="/settings/models"><input type="hidden" name="csrf" value="{{$.CSRF}}"><input type="hidden" name="role" value="{{.Role}}">
-<div class="row"><input type="text" name="name" placeholder="a name, such as {{if eq .Role "agent"}}gpt or claude{{else if eq .Role "say"}}tts{{else}}stt{{end}}" aria-label="Name" required maxlength="40">
-<select name="provider" aria-label="Provider">{{range .Providers}}<option value="{{.ID}}">{{.Label}}</option>{{end}}</select></div>
-<div class="row"><input type="text" name="model" placeholder="{{if eq .Role "say"}}the provider's model, or a Piper server's voice{{else}}the provider's model name{{end}}" aria-label="Model" required>
-<input type="password" name="key" placeholder="API key{{if eq .Role "say"}} (none for a Piper server){{end}}" aria-label="API key" autocomplete="off"></div>
-<div class="row"><input type="text" name="base_url" placeholder="{{if eq .Role "say"}}base URL: a Piper server's address{{else}}base URL (optional){{end}}" aria-label="Base URL">
-{{if eq .Role "agent"}}<select name="effort" aria-label="Reasoning effort"><option value="">reasoning effort: automatic</option>{{range $.Efforts}}{{if .}}<option value="{{.}}">{{.}}</option>{{end}}{{end}}</select>{{end}}
-<label class="check"><input type="checkbox" name="default"> use it now</label>
-<input class="primary" type="submit" value="Add"></div></form></details></section>
-{{end}}
-<div class="tablewrap"><table class="kv">
-<tr><th>Jams</th><td>{{if .JamsPossible}}<form class="inline" method="post" action="/settings/jams"><input type="hidden" name="csrf" value="{{.CSRF}}"><input type="hidden" name="on" value="{{if .JamsOn}}0{{else}}1{{end}}">{{if .JamsOn}}on <button class="link" type="submit">turn off</button>{{else}}off <button class="link" type="submit">turn on</button>{{end}}</form>{{else}}<span class="muted">off until an agent model is set</span>{{end}}</td></tr>
-{{if .JamsPossible}}<tr><th>Jam video</th><td><form class="inline" method="post" action="/settings/jam-video"><input type="hidden" name="csrf" value="{{.CSRF}}"><input type="hidden" name="on" value="{{if .JamVideo}}0{{else}}1{{end}}">{{if .JamVideo}}on <button class="link" type="submit">turn off</button>{{else}}off <button class="link" type="submit">turn on</button>{{end}} <span class="muted">a jam's record holds video of the device's screen</span></form></td></tr>
-{{end}}<tr><th>Vibium</th><td>{{if .Vibium}}<code>{{.Vibium}}</code>{{else}}<span class="muted">not found ({{.VibiumMissing}}); jam sessions drive devices through <code>vibium mcp</code>, so put the binary on the station's PATH or pass <code>--vibium</code></span>{{end}}</td></tr>
-</table></div>
-
-{{if .JamsPossible}}<h2 class="h2" id="jam-notes">Jam notes {{template "help" "jam-notes"}}</h2>
-<p class="helptext" id="help-jam-notes" hidden>Standing guidance for the model, given to it with every jam on this station, whoever starts it. Each person can add notes of their own on Account. A jam's transcript shows the notes it was given. They travel with every step of a jam, so short notes cost fewer tokens. They are guidance and not a guard: a prompt that asks for something else is followed. The notes are also the file <code>jam-notes.md</code> in the station's data directory, which can be edited by hand. A change applies to the next jam.</p>
-<form method="post" action="/settings/jam-notes"><input type="hidden" name="csrf" value="{{.CSRF}}">
-<textarea class="notes" name="notes" rows="6" maxlength="{{.MaxNotes}}" aria-label="Notes for every jam on this station" placeholder="After a completed run or a passed check, leave the device on its home screen.">{{.JamNotes}}</textarea>
-<input type="submit" value="Save notes"></form>
-{{end}}<h2 class="h2" id="enroll">Enroll a rig {{template "help" "enroll"}}</h2>
-<p class="helptext" id="help-enroll" hidden>A rig is a machine with devices on it: a Raspberry Pi running Roadie with a phone wired to it. Enrolling joins it to this station. From then on the rig keeps a tunnel open to the station, the station lists the rig's devices, and holds on them go through the tunnel. An enrollment code is used once and expires after 15 minutes. Every code still open is listed here until it is used, cancelled or runs out, and Cancel, held for a moment, ends one at once. The station keeps codes hashed, so a code's text is shown only while the station that made it still runs. A code's last group is this station's key fingerprint, which the rig checks, so it enrolls with the station you meant. On the same network the rig finds the station by mDNS and the address can be left out.</p>
-<form class="row" method="post" action="/settings/codes"><input type="hidden" name="csrf" value="{{.CSRF}}">
-<input class="primary" type="submit" value="New enrollment code"></form>
-{{range $i, $c := .OpenCodes}}<div class="card code{{if and (eq $i 0) $c.Code}} featured{{end}}">
-<div class="codehead"><span>{{if $c.Code}}On the rig, until {{$c.Until}}:{{else}}A code made at {{$c.Made}}, good until {{$c.Until}}.{{end}}</span>
-<form class="inline" method="post" action="/settings/codes/cancel"><input type="hidden" name="csrf" value="{{$.CSRF}}"><input type="hidden" name="id" value="{{$c.ID}}"><button class="small hold" type="button" data-hold title="Hold to cancel">Cancel</button></form></div>
-{{if $c.Code}}<p class="secret">roadie enroll {{$.PublicURL}} --code {{$c.Code}}</p>{{end}}</div>{{end}}
-{{if .OpenCodes}}<p class="muted">On the same network the URL can be left out: the rig finds the station over mDNS. A code ends with this station's key fingerprint, {{.Fingerprint}}, which the rig checks.</p>{{end}}
-
-<h2 class="h2">Rigs {{template "help" "rigs"}}</h2>
-<p class="helptext" id="help-rigs" hidden>The rigs enrolled here. Key is the rig's own public key, which signs everything the rig sends. Devices is what the rig announces each time it connects, so a change on the rig shows after its next connection. Remove refuses the rig's key from then on; to come back, it enrolls again with a new code.</p>
-{{if not .Rigs}}<p class="muted">None enrolled.</p>{{end}}
-{{if .Rigs}}<div class="tablewrap"><table><thead><tr><th>Rig</th><th>Key</th><th>Devices</th><th>Enrolled</th><th></th></tr></thead><tbody>
-{{range .Rigs}}<tr><td data-l="Rig"><b>{{.Name}}</b><span class="sub">{{.ID}}</span></td><td data-l="Key"><code>{{npub .PubKey}}</code></td>
-<td data-l="Devices">{{range .Devices}}{{.Title}} <span class="muted">({{.Kind}}{{if .Platform}}, {{platform .Platform}}{{if .OSVersion}} {{.OSVersion}}{{end}}{{end}})</span> {{end}}</td><td data-l="Enrolled">{{.EnrolledAt.Format "Jan 2, 2006"}}</td>
-<td class="act"><form class="inline" method="post" action="/settings/rigs/remove"><input type="hidden" name="csrf" value="{{$.CSRF}}"><input type="hidden" name="rig" value="{{.ID}}"><button class="small hold" type="button" data-hold title="Hold to remove">Remove</button></form></td></tr>{{end}}</tbody></table></div>{{end}}
-
-<h2 class="h2" id="teams">Users {{template "help" "users"}}</h2>
-<p class="helptext" id="help-users" hidden>Who can sign in. An admin sees every device, jam and record and manages the station here; a regular user sees the devices their teams were given, and the jams and records made on them, and nothing until then. Adding a user makes a setup link, good for a day, that you pass on: they choose their own password there and add an authenticator app, and every password sign-in asks for a code from it. Lock ends a user's sign-ins and tokens and keeps their history. Reset sign-in forgets their password and authenticator and makes a new link, for a forgotten password or a lost phone. Remove deletes their tokens too. You cannot lock yourself or take your own admin rights away.</p>
-{{if .NoPassword}}<div class="msg">Nobody can sign in by password yet; <code>station passwd</code> on the station's machine creates the owner.</div>{{end}}
-{{if .SetupURL}}<div class="card featured">Setup link for <b>{{.SetupLogin}}</b>, shown once and good for 24 hours. Pass it on by a channel you trust:<p class="secret">{{.SetupURL}}</p></div>{{end}}
-{{if .Users}}<div class="tablewrap"><table><thead><tr><th>Login</th><th>Name</th><th>Role</th><th>Teams</th><th>Sign-in</th><th>Last sign-in</th><th></th></tr></thead><tbody>
-{{range .Users}}<tr>
-<td data-l="Login"><b>{{.Login}}</b></td>
-<td data-l="Name">{{if .Name}}{{.Name}}{{else}}<span class="muted">—</span>{{end}}</td>
-<td data-l="Role">{{if .Admin}}admin{{else}}regular{{end}}{{if .Self}} <span class="muted">(you)</span>{{end}}</td>
-<td data-l="Teams">{{if .Admin}}<span class="muted">all</span>{{else if .TeamNames}}{{range $i, $t := .TeamNames}}{{if $i}}, {{end}}{{$t}}{{end}}{{else}}<span class="muted">none</span>{{end}}</td>
-<td data-l="Sign-in">{{.SignIn}}</td>
-<td data-l="Last sign-in">{{if .LastLogin.IsZero}}<span class="muted">never</span>{{else}}{{.LastLogin.Local.Format "Jan 2 15:04"}}{{end}}</td>
-<td class="act">{{if not .Self}}<form class="inline" method="post" action="/settings/users/role"><input type="hidden" name="csrf" value="{{$.CSRF}}"><input type="hidden" name="user" value="{{.ID}}"><input type="hidden" name="admin" value="{{if .Admin}}0{{else}}1{{end}}"><button class="small" type="submit">{{if .Admin}}Make regular{{else}}Make admin{{end}}</button></form> <form class="inline" method="post" action="/settings/users/lock"><input type="hidden" name="csrf" value="{{$.CSRF}}"><input type="hidden" name="user" value="{{.ID}}"><input type="hidden" name="locked" value="{{if .Locked}}0{{else}}1{{end}}"><button class="small" type="submit">{{if .Locked}}Unlock{{else}}Lock{{end}}</button></form> {{end}}<form class="inline" method="post" action="/settings/users/reset"><input type="hidden" name="csrf" value="{{$.CSRF}}"><input type="hidden" name="user" value="{{.ID}}"><button class="small hold" type="button" data-hold title="Hold to forget their password and authenticator and make a new setup link">Reset sign-in</button></form>{{if not .Self}} <form class="inline" method="post" action="/settings/users/remove"><input type="hidden" name="csrf" value="{{$.CSRF}}"><input type="hidden" name="user" value="{{.ID}}"><button class="small hold" type="button" data-hold title="Hold to remove">Remove</button></form>{{end}}</td>
-</tr>{{end}}</tbody></table></div>{{end}}
-<form class="card modelform" method="post" action="/settings/users"><input type="hidden" name="csrf" value="{{.CSRF}}">
-<div class="row"><input type="text" name="login" placeholder="login, such as ann@example.com" aria-label="Login" autocomplete="off" autocapitalize="none" spellcheck="false" required> <input type="text" name="name" placeholder="name" aria-label="Name" autocomplete="off"> <label class="check"><input type="checkbox" name="admin"> admin</label> <input type="submit" value="Add user"></div></form>
-
-<h2 class="h2">Teams {{template "help" "teams"}}</h2>
-<p class="helptext" id="help-teams" hidden>A team is a group of users; devices are shared with teams, under Device access. A user may be in several teams, and admins are in every team without being listed.</p>
-{{if .Teams}}<div class="tablewrap"><table><thead><tr><th>Team</th><th>Members</th><th></th></tr></thead><tbody>
-{{range .Teams}}<tr>
-<td data-l="Team"><b>{{.Name}}</b><span class="sub">{{.ID}}</span></td>
-<td data-l="Members">{{range .Members}}<span class="member">{{.Login}} <form class="inline" method="post" action="/settings/teams/members"><input type="hidden" name="csrf" value="{{$.CSRF}}"><input type="hidden" name="team" value="{{$.ID}}"><input type="hidden" name="user" value="{{.ID}}"><input type="hidden" name="in" value="0"><button class="link" type="submit" title="Take {{.Login}} out of the team" aria-label="Take {{.Login}} out of the team">×</button></form></span> {{end}}{{if not .Members}}<span class="muted">nobody yet</span>{{end}}{{if .Joinable}} <form class="inline" method="post" action="/settings/teams/members"><input type="hidden" name="csrf" value="{{$.CSRF}}"><input type="hidden" name="team" value="{{.ID}}"><select name="user" aria-label="Add a member to {{.Name}}">{{range .Joinable}}<option value="{{.ID}}">{{.Login}}</option>{{end}}</select> <button class="small" type="submit">Add</button></form>{{end}}</td>
-<td class="act"><form class="inline" method="post" action="/settings/teams/remove"><input type="hidden" name="csrf" value="{{$.CSRF}}"><input type="hidden" name="team" value="{{.ID}}"><button class="small hold" type="button" data-hold title="Hold to remove">Remove</button></form></td>
-</tr>{{end}}</tbody></table></div>{{end}}
-<form class="row" method="post" action="/settings/teams"><input type="hidden" name="csrf" value="{{.CSRF}}">
-<input type="text" name="name" placeholder="team name" aria-label="Team name" required> <input type="submit" value="Add team"></form>
-
-<h2 class="h2">Device access {{template "help" "access"}}</h2>
-<p class="helptext" id="help-access" hidden>What each team may do with each device. Watch opens the watching page and shows the device's jams and records; drive takes the device from the viewer too; jam starts jams and drives it with agents over the API as well. Nothing is shared until it is set here, and a change saves at once.</p>
-{{if and .Teams .AccessRows}}<div class="tablewrap"><table class="access"><thead><tr><th>Device</th>{{range .Teams}}<th>{{.Name}}</th>{{end}}</tr></thead><tbody>
-{{range .AccessRows}}{{$row := .}}<tr><td data-l="Device"><b>{{.Device.Title}}</b><span class="sub">{{.Device.ID}}</span></td>
-{{range .Cells}}<td data-l="{{.Team.Name}}"><form class="inline" method="post" action="/settings/access"><input type="hidden" name="csrf" value="{{$.CSRF}}"><input type="hidden" name="device" value="{{$row.Device.ID}}"><input type="hidden" name="team" value="{{.Team.ID}}"><select name="level" data-submit aria-label="{{.Team.Name}} on {{$row.Device.Title}}">{{$cell := .}}{{range $.Levels}}<option value="{{.}}"{{if eq . $cell.Level}} selected{{end}}>{{if .}}{{.}}{{else}}none{{end}}</option>{{end}}</select></form></td>{{end}}
-</tr>{{end}}</tbody></table></div>{{else}}<p class="muted">{{if not .Teams}}Make a team, and the devices appear here to share.{{else}}No devices yet.{{end}}</p>{{end}}
-
-<h2 class="h2">API tokens {{template "help" "tokens"}}</h2>
-<p class="helptext" id="help-tokens" hidden>A token lets an agent or a script use this station without signing in, sent as <code>Authorization: Bearer &lt;token&gt;</code>. It acts as its user, within that user's teams, and within its own level: <b>watch</b> only looks; <b>drive</b> holds and drives devices, starts jams and runs agents, which is what most tokens need; <b>admin</b> also manages the station, users and teams. A token's level is capped by its user's own: admin for an admin, drive for a user with drive or jam on some device, watch for one who may only watch. Everyone makes their own on their Account page; here you make anyone's. The secret is shown once, when the token is made; the station keeps only a hash of it. Revoke stops the token at once.</p>
-{{if .NewToken}}<div class="card featured">Token <b>{{.NewTokenName}}</b>, shown once:<p class="secret">{{.NewToken}}</p></div>{{end}}
-{{if .Tokens}}<div class="tablewrap"><table><thead><tr><th>Name</th><th>User</th><th>Access</th><th>Created</th><th>Last used</th><th></th></tr></thead><tbody>
-{{range .Tokens}}<tr><td data-l="Name"><b>{{.Name}}</b></td><td data-l="User">{{with index $.TokenUsers .UserID}}{{.}}{{else}}owner{{end}}</td><td data-l="Access">{{.Level}}</td><td data-l="Created">{{.CreatedAt.Format "Jan 2, 2006"}}</td>
-<td data-l="Last used">{{if .UsedAt.IsZero}}<span class="muted">never</span>{{else}}{{.UsedAt.Format "Jan 2 15:04"}}{{end}}</td>
-<td class="act"><form class="inline" method="post" action="/settings/tokens/revoke"><input type="hidden" name="csrf" value="{{$.CSRF}}"><input type="hidden" name="name" value="{{.Name}}"><button class="small hold" type="button" data-hold title="Hold to revoke">Revoke</button></form></td></tr>{{end}}</tbody></table></div>{{end}}
-<form class="row" method="post" action="/settings/tokens"><input type="hidden" name="csrf" value="{{.CSRF}}">
-<select name="user" aria-label="For which user">{{range .Users}}<option value="{{.ID}}"{{if .Self}} selected{{end}}>{{.Login}}</option>{{end}}</select>
-<input type="text" name="name" placeholder="name" aria-label="Token name" required> <select name="level" aria-label="Access level"><option value="watch">watch</option><option value="drive" selected>drive</option><option value="admin">admin</option></select>
-<input type="submit" value="Create token"></form>
-
+<h2 class="h2">Appearance {{template "help" "appearance"}}</h2>
+<p class="helptext" id="help-appearance" hidden>Light or dark for this browser, or whatever the device is set to. The choice stays in the browser, not on the station, so each browser has its own.</p>
+<fieldset class="themepick" id="themePick"><legend class="sr">Theme</legend>
+<label><input type="radio" name="theme" value="system"><span>System</span></label>
+<label><input type="radio" name="theme" value="light"><span>Light</span></label>
+<label><input type="radio" name="theme" value="dark"><span>Dark</span></label></fieldset>
 
 <h2 class="h2">Network {{template "help" "network"}}</h2>
 <div class="helptext" id="help-network" hidden>
@@ -476,15 +376,139 @@ var pages = template.Must(template.New("").Funcs(template.FuncMap{"npub": npub, 
 <tr><th>Directory</th><td><code>{{.RecordsDir}}</code></td></tr>
 <tr><th>Limits</th><td>{{.RecordsMaxFile}} a file, {{.RecordsMaxTotal}} in all, {{if .RecordsMaxAge}}{{.RecordsMaxAge}} each{{else}}no age limit{{end}}</td></tr>
 </table></div>
+{{end}}
 
-<h2 class="h2">Appearance {{template "help" "appearance"}}</h2>
-<p class="helptext" id="help-appearance" hidden>Light or dark for this browser, or whatever the device is set to. The choice stays in the browser, not on the station, so each browser has its own.</p>
-<fieldset class="themepick" id="themePick"><legend class="sr">Theme</legend>
-<label><input type="radio" name="theme" value="system"><span>System</span></label>
-<label><input type="radio" name="theme" value="light"><span>Light</span></label>
-<label><input type="radio" name="theme" value="dark"><span>Dark</span></label></fieldset>
-</main>{{template "foot" .}}{{end}}
+{{define "settings-ai"}}<h2 class="h2" id="ai">AI models {{template "help" "ai"}}</h2>
+<div class="helptext" id="help-ai" hidden>
+<p>A jam session can use three kinds of model: an AI chat model that drives the device (Agent), text to speech (Say), and speech to text (Listen). You can add more than one of each. New jam sessions use the one marked <i>in use</i>, and <b>Use</b> switches to another.</p>
+<p>Each model is saved as a file in <code>{{.AIDir}}</code>, in Vibium's <code>ai.env</code> format. Only the station's user can read these files, because they hold your API keys. <a href="https://github.com/VibiumDev/station/blob/main/docs/how-to-guides/set-up-jams.md">Set Up Jams</a> walks through it step by step.</p>
+</div>
+{{range .AIParts}}<section class="aipart" id="ai-{{.Role}}"><h3>{{.Title}} {{template "help" (print "ai-" .Role)}}</h3>
+<div class="helptext" id="help-ai-{{.Role}}" hidden>
+{{if eq .Role "agent"}}<p>You can use OpenAI, Anthropic, Google Gemini, xAI, or any server with an OpenAI-compatible API, including one running on your own machine. When you add a model, the station sends it a short test message, so a wrong key or model name shows up right away. A model set in the station's environment is listed as <i>host</i>. <a href="https://github.com/VibiumDev/station/blob/main/docs/how-to-guides/set-up-jams.md#2-an-agent-model">How to add an agent model</a></p>
+{{else if eq .Role "say"}}<p>Piper runs on this station and needs no API key.{{if $.Piper.URL}} Its server is running at <code>{{$.Piper.URL}}</code>.{{end}} Its voices are the <code>.onnx</code> files in <code>{{if $.Piper.Dir}}{{$.Piper.Dir}}{{else}}piper/ in the data directory{{end}}</code>. To add a voice, download its <code>.onnx</code> and <code>.onnx.json</code> files into that folder and restart the station. If Piper doesn't start, look at <code>server.log</code> in the same folder.</p>
+<p>To use OpenAI's text to speech instead, add it with <b>Add a voice</b> and your API key. <a href="https://github.com/VibiumDev/station/blob/main/docs/how-to-guides/set-up-jams.md#4-talk-with-piper-on-this-machine">How to set up Piper</a> · <a href="https://github.com/VibiumDev/station/blob/main/docs/how-to-guides/set-up-jams.md#3-voices-listen-and-say">How to add a cloud voice</a></p>
+{{else}}<p>OpenAI's <code>gpt-transcribe</code> is the only option for now. Speech to text on this machine isn't supported yet. <a href="https://github.com/VibiumDev/station/blob/main/docs/how-to-guides/set-up-jams.md#3-voices-listen-and-say">How to add a listen model</a></p>{{end}}
+</div>
+<p class="muted">{{.About}}</p>
+{{if and (eq .Role "say") .Models}}<form class="sayprobe" data-preview-form><input type="hidden" name="csrf" value="{{$.CSRF}}"><label for="sayText">Test phrase</label> <input id="sayText" type="text" name="text" value="Come here, Watson." maxlength="50"> <span class="status" role="status"></span></form>{{end}}
+{{if .Models}}<ul class="models">{{range .Models}}{{template "model-row" (dict "M" . "S" $)}}{{end}}</ul>{{else}}<p class="muted">None yet.</p>{{end}}
+{{if and (eq .Role "say") (not $.Piper.URL)}}<p class="piperline muted">{{if $.Piper.Python}}Piper: {{if $.Piper.Missing}}{{$.Piper.Missing}}{{else}}starting.{{end}}{{else}}Piper isn't installed. <a href="https://github.com/VibiumDev/station/blob/main/docs/how-to-guides/set-up-jams.md#4-talk-with-piper-on-this-machine">How to install it</a>{{end}}</p>{{end}}
+<details class="addmodel"><summary class="btn small">{{.Add}}</summary>
+<form class="card modelform" method="post" action="/settings/models"><input type="hidden" name="csrf" value="{{$.CSRF}}"><input type="hidden" name="role" value="{{.Role}}">
+<div class="row"><input type="text" name="name" placeholder="Name, such as {{if eq .Role "agent"}}gpt or claude{{else if eq .Role "say"}}tts{{else}}stt{{end}}" aria-label="Name" required maxlength="40">
+<select name="provider" aria-label="Provider">{{range .Providers}}<option value="{{.ID}}">{{.Label}}</option>{{end}}</select></div>
+<div class="row"><input type="text" name="model" placeholder="{{if eq .Role "say"}}Model, or a Piper voice name{{else}}Model name{{end}}" aria-label="Model" required>
+<input type="password" name="key" placeholder="API key{{if eq .Role "say"}} (not needed for Piper){{end}}" aria-label="API key" autocomplete="off"></div>
+<div class="row"><input type="text" name="base_url" placeholder="{{if eq .Role "say"}}Base URL (a Piper server's address){{else}}Base URL (optional){{end}}" aria-label="Base URL">
+{{if eq .Role "agent"}}<select name="effort" aria-label="Reasoning effort"><option value="">Reasoning effort: automatic</option>{{range $.Efforts}}{{if .}}<option value="{{.}}">{{.}}</option>{{end}}{{end}}</select>{{end}}
+<label class="check"><input type="checkbox" name="default"> Use it now</label>
+<input class="primary" type="submit" value="Add"></div></form></details></section>
+{{end}}
+
+<h2 class="h2" id="jams">Jam sessions {{template "help" "jams"}}</h2>
+<p class="helptext" id="help-jams" hidden>Jam sessions let people type a prompt on the front page and have the AI chat model carry it out on a device. They turn on by themselves once you add an agent model. Turning them off hides the prompt and keeps your models and keys. Each session drives the device through <code>vibium mcp</code>, so the station needs the Vibium binary on its PATH or set with <code>--vibium</code>.</p>
+<div class="tablewrap"><table class="kv">
+<tr><th>Jam sessions</th><td>{{if .JamsPossible}}<form class="inline" method="post" action="/settings/jams"><input type="hidden" name="csrf" value="{{.CSRF}}"><input type="hidden" name="on" value="{{if .JamsOn}}0{{else}}1{{end}}">{{if .JamsOn}}on <button class="link" type="submit">turn off</button>{{else}}off <button class="link" type="submit">turn on</button>{{end}}</form>{{else}}<span class="muted">off until you add an agent model</span>{{end}}</td></tr>
+{{if .JamsPossible}}<tr><th>Video</th><td><form class="inline" method="post" action="/settings/jam-video"><input type="hidden" name="csrf" value="{{.CSRF}}"><input type="hidden" name="on" value="{{if .JamVideo}}0{{else}}1{{end}}">{{if .JamVideo}}on <button class="link" type="submit">turn off</button>{{else}}off <button class="link" type="submit">turn on</button>{{end}} <span class="muted">Saves a video of the device's screen with each session.</span></form></td></tr>
+{{end}}<tr><th>Vibium</th><td>{{if .Vibium}}<code>{{.Vibium}}</code>{{else}}<span class="muted">not found ({{.VibiumMissing}}). Put the Vibium binary on the station's PATH or set it with <code>--vibium</code>.</span>{{end}}</td></tr>
+</table></div>
+
+{{if .JamsPossible}}<h2 class="h2" id="jam-notes">Jam notes {{template "help" "jam-notes"}}</h2>
+<p class="helptext" id="help-jam-notes" hidden>Instructions added to every jam session on this station, whoever starts it. Each person can also add their own on their Account page, and a session's transcript shows the notes it was given. Keep them short, because they're sent with every step of a session. They're guidance, not a rule: a prompt that asks for something else is followed. They're saved as <code>jam-notes.md</code> in the station's data directory, which you can also edit by hand. Changes apply to the next session.</p>
+<form method="post" action="/settings/jam-notes"><input type="hidden" name="csrf" value="{{.CSRF}}">
+<textarea class="notes" name="notes" rows="6" maxlength="{{.MaxNotes}}" aria-label="Notes for every jam session on this station" placeholder="After a completed run or a passed check, leave the device on its home screen.">{{.JamNotes}}</textarea>
+<input type="submit" value="Save notes"></form>
+{{end}}{{end}}
+
+{{define "model-row"}}{{$m := .M}}{{$s := .S}}<li{{if $m.Default}} class="inuse"{{end}}>
+<div class="who"><b>{{$m.Name}}</b>{{if $m.Default}} <span class="pill inuse">in use</span>{{end}}
+<span class="sub">{{if $m.OwnPiper}}Piper, on this station · no API key needed{{else}}{{providerName $m.Provider}} · {{$m.Model}}{{if $m.ReasoningEffort}} · {{$m.ReasoningEffort}} reasoning{{end}}{{if $m.BaseURL}} · {{$m.BaseURL}}{{end}} · {{if $m.Host}}set in the environment{{else if eq $m.Provider "piper-server"}}no API key needed{{else if $m.HasKey}}API key set{{else}}no API key{{end}}{{end}}</span></div>
+<div class="acts">{{if $m.OwnPiper}}<form class="inline pipervoice" method="post" action="/settings/piper/voice"><input type="hidden" name="csrf" value="{{$s.CSRF}}">{{if gt (len $s.Piper.Voices) 1}}<select name="voice" aria-label="Piper voice"{{if $m.Default}} data-current="{{$m.Model}}"{{end}}>{{range $s.Piper.Voices}}<option{{if eq . $m.Model}} selected{{end}}>{{.}}</option>{{end}}</select>{{else}}<input type="hidden" name="voice" value="{{$m.Model}}"><span class="voice">{{$m.Model}}</span>{{end}}
+<button class="small icon" type="button" data-preview="{{$m.Name}}" title="Hear this voice" aria-label="Hear this voice">{{template "icon-play"}}</button>
+<button class="small" type="submit"{{if $m.Default}} hidden{{end}}>Use</button></form>
+{{else}}{{if and (eq $m.Role "say") (or (eq $m.Provider "piper-server") (eq $m.Provider "openai"))}}<button class="small icon" type="button" data-preview="{{$m.Name}}" title="Hear this voice" aria-label="Hear {{$m.Name}}">{{template "icon-play"}}</button>
+{{end}}{{if and (not $m.Default) (not $m.Host)}}<form class="inline" method="post" action="/settings/models/default"><input type="hidden" name="csrf" value="{{$s.CSRF}}"><input type="hidden" name="name" value="{{$m.Name}}"><button class="small" type="submit">Use</button></form>
+{{end}}{{if not $m.Host}}<details class="more"><summary class="btn small icon" title="Key and remove" aria-label="Key and remove for {{$m.Name}}">⋯</summary><div class="menu">
+{{if ne $m.Provider "piper-server"}}<form class="row" method="post" action="/settings/models/key"><input type="hidden" name="csrf" value="{{$s.CSRF}}"><input type="hidden" name="name" value="{{$m.Name}}"><input type="password" name="key" placeholder="New API key" aria-label="New API key for {{$m.Name}}" autocomplete="off"> <button class="small" type="submit">Replace key</button></form>
+{{end}}<form method="post" action="/settings/models/remove"><input type="hidden" name="csrf" value="{{$s.CSRF}}"><input type="hidden" name="name" value="{{$m.Name}}"><button class="small hold" type="button" data-hold title="Hold to remove">Remove {{$m.Name}}</button></form>
+</div></details>{{end}}{{end}}</div></li>{{end}}
+
+{{define "settings-rigs"}}<h2 class="h2" id="enroll">Enroll a rig {{template "help" "enroll"}}</h2>
+<p class="helptext" id="help-enroll" hidden>A rig is a machine with devices on it: a Raspberry Pi running Roadie with a phone wired to it. Enrolling joins it to this station. From then on the rig keeps a tunnel open to the station, the station lists the rig's devices, and holds on them go through the tunnel. An enrollment code is used once and expires after 15 minutes. Every code still open is listed here until it is used, cancelled or runs out, and Cancel, held for a moment, ends one at once. The station keeps codes hashed, so a code's text is shown only while the station that made it still runs. A code's last group is this station's key fingerprint, which the rig checks, so it enrolls with the station you meant. On the same network the rig finds the station by mDNS and the address can be left out.</p>
+<form class="row" method="post" action="/settings/codes"><input type="hidden" name="csrf" value="{{.CSRF}}">
+<input class="primary" type="submit" value="New enrollment code"></form>
+{{range $i, $c := .OpenCodes}}<div class="card code{{if and (eq $i 0) $c.Code}} featured{{end}}">
+<div class="codehead"><span>{{if $c.Code}}On the rig, until {{$c.Until}}:{{else}}A code made at {{$c.Made}}, good until {{$c.Until}}.{{end}}</span>
+<form class="inline" method="post" action="/settings/codes/cancel"><input type="hidden" name="csrf" value="{{$.CSRF}}"><input type="hidden" name="id" value="{{$c.ID}}"><button class="small hold" type="button" data-hold title="Hold to cancel">Cancel</button></form></div>
+{{if $c.Code}}<p class="secret">roadie enroll {{$.PublicURL}} --code {{$c.Code}}</p>{{end}}</div>{{end}}
+{{if .OpenCodes}}<p class="muted">On the same network the URL can be left out: the rig finds the station over mDNS. A code ends with this station's key fingerprint, {{.Fingerprint}}, which the rig checks.</p>{{end}}
+
+<h2 class="h2">Rigs {{template "help" "rigs"}}</h2>
+<p class="helptext" id="help-rigs" hidden>The rigs enrolled here. Key is the rig's own public key, which signs everything the rig sends. Devices is what the rig announces each time it connects, so a change on the rig shows after its next connection. Remove refuses the rig's key from then on; to come back, it enrolls again with a new code.</p>
+{{if not .Rigs}}<p class="muted">None enrolled.</p>{{end}}
+{{if .Rigs}}<div class="tablewrap"><table><thead><tr><th>Rig</th><th>Key</th><th>Devices</th><th>Enrolled</th><th></th></tr></thead><tbody>
+{{range .Rigs}}<tr><td data-l="Rig"><b>{{.Name}}</b><span class="sub">{{.ID}}</span></td><td data-l="Key"><code>{{npub .PubKey}}</code></td>
+<td data-l="Devices">{{range .Devices}}{{.Title}} <span class="muted">({{.Kind}}{{if .Platform}}, {{platform .Platform}}{{if .OSVersion}} {{.OSVersion}}{{end}}{{end}})</span> {{end}}</td><td data-l="Enrolled">{{.EnrolledAt.Format "Jan 2, 2006"}}</td>
+<td class="act"><form class="inline" method="post" action="/settings/rigs/remove"><input type="hidden" name="csrf" value="{{$.CSRF}}"><input type="hidden" name="rig" value="{{.ID}}"><button class="small hold" type="button" data-hold title="Hold to remove">Remove</button></form></td></tr>{{end}}</tbody></table></div>{{end}}
+{{end}}
+
+{{define "settings-access"}}<h2 class="h2" id="users">Users {{template "help" "users"}}</h2>
+<p class="helptext" id="help-users" hidden>Who can sign in. An admin sees every device, jam and record and manages the station here; a regular user sees the devices their teams were given, and the jams and records made on them, and nothing until then. Adding a user makes a setup link, good for a day, that you pass on: they choose their own password there and add an authenticator app, and every password sign-in asks for a code from it. Lock ends a user's sign-ins and tokens and keeps their history. Reset sign-in forgets their password and authenticator and makes a new link, for a forgotten password or a lost phone. Remove deletes their tokens too. You cannot lock yourself or take your own admin rights away.</p>
+{{if .NoPassword}}<div class="msg">Nobody can sign in by password yet; <code>station passwd</code> on the station's machine creates the owner.</div>{{end}}
+{{if .SetupURL}}<div class="card featured">Setup link for <b>{{.SetupLogin}}</b>, shown once and good for 24 hours. Pass it on by a channel you trust:<p class="secret">{{.SetupURL}}</p></div>{{end}}
+{{if .Users}}<div class="tablewrap"><table><thead><tr><th>Login</th><th>Name</th><th>Role</th><th>Teams</th><th>Sign-in</th><th>Last sign-in</th><th></th></tr></thead><tbody>
+{{range .Users}}<tr>
+<td data-l="Login"><b>{{.Login}}</b></td>
+<td data-l="Name">{{if .Name}}{{.Name}}{{else}}<span class="muted">—</span>{{end}}</td>
+<td data-l="Role">{{if .Admin}}admin{{else}}regular{{end}}{{if .Self}} <span class="muted">(you)</span>{{end}}</td>
+<td data-l="Teams">{{if .Admin}}<span class="muted">all</span>{{else if .TeamNames}}{{range $i, $t := .TeamNames}}{{if $i}}, {{end}}{{$t}}{{end}}{{else}}<span class="muted">none</span>{{end}}</td>
+<td data-l="Sign-in">{{.SignIn}}</td>
+<td data-l="Last sign-in">{{if .LastLogin.IsZero}}<span class="muted">never</span>{{else}}{{.LastLogin.Local.Format "Jan 2 15:04"}}{{end}}</td>
+<td class="act">{{if not .Self}}<form class="inline" method="post" action="/settings/users/role"><input type="hidden" name="csrf" value="{{$.CSRF}}"><input type="hidden" name="user" value="{{.ID}}"><input type="hidden" name="admin" value="{{if .Admin}}0{{else}}1{{end}}"><button class="small" type="submit">{{if .Admin}}Make regular{{else}}Make admin{{end}}</button></form> <form class="inline" method="post" action="/settings/users/lock"><input type="hidden" name="csrf" value="{{$.CSRF}}"><input type="hidden" name="user" value="{{.ID}}"><input type="hidden" name="locked" value="{{if .Locked}}0{{else}}1{{end}}"><button class="small" type="submit">{{if .Locked}}Unlock{{else}}Lock{{end}}</button></form> {{end}}<form class="inline" method="post" action="/settings/users/reset"><input type="hidden" name="csrf" value="{{$.CSRF}}"><input type="hidden" name="user" value="{{.ID}}"><button class="small hold" type="button" data-hold title="Hold to forget their password and authenticator and make a new setup link">Reset sign-in</button></form>{{if not .Self}} <form class="inline" method="post" action="/settings/users/remove"><input type="hidden" name="csrf" value="{{$.CSRF}}"><input type="hidden" name="user" value="{{.ID}}"><button class="small hold" type="button" data-hold title="Hold to remove">Remove</button></form>{{end}}</td>
+</tr>{{end}}</tbody></table></div>{{end}}
+<form class="card modelform" method="post" action="/settings/users"><input type="hidden" name="csrf" value="{{.CSRF}}">
+<div class="row"><input type="text" name="login" placeholder="login, such as ann@example.com" aria-label="Login" autocomplete="off" autocapitalize="none" spellcheck="false" required> <input type="text" name="name" placeholder="name" aria-label="Name" autocomplete="off"> <label class="check"><input type="checkbox" name="admin"> admin</label> <input type="submit" value="Add user"></div></form>
+
+<h2 class="h2" id="teams">Teams {{template "help" "teams"}}</h2>
+<p class="helptext" id="help-teams" hidden>A team is a group of users; devices are shared with teams, under Device access. A user may be in several teams, and admins are in every team without being listed.</p>
+{{if .Teams}}<div class="tablewrap"><table><thead><tr><th>Team</th><th>Members</th><th></th></tr></thead><tbody>
+{{range .Teams}}<tr>
+<td data-l="Team"><b>{{.Name}}</b><span class="sub">{{.ID}}</span></td>
+<td data-l="Members">{{range .Members}}<span class="member">{{.Login}} <form class="inline" method="post" action="/settings/teams/members"><input type="hidden" name="csrf" value="{{$.CSRF}}"><input type="hidden" name="team" value="{{$.ID}}"><input type="hidden" name="user" value="{{.ID}}"><input type="hidden" name="in" value="0"><button class="link" type="submit" title="Take {{.Login}} out of the team" aria-label="Take {{.Login}} out of the team">×</button></form></span> {{end}}{{if not .Members}}<span class="muted">nobody yet</span>{{end}}{{if .Joinable}} <form class="inline" method="post" action="/settings/teams/members"><input type="hidden" name="csrf" value="{{$.CSRF}}"><input type="hidden" name="team" value="{{.ID}}"><select name="user" aria-label="Add a member to {{.Name}}">{{range .Joinable}}<option value="{{.ID}}">{{.Login}}</option>{{end}}</select> <button class="small" type="submit">Add</button></form>{{end}}</td>
+<td class="act"><form class="inline" method="post" action="/settings/teams/remove"><input type="hidden" name="csrf" value="{{$.CSRF}}"><input type="hidden" name="team" value="{{.ID}}"><button class="small hold" type="button" data-hold title="Hold to remove">Remove</button></form></td>
+</tr>{{end}}</tbody></table></div>{{end}}
+<form class="row" method="post" action="/settings/teams"><input type="hidden" name="csrf" value="{{.CSRF}}">
+<input type="text" name="name" placeholder="team name" aria-label="Team name" required> <input type="submit" value="Add team"></form>
+
+<h2 class="h2">Device access {{template "help" "access"}}</h2>
+<p class="helptext" id="help-access" hidden>What each team may do with each device. Watch opens the watching page and shows the device's jams and records; drive takes the device from the viewer too; jam starts jams and drives it with agents over the API as well. Nothing is shared until it is set here, and a change saves at once.</p>
+{{if and .Teams .AccessRows}}<div class="tablewrap"><table class="access"><thead><tr><th>Device</th>{{range .Teams}}<th>{{.Name}}</th>{{end}}</tr></thead><tbody>
+{{range .AccessRows}}{{$row := .}}<tr><td data-l="Device"><b>{{.Device.Title}}</b><span class="sub">{{.Device.ID}}</span></td>
+{{range .Cells}}<td data-l="{{.Team.Name}}"><form class="inline" method="post" action="/settings/access"><input type="hidden" name="csrf" value="{{$.CSRF}}"><input type="hidden" name="device" value="{{$row.Device.ID}}"><input type="hidden" name="team" value="{{.Team.ID}}"><select name="level" data-submit aria-label="{{.Team.Name}} on {{$row.Device.Title}}">{{$cell := .}}{{range $.Levels}}<option value="{{.}}"{{if eq . $cell.Level}} selected{{end}}>{{if .}}{{.}}{{else}}none{{end}}</option>{{end}}</select></form></td>{{end}}
+</tr>{{end}}</tbody></table></div>{{else}}<p class="muted">{{if not .Teams}}Make a team, and the devices appear here to share.{{else}}No devices yet.{{end}}</p>{{end}}
+
+<h2 class="h2" id="tokens">API tokens {{template "help" "tokens"}}</h2>
+<p class="helptext" id="help-tokens" hidden>A token lets an agent or a script use this station without signing in, sent as <code>Authorization: Bearer &lt;token&gt;</code>. It acts as its user, within that user's teams, and within its own level: <b>watch</b> only looks; <b>drive</b> holds and drives devices, starts jams and runs agents, which is what most tokens need; <b>admin</b> also manages the station, users and teams. A token's level is capped by its user's own: admin for an admin, drive for a user with drive or jam on some device, watch for one who may only watch. Everyone makes their own on their Account page; here you make anyone's. The secret is shown once, when the token is made; the station keeps only a hash of it. Revoke stops the token at once.</p>
+{{if .NewToken}}<div class="card featured">Token <b>{{.NewTokenName}}</b>, shown once:<p class="secret">{{.NewToken}}</p></div>{{end}}
+{{if .Tokens}}<div class="tablewrap"><table><thead><tr><th>Name</th><th>User</th><th>Access</th><th>Created</th><th>Last used</th><th></th></tr></thead><tbody>
+{{range .Tokens}}<tr><td data-l="Name"><b>{{.Name}}</b></td><td data-l="User">{{with index $.TokenUsers .UserID}}{{.}}{{else}}owner{{end}}</td><td data-l="Access">{{.Level}}</td><td data-l="Created">{{.CreatedAt.Format "Jan 2, 2006"}}</td>
+<td data-l="Last used">{{if .UsedAt.IsZero}}<span class="muted">never</span>{{else}}{{.UsedAt.Format "Jan 2 15:04"}}{{end}}</td>
+<td class="act"><form class="inline" method="post" action="/settings/tokens/revoke"><input type="hidden" name="csrf" value="{{$.CSRF}}"><input type="hidden" name="name" value="{{.Name}}"><button class="small hold" type="button" data-hold title="Hold to revoke">Revoke</button></form></td></tr>{{end}}</tbody></table></div>{{end}}
+<form class="row" method="post" action="/settings/tokens"><input type="hidden" name="csrf" value="{{.CSRF}}">
+<select name="user" aria-label="For which user">{{range .Users}}<option value="{{.ID}}"{{if .Self}} selected{{end}}>{{.Login}}</option>{{end}}</select>
+<input type="text" name="name" placeholder="name" aria-label="Token name" required> <select name="level" aria-label="Access level"><option value="watch">watch</option><option value="drive" selected>drive</option><option value="admin">admin</option></select>
+<input type="submit" value="Create token"></form>
+{{end}}
 `))
+
+// providerName is how Settings names a model provider, such as OpenAI.
+func providerName(id string) string {
+	if p, ok := jam.ProviderByID(id); ok {
+		return p.Label
+	}
+	return id
+}
 
 // initial is the first letter of a name, for the account's avatar.
 func initial(s string) string {

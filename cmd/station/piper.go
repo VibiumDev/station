@@ -166,7 +166,7 @@ func (p *piperRunner) run(ctx context.Context) {
 	for ctx.Err() == nil {
 		voices := p.Voices()
 		if len(voices) == 0 {
-			p.setMissing("no voice in " + p.voicesDir + ": put a Piper voice's .onnx and .onnx.json there")
+			p.setMissing("no voices in " + p.voicesDir + ". Download a voice's .onnx and .onnx.json files there.")
 			if !sleepCtx(ctx, 30*time.Second) {
 				return
 			}
@@ -185,7 +185,7 @@ func (p *piperRunner) run(ctx context.Context) {
 		if ctx.Err() != nil {
 			return
 		}
-		p.setMissing(fmt.Sprintf("Piper's server stopped (%v); its output is in %s", err, p.logPath))
+		p.setMissing(fmt.Sprintf("its server stopped (%v). The log is %s.", err, p.logPath))
 		p.logf("piper: %v; starting again in %s", err, wait)
 		if time.Since(started) > 5*time.Minute {
 			wait = 2 * time.Second

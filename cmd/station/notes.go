@@ -77,7 +77,7 @@ func (s *server) setJamNotes(w http.ResponseWriter, r *http.Request, p station.P
 		return
 	}
 	s.db.Audit(r.Context(), station.AuditEntry{Subject: p.Subject, Action: "jams", Detail: "changed the station's jam notes"})
-	http.Redirect(w, r, "/settings#jam-notes", http.StatusSeeOther)
+	http.Redirect(w, r, "/settings/ai#jam-notes", http.StatusSeeOther)
 }
 
 // setMyJamNotes is POST /account/jam-notes: a person's own notes.

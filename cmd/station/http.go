@@ -192,6 +192,9 @@ func (s *server) handler() http.Handler {
 	mux.Handle("POST /account/tokens/revoke", s.personPage(s.accountTokenRevoke))
 	mux.Handle("POST /account/jam-notes", s.personPage(s.setMyJamNotes))
 	mux.Handle("GET /settings", s.page(station.ActionManage, s.settingsPage))
+	mux.Handle("GET /settings/ai", s.page(station.ActionManage, s.settingsPage))
+	mux.Handle("GET /settings/rigs", s.page(station.ActionManage, s.settingsPage))
+	mux.Handle("GET /settings/access", s.page(station.ActionManage, s.settingsPage))
 	mux.Handle("POST /settings/name", s.page(station.ActionManage, s.setName))
 	mux.Handle("POST /settings/tokens", s.page(station.ActionManage, s.createToken))
 	mux.Handle("POST /settings/tokens/revoke", s.page(station.ActionManage, s.revokeToken))
@@ -952,7 +955,7 @@ func (s *server) settingsData(r *http.Request, p station.Principal, extra map[st
 	tokens, _ := s.db.Tokens(ctx)
 	rigs, _ := s.db.Rigs(ctx)
 	data := map[string]any{
-		"Page": "settings", "Principal": p, "CSRF": s.auth.csrfToken(r), "Tokens": tokens, "Rigs": rigs, "OpenCodes": s.openCodes(ctx),
+		"Page": "settings", "Tab": settingsTab(r.URL.Path), "Tabs": settingsTabs, "Principal": p, "CSRF": s.auth.csrfToken(r), "Tokens": tokens, "Rigs": rigs, "OpenCodes": s.openCodes(ctx),
 		"Mode": s.mode, "PublicURL": s.publicURL, "TunnelURL": s.enroll.TunnelURL, "MDNS": s.mdns,
 		"Npub": npub(s.key.Public()), "Fingerprint": enroll.Fingerprint(s.key.Public()), "Allow": s.cfg.Allow,
 		"NoPassword": !s.auth.hasUsers(ctx), "TURN": s.turnInfo,
@@ -968,6 +971,29 @@ func (s *server) settingsData(r *http.Request, p station.Principal, extra map[st
 		data[k] = v
 	}
 	return data
+}
+
+// settingsTabs are the pages of Settings, in the order of its tab bar.
+var settingsTabs = []struct{ ID, Title, URL string }{
+	{"general", "General", "/settings"},
+	{"ai", "AI", "/settings/ai"},
+	{"rigs", "Rigs", "/settings/rigs"},
+	{"access", "Access", "/settings/access"},
+}
+
+// settingsTab is the Settings page a path belongs to, so a form shows
+// its own page again.
+func settingsTab(path string) string {
+	first, _, _ := strings.Cut(strings.TrimPrefix(strings.TrimPrefix(path, "/settings"), "/"), "/")
+	switch first {
+	case "ai", "models", "piper", "say", "jams", "jam-video", "jam-notes":
+		return "ai"
+	case "rigs", "codes":
+		return "rigs"
+	case "access", "users", "teams", "tokens":
+		return "access"
+	}
+	return "general"
 }
 
 func (s *server) settingsPage(w http.ResponseWriter, r *http.Request, p station.Principal) {
@@ -1002,7 +1028,7 @@ func (s *server) revokeToken(w http.ResponseWriter, r *http.Request, p station.P
 		return
 	}
 	s.db.Audit(r.Context(), station.AuditEntry{Subject: p.Subject, Action: "token", Detail: "revoked " + name})
-	http.Redirect(w, r, "/settings", http.StatusSeeOther)
+	http.Redirect(w, r, "/settings/access#tokens", http.StatusSeeOther)
 }
 
 func (s *server) createCode(w http.ResponseWriter, r *http.Request, p station.Principal) {
@@ -1012,7 +1038,7 @@ func (s *server) createCode(w http.ResponseWriter, r *http.Request, p station.Pr
 	}
 	// The page lists the code with the others still open, so a reload
 	// makes no second one.
-	http.Redirect(w, r, "/settings#enroll", http.StatusSeeOther)
+	http.Redirect(w, r, "/settings/rigs#enroll", http.StatusSeeOther)
 }
 
 // cancelCode is POST /settings/codes/cancel: id, as the page lists it.
@@ -1022,7 +1048,7 @@ func (s *server) cancelCode(w http.ResponseWriter, r *http.Request, p station.Pr
 		return
 	}
 	// A code already used or run out is as gone as a cancelled one.
-	http.Redirect(w, r, "/settings#enroll", http.StatusSeeOther)
+	http.Redirect(w, r, "/settings/rigs#enroll", http.StatusSeeOther)
 }
 
 func (s *server) newCode(ctx context.Context) (string, time.Time, error) {
@@ -1077,7 +1103,7 @@ func (s *server) removeRig(w http.ResponseWriter, r *http.Request, p station.Pri
 		return
 	}
 	s.db.Audit(r.Context(), station.AuditEntry{Subject: p.Subject, Action: "rig", Detail: "removed " + id})
-	http.Redirect(w, r, "/settings", http.StatusSeeOther)
+	http.Redirect(w, r, "/settings/rigs", http.StatusSeeOther)
 }
 
 // render writes a page; every page knows the station's name, whether the
