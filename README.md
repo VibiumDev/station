@@ -1,43 +1,80 @@
 # Vibium Station
 
-Vibium Station brokers access to remote devices. Each machine with a device
-on it, a [Roadie](https://github.com/VibiumDev/roadie) Pi with a phone for
-now, enrolls as a rig and keeps one outbound tunnel to the station; people
-and agents reach the devices through the station's pages and API. The
-station signs every session as a hold grant that the rig checks itself, so
-the rig stays the final gate.
+Vibium Station lets people and AI agents use real devices from anywhere.
+Each device sits on a rig: today that is a Raspberry Pi running
+[Roadie](https://github.com/VibiumDev/roadie), with a phone plugged into it.
+The rig connects out to the station and keeps that connection open, so it
+works from behind any router. People use the devices from the station's web
+pages, and agents use its API.
 
-`station` is the self-hosted binary, which serves one operator and their
-own rigs, lets people sign in with a login, a password and a code from
-an authenticator app, or by a tailnet identity, and keeps admins apart
-from regular users, who see only the devices their teams were given
-([docs/specs/teams.md](docs/specs/teams.md),
-[docs/specs/second-factor.md](docs/specs/second-factor.md)),
-and keeps its store in one SQLite file. The packages it is built from
-take an authenticator, an authorizer and stores as interfaces, so a
-hosted service can embed them instead of forking.
+The station decides who may use which device. For each session it signs a
+short-lived grant, and the rig checks that grant itself before it takes any
+input, so the rig always has the last word.
 
-Status: R5 of the [remote spec](docs/remote-spec.md), under review.
-These parts work:
+## How it works
 
-- LAN, tailnet and public mode
-- enrollment
-- the tunnel
-- holds and grants
-- the viewer over WebRTC with the embedded TURN server behind it
-- the MJPEG fallback through the station
-- the REST and BiDi relay for agents, with `/session` as the entry point
-- `station-probe`, which checks a station from outside
-- the Record Store (R7, under way): recordings and screenshots as
-  Blossom blobs, uploaded with authorizations the station signs for
-  agents or a rig signs itself, listed per device and hold, and
-  played in place by the embedded Record Player
-- Jams (R8, under way): a prompt on the station's front page that a
-  model the owner set up on Settings carries out on a device through
-  Vibium's tools, with each step shown as it happens, and the list of
-  jams at `/jams`; [docs/specs/jams.md](docs/specs/jams.md)
+```mermaid
+flowchart TB
+    P["People<br/>a browser: pages and the viewer"]
+    A["Agents and scripts<br/>an API token: REST, WebDriver BiDi"]
+    S["Station<br/>sign-in, users and teams, holds and grants,<br/>jam sessions, Record Store, TURN relay"]
+    M["AI models<br/>OpenAI, Anthropic, Gemini, xAI or local;<br/>Piper speaks on the station"]
+    R1["Rig: Roadie on a Pi<br/>checks every grant"]
+    R2["Rig: Roadie on a Pi<br/>checks every grant"]
+    D1["Phone"]
+    D2["Phone"]
 
-Packaging and hardening (R6) are under review.
+    P -- "HTTPS" --> S
+    A -- "HTTPS" --> S
+    S -- "jam sessions" --> M
+    S <-- "tunnel: one WebSocket,<br/>opened by the rig" --> R1
+    S <-- "tunnel" --> R2
+    R1 --- D1
+    R2 --- D2
+    P -. "WebRTC: video, sound and input,<br/>direct or through TURN" .- R1
+```
+
+- **People** sign in to the station and open a device in the viewer. Video,
+  sound and input go straight between the browser and the rig over WebRTC
+  when they can, and through the station's TURN relay when they can't. If
+  WebRTC fails altogether, the viewer falls back to an MJPEG stream relayed
+  through the station.
+- **Agents** use an API token. The station relays REST calls and WebDriver
+  BiDi to the rig, so Vibium, Claude Code or a script can drive a device
+  as if it were local.
+- **Jam sessions** start from a prompt on the station's front page. An AI
+  chat model you set up on Settings carries it out on a device through
+  Vibium's tools, and can speak to the device and listen to it.
+- **The Record Store** keeps recordings, screenshots and sound, and plays
+  them in place.
+
+## What it does
+
+- Sign-in with a password and an authenticator app, or with a tailnet
+  identity. Admins manage the station. Regular users see only the devices
+  their teams were given ([docs/specs/teams.md](docs/specs/teams.md),
+  [docs/specs/second-factor.md](docs/specs/second-factor.md)).
+- LAN, tailnet and public mode, with an embedded TURN server for browsers
+  and rigs behind NATs.
+- Enrollment with one-time codes, and the rig's tunnel.
+- Holds and signed grants: one person or agent controls a device at a
+  time, one other can watch, and the rig enforces it.
+- The viewer over WebRTC, with an MJPEG fallback through the station.
+- The REST and BiDi relay for agents, with `/session` as the entry point.
+- The Record Store, with the embedded Record Player.
+- Jam sessions with AI models you bring your own keys for, or a local
+  server, and Piper for speech on the station itself
+  ([docs/specs/jams.md](docs/specs/jams.md)).
+- `station-probe`, which checks a station from outside.
+
+`station` is the self-hosted binary: one operator, their own rigs, and one
+SQLite file for everything it keeps. The packages it is built from take an
+authenticator, an authorizer and their stores as interfaces, so a hosted
+service can embed them instead of forking.
+
+Milestones R0 to R5 of the [remote spec](docs/remote-spec.md) are done.
+Packaging and hardening (R6) and recordings (R7) are in review. No release
+is published yet.
 
 ## Run it
 
@@ -111,8 +148,8 @@ Then enroll a rig:
    agent or someone else holds the device watches it instead, with a Hold
    button that takes it; `?watch=1` only ever watches.
 
-Agents use API tokens from the Account page, the Settings page or
-`station token create NAME`, sent as `Authorization: Bearer`. A token
+Agents use API tokens from the Account page, the Access tab of Settings,
+or `station token create NAME`, sent as `Authorization: Bearer`. A token
 acts as its user at a level of its own, never above the user's: watch
 only looks, drive holds and drives devices and runs jams and agents,
 and admin manages the station too. See [API.md](API.md), and
@@ -189,6 +226,7 @@ variable in the environment are one more agent model on Settings, named
 | `sqlite` | The one-file store, pure Go |
 | `sdnotify` | Tells systemd the service is ready, alive (the watchdog) or stopping; a no-op outside systemd |
 | `blob` | Files by their SHA-256 on disk, hashed as they are written |
+| `jam` | Jam sessions: the station's own agent loop, the AI models and their providers, and the settings handed to Vibium for speech |
 | `records` | The Record Store: Blossom's upload, fetch, list and delete, the authorizations the station signs on an agent's behalf, the file event per blob, and retention |
 | `viewer` | The shell: the one viewer page a station and a Roadie both serve, plus the embedded Record Player under `player/` (built from the [record-player](https://github.com/VibiumDev/record-player) repository by `scripts/update-player.sh`) (Roadie's toolbar, settings panel and on-screen keyboard, the MJPEG reader, sound and microphone, input in picture space, WebRTC), told its endpoints by a config and extended by a rig's own extras module |
 | `cmd/station` | The station binary |
