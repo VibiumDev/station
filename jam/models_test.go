@@ -142,6 +142,70 @@ func TestPiperServerModel(t *testing.T) {
 	}
 }
 
+// A sherpa-onnx server listens at the base URL, a WebSocket address, or
+// at the station's own server when there is none, and only in the
+// listen role.
+func TestSherpaServerModel(t *testing.T) {
+	sherpa := ModelConfig{Name: "ears", Role: RoleListen, Provider: "sherpa-server", Model: "zipformer-en", BaseURL: "ws://10.0.0.5:6006"}
+	if err := sherpa.Validate(); err != nil {
+		t.Fatal(err)
+	}
+	if got := strings.Join(sherpa.Env(), " "); got != "VIBIUM_LISTEN_PROVIDER=sherpa-server VIBIUM_LISTEN_MODEL=zipformer-en VIBIUM_SHERPA_URL=ws://10.0.0.5:6006" {
+		t.Errorf("env: %s", got)
+	}
+	sherpa.BaseURL = "http://10.0.0.5:6006"
+	if err := sherpa.Validate(); err == nil || !strings.Contains(err.Error(), "ws://") {
+		t.Errorf("an http address: %v", err)
+	}
+	// With no address it is the station's own server, whose address the
+	// station adds when a jam starts.
+	sherpa.BaseURL = ""
+	if got := strings.Join(sherpa.Env(), " "); got != "VIBIUM_LISTEN_PROVIDER=sherpa-server VIBIUM_LISTEN_MODEL=zipformer-en" || !sherpa.OwnSherpa() || !sherpa.Own() || sherpa.OwnPiper() {
+		t.Errorf("env with no base URL: %s", got)
+	}
+	if err := sherpa.Validate(); err != nil {
+		t.Errorf("the station's own sherpa-onnx: %v", err)
+	}
+	for _, role := range []string{RoleAgent, RoleSay} {
+		c := sherpa
+		c.Role = role
+		if err := c.Validate(); err == nil || !strings.Contains(err.Error(), "cannot be a "+role+" model") {
+			t.Errorf("as %s: %v", role, err)
+		}
+	}
+	sherpa.Model = ""
+	if err := sherpa.Validate(); err == nil || !strings.Contains(err.Error(), "the model") {
+		t.Errorf("with no model: %v", err)
+	}
+	// Saved and read back, it is the same model.
+	s := &Store{Dir: t.TempDir(), Getenv: func(string) string { return "" }}
+	sherpa.Model, sherpa.BaseURL = "zipformer-en", "wss://ears.example/"
+	if err := s.Save(sherpa); err != nil {
+		t.Fatal(err)
+	}
+	got, err := s.Get("ears")
+	if err != nil || got.Provider != "sherpa-server" || got.Model != "zipformer-en" || got.BaseURL != "wss://ears.example/" || got.Role != RoleListen {
+		t.Errorf("read back %+v %v", got, err)
+	}
+	// The station's own is the listen default over a hosted one, until
+	// the hosted one is marked.
+	s.Builtin = func() []ModelConfig {
+		return []ModelConfig{{Name: "sherpa", Role: RoleListen, Provider: "sherpa-server", Model: "zipformer-en"}}
+	}
+	if err := s.Save(ModelConfig{Name: "astt", Role: RoleListen, Provider: "openai", Model: "gpt-transcribe", APIKey: "sk-l"}); err != nil {
+		t.Fatal(err)
+	}
+	if c, ok := s.Default(RoleListen); !ok || c.Name != "sherpa" || !c.Builtin {
+		t.Errorf("the listen default is %+v", c)
+	}
+	if err := s.SetDefault("astt"); err != nil {
+		t.Fatal(err)
+	}
+	if c, _ := s.Default(RoleListen); c.Name != "astt" {
+		t.Errorf("after marking astt: %s", c.Name)
+	}
+}
+
 // The station's own Piper is listed without a file, is the say default
 // unless another is marked, and becomes a file once it is changed.
 func TestBuiltinPiper(t *testing.T) {
@@ -197,7 +261,7 @@ func TestProvidersFor(t *testing.T) {
 	if got := ids(ProvidersFor(RoleSay)); got != "openai piper-server" {
 		t.Errorf("say: %s", got)
 	}
-	if got := ids(ProvidersFor(RoleListen)); got != "openai" {
+	if got := ids(ProvidersFor(RoleListen)); got != "openai sherpa-server" {
 		t.Errorf("listen: %s", got)
 	}
 	if err := (ModelConfig{Name: "c", Role: RoleSay, Provider: "anthropic", Model: "m", APIKey: "k"}).Validate(); err == nil {

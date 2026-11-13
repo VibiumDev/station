@@ -38,6 +38,7 @@ To set a station up step by step, see
 | `--records-max-age` | `720h` | How long it keeps a file; `0` for ever |
 | `--vibium` | `$STATION_VIBIUM`, else `vibium` on `PATH` | The Vibium binary a jam session drives devices with, through `vibium mcp` |
 | `--piper` | `$STATION_PIPER`, else `piper/venv/bin/python` in the data directory, else `piper` on `PATH` | The Python that has `piper-tts[http]`: the station runs Piper's server with it, so jam sessions speak with a voice from `piper/` in the data directory |
+| `--sherpa` | `$STATION_SHERPA`, else `sherpa/venv/bin/python` in the data directory, else `sherpa-onnx-cli` on `PATH` | The Python that has `sherpa-onnx` and `websockets`: the station runs a speech-to-text server with it, so jam sessions listen with a model from `sherpa/` in the data directory |
 | `--turn` | `auto` | Run the TURN server: `on`, `off`, or `auto` (on in public mode) |
 | `--turn-listen` | `:3478` | TURN's UDP address; `fly-global-services:3478` on Fly.io |
 | `--turn-public-ip` | the `--public` host's address | The public address TURN and its relays are reached at |
@@ -54,6 +55,7 @@ To set a station up step by step, see
 | `STATION_PASSWORD` | Sets the owner's password when the station starts, for hosts whose secrets are environment variables. The owner still sets up an authenticator at their first sign-in. |
 | `STATION_VIBIUM` | The Vibium binary, like `--vibium` |
 | `STATION_PIPER` | Piper's Python, like `--piper` |
+| `STATION_SHERPA` | sherpa-onnx's Python, like `--sherpa` |
 | `TS_AUTHKEY` | Lets tailnet mode join without printing a login link |
 | `VIBIUM_AI_PROVIDER`, `VIBIUM_AI_MODEL` and the provider's key variable | One more agent model on Settings, named `host`, for a deployment that keeps the key as a platform secret |
 

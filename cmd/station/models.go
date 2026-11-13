@@ -47,6 +47,9 @@ func (s *server) modelsData(data map[string]any) {
 	piper := s.piper.status()
 	piper.Voices = s.piper.Voices()
 	data["Piper"] = piper
+	sherpa := s.sherpa.status()
+	sherpa.Models = s.sherpa.Models()
+	data["Sherpa"] = sherpa
 	data["JamNotes"], data["MaxNotes"] = s.stationNotes(), jam.MaxNotes
 }
 
@@ -205,6 +208,34 @@ func (s *server) piperVoice(w http.ResponseWriter, r *http.Request, p station.Pr
 	s.db.Audit(r.Context(), station.AuditEntry{Subject: p.Subject, Action: "model", Detail: "piper speaks with " + voice})
 	go s.piper.warm(voice)
 	http.Redirect(w, r, "/settings/ai#ai-say", http.StatusSeeOther)
+}
+
+// sherpaUse is POST /settings/sherpa/model: jam sessions listen with the
+// station's own sherpa-onnx, with this model. The server starts again
+// with the model at once, so the first session to listen does not wait
+// for the load.
+func (s *server) sherpaUse(w http.ResponseWriter, r *http.Request, p station.Principal) {
+	model := r.FormValue("model")
+	if !slices.Contains(s.sherpa.Models(), model) {
+		s.render(w, "settings", s.settingsData(r, p, map[string]any{"Message": "No such sherpa-onnx model: " + model}))
+		return
+	}
+	c, err := s.jams.models.Get(sherpaModel)
+	if err != nil || !c.OwnSherpa() {
+		s.render(w, "settings", s.settingsData(r, p, map[string]any{"Message": "The station's sherpa-onnx is not running."}))
+		return
+	}
+	changed := c.Model != model
+	c.Model, c.Builtin, c.Default = model, false, true
+	if err := s.jams.models.Save(c); err != nil {
+		s.render(w, "settings", s.settingsData(r, p, map[string]any{"Message": err.Error()}))
+		return
+	}
+	s.db.Audit(r.Context(), station.AuditEntry{Subject: p.Subject, Action: "model", Detail: "sherpa-onnx listens with " + model})
+	if changed || s.sherpa.status().Model != model {
+		s.sherpa.reload()
+	}
+	http.Redirect(w, r, "/settings/ai#ai-listen", http.StatusSeeOther)
 }
 
 // removeModel is POST /settings/models/remove.

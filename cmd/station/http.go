@@ -31,7 +31,8 @@ import (
 
 // server is the single-player station's HTTP side.
 type server struct {
-	piper *piperRunner // the station's own Piper, found or not
+	piper  *piperRunner  // the station's own Piper, found or not
+	sherpa *sherpaRunner // the station's own sherpa-onnx, found or not
 	// codeText is the text of the enrollment codes this run made, by
 	// their hash, for Settings to show while they are open.
 	codeMu     sync.Mutex
@@ -200,6 +201,7 @@ func (s *server) handler() http.Handler {
 	mux.Handle("POST /settings/tokens/revoke", s.page(station.ActionManage, s.revokeToken))
 	mux.Handle("POST /settings/codes", s.page(station.ActionManage, s.createCode))
 	mux.Handle("POST /settings/piper/voice", s.page(station.ActionManage, s.piperVoice))
+	mux.Handle("POST /settings/sherpa/model", s.page(station.ActionManage, s.sherpaUse))
 	mux.Handle("POST /settings/say/preview", s.page(station.ActionManage, s.sayPreview))
 	mux.Handle("POST /settings/codes/cancel", s.page(station.ActionManage, s.cancelCode))
 	mux.Handle("POST /settings/rigs/remove", s.page(station.ActionManage, s.removeRig))
@@ -987,7 +989,7 @@ var settingsTabs = []struct{ ID, Title, URL string }{
 func settingsTab(path string) string {
 	first, _, _ := strings.Cut(strings.TrimPrefix(strings.TrimPrefix(path, "/settings"), "/"), "/")
 	switch first {
-	case "ai", "models", "piper", "say", "jams", "jam-video", "jam-notes":
+	case "ai", "models", "piper", "sherpa", "say", "jams", "jam-video", "jam-notes":
 		return "ai"
 	case "rigs", "codes":
 		return "rigs"

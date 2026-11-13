@@ -195,7 +195,8 @@
         if (!d.contains(e.target)) d.open = false;
       });
     });
-    // Piper's voice list: Use shows once another voice is picked.
+    // Piper's voice list and sherpa-onnx's model list: Use shows once
+    // another one is picked.
     Array.prototype.forEach.call(document.querySelectorAll('select[data-current]'), function (sel) {
       var use = sel.form && sel.form.querySelector('button[type=submit]');
       if (!use) return;

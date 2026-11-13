@@ -55,8 +55,9 @@ test voice assistants, voice agents and any app where sound matters.
 - Agents speak and listen with Vibium: `vibium say` speaks into the
   device, and `vibium listen` turns its answer into text, with how long it
   took ([say and listen](https://github.com/VibiumDev/vibium/blob/main/docs/specs/say-listen-spec.md)).
-- A chat can talk to the device and check what it says back, with Piper on
-  the station or a cloud voice.
+- A chat can talk to the device and check what it says back. Speech can
+  run on the station itself, with Piper speaking and sherpa-onnx
+  listening, or in the cloud.
 - Recordings keep both sides of the sound, and the Record Store plays them.
 
 ## What it does
@@ -66,7 +67,7 @@ test voice assistants, voice agents and any app where sound matters.
 - Accounts that expire on a date, for a trial or a demo
 - One person or agent in control of a device at a time, and one watching
 - Chat: an LLM you set up does what you ask on a device
-- Two-way sound, with speech on the station (Piper) or in the cloud
+- Two-way sound, with speech on the station (Piper and sherpa-onnx) or in the cloud
 - A Record Store for recordings, screenshots and sound, played in place
 - Runs on your LAN, your tailnet, or the public internet
 
