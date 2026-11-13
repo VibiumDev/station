@@ -11,29 +11,38 @@ rig dials out to the station, so it works from behind any router.
 
 ```mermaid
 flowchart TB
-    J["Jam sessions on the station<br/>a chat with your LLM,<br/>which drives Vibium (MCP)<br/>with text to speech<br/>and speech to text"]
-    C["People and agents<br/>a browser or an API token"]
-    S["Station"]
-    R["Rig<br/>Roadie on a Pi"]
-    D["Phone"]
+    P["People<br/>in a browser"]
+    A["Agents<br/>with an API token"]
+    C["Chat<br/>an LLM on the station<br/>with Vibium (MCP)<br/>and voice"]
+    S["Station<br/>the hub"]
+    R1["Rig<br/>Roadie on a Pi"]
+    R2["Rig<br/>Roadie on a Pi"]
+    R3["Rig<br/>Roadie on a Mac"]
+    D1["iPhone"]
+    D2["Android phone"]
+    D3["iPad"]
 
-    J --> S
+    P --> S
+    A --> S
     C --> S
-    S <-- "tunnel" --> R
-    R --- D
-    C -. "WebRTC" .- R
+    S <-- "tunnel" --> R1
+    S <-- "tunnel" --> R2
+    S <-- "tunnel" --> R3
+    R1 --- D1
+    R2 --- D2
+    R3 --- D3
 ```
 
 - **People** open a device in the browser and drive it.
 - **Agents** drive it through the API, with REST and WebDriver BiDi.
-- **Jam sessions** are chat sessions with an LLM you set up on the station.
-  You type what you want done, and the LLM does it on the device through
-  Vibium's MCP tools, speaking and listening with text-to-speech and
-  speech-to-text models.
+- **Chat** runs on the station: you type what you want done, and an LLM
+  you set up does it on the device through Vibium's MCP tools, speaking and
+  listening with text-to-speech and speech-to-text models. The station's
+  pages call each chat a jam session.
 - **Video, sound and input** go over WebRTC, directly or through the
   station's TURN relay.
-- **The rig** checks a grant signed by the station before it takes any
-  input.
+- **Each rig** dials out to the station, which is the hub, and checks a
+  grant signed by the station before it takes any input.
 
 ## Voice, both ways
 
@@ -46,8 +55,8 @@ test voice assistants, voice agents and any app where sound matters.
 - Agents speak and listen with Vibium: `vibium say` speaks into the
   device, and `vibium listen` turns its answer into text, with how long it
   took ([say and listen](https://github.com/VibiumDev/vibium/blob/main/docs/specs/say-listen-spec.md)).
-- Jam sessions can talk to the device and check what it says back, with
-  Piper on the station or a cloud voice.
+- A chat can talk to the device and check what it says back, with Piper on
+  the station or a cloud voice.
 - Recordings keep both sides of the sound, and the Record Store plays them.
 
 ## What it does
@@ -55,7 +64,7 @@ test voice assistants, voice agents and any app where sound matters.
 - Sign-in with a password and an authenticator app, or a tailnet identity
 - Users and teams: regular users see only the devices their teams were given
 - One person or agent in control of a device at a time, and one watching
-- Jam sessions: a chat with an LLM you set up, which does what you ask on a device
+- Chat: an LLM you set up does what you ask on a device
 - Two-way sound, with speech on the station (Piper) or in the cloud
 - A Record Store for recordings, screenshots and sound, played in place
 - Runs on your LAN, your tailnet, or the public internet
@@ -77,7 +86,7 @@ Then:
 1. Make an enrollment code on **Settings → Rigs**.
 2. On the rig, run `roadie enroll https://<station> --code <code>`.
 3. Open the phone from **Devices**.
-4. For jam sessions, add an AI model on **Settings → AI**.
+4. For chat, add an AI model on **Settings → AI**.
 
 ## Docs
 
@@ -85,7 +94,7 @@ Then:
 |---|---|
 | Run a station on your own server | [Self-host a station](docs/how-to-guides/self-host.md) |
 | Run one on Fly.io | [Deploy to Fly.io](docs/how-to-guides/deploy-to-fly.md) |
-| Set up jam sessions and voices | [Set Up Jams](docs/how-to-guides/set-up-jams.md) |
+| Set up chat and voices | [Set Up Jams](docs/how-to-guides/set-up-jams.md) |
 | Point an agent at a device | [Reach a device through the station](docs/tutorials/agent-through-the-station.md) |
 | Use the API | [API.md](API.md) |
 | Look up a command or flag | [Commands and flags](docs/reference/commands-and-flags.md) |
