@@ -127,6 +127,12 @@
         });
       });
     }
+    // A row's ⋯ menu closes on a click anywhere else.
+    document.addEventListener('click', function (e) {
+      Array.prototype.forEach.call(document.querySelectorAll('details.more[open]'), function (d) {
+        if (!d.contains(e.target)) d.open = false;
+      });
+    });
     // Piper's voice list: Use shows once another voice is picked.
     Array.prototype.forEach.call(document.querySelectorAll('select[data-current]'), function (sel) {
       var use = sel.form && sel.form.querySelector('button[type=submit]');

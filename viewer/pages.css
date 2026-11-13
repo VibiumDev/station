@@ -448,6 +448,7 @@ main.home { padding-top: clamp(44px, 30vh, 320px); }
 .more summary::-webkit-details-marker { display: none; }
 .more .menu { position: absolute; right: 0; top: calc(100% + 6px); z-index: 5; display: flex; flex-direction: column; align-items: flex-start; gap: 10px; padding: 12px; min-width: 280px; border: 1px solid var(--line-card); border-radius: 12px; background: var(--surface); box-shadow: 0 8px 24px rgb(0 0 0 / 0.12); }
 .more .menu .row { margin: 0; flex-wrap: nowrap; }
+.more .menu button { white-space: nowrap; }
 .tabs { display: flex; flex-wrap: wrap; gap: 4px 24px; margin: 28px 0 0; border-bottom: 1px solid var(--line-card); font-size: 15px; }
 .tabs a { padding: 8px 0 10px; margin-bottom: -1px; color: var(--text-2); text-decoration: none; border-bottom: 2px solid transparent; }
 .tabs a:hover { color: var(--text); }
@@ -456,7 +457,7 @@ main.home { padding-top: clamp(44px, 30vh, 320px); }
 .piperline { margin: 10px 0 0; font-size: 14px; }
 .sayprobe { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; margin: 0 0 10px; font-size: 14px; }
 .sayprobe input[type=text] { width: min(60vw, 320px); }
-.sayprobe .status { color: var(--text-2); }
+.sayprobe .status { color: var(--text-2); font-family: var(--sans); }
 .addmodel { margin: 10px 0 0; }
 .addmodel summary { list-style: none; display: inline-flex; cursor: pointer; }
 .addmodel summary::-webkit-details-marker { display: none; }
