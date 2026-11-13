@@ -5,9 +5,10 @@ Raspberry Pi, a small VPS, or a box under the desk. The station becomes
 a systemd service under a user of its own, sandboxed and restarted by
 itself, and keeps everything it owns in one directory. The recommended
 mode is tailnet mode, where the station joins your Tailscale network as
-a node and nothing is exposed to the Internet, with LAN mode, public
-mode and a TLS proxy as the alternatives. To run one on Fly.io instead, see
-[deploy-to-fly.md](deploy-to-fly.md).
+a node and nothing is exposed to the Internet: a station on the same Pi
+as Roadie makes quick work of your own testing and a small team's. LAN
+mode, public mode and a TLS proxy are the alternatives. To run one on
+Fly.io instead, see [deploy-to-fly.md](deploy-to-fly.md).
 
 You need a host with systemd and `sudo`, and for tailnet mode a
 Tailscale account with MagicDNS and HTTPS certificates enabled on the
@@ -31,70 +32,9 @@ files under `deploy/`. A release will carry a tarball per architecture
 with the same two binaries, the systemd unit and the sample `fly.toml`;
 `make dist` builds them. The Docker image is covered [below](#docker).
 
-Jams, the prompt on the station's front page, drive devices through
-`vibium mcp`, so the station also needs the Vibium binary, on its
-`PATH` or named with `--vibium` (or `STATION_VIBIUM` in
-`/etc/default/station`). There are three ways to get it. Whichever you
-use, install it under `/usr/local/bin`: the service's sandbox
-(`ProtectHome=yes`) keeps the station out of home directories.
-
-### Vibium: a tagged release
-
-Releases ship their binaries as npm packages, `@vibium/linux-arm64` and
-`@vibium/linux-x64`. The station needs only the binary inside, so Node is
-not needed:
-
-```bash
-ARCH=arm64   # or x64 on a PC
-VERSION=26.8.21
-PKG=https://registry.npmjs.org/@vibium/linux-$ARCH
-curl -fsSLo vibium.tgz $PKG/-/linux-$ARCH-$VERSION.tgz
-curl -fsSL $PKG/$VERSION | grep -o '"integrity":"[^"]*"'
-echo "sha512-$(openssl dgst -sha512 -binary vibium.tgz | base64 -w0)"
-tar xzf vibium.tgz package/bin/vibium
-sudo install -m 755 package/bin/vibium /usr/local/bin/vibium
-vibium --version
-```
-
-The two integrity strings must be the same. Release 26.8.21 cannot tap,
-swipe, long press or type text on a phone, and cannot send a jam's record
-to the station, so use a nightly until a later release is out.
-
-### Vibium: a nightly
-
-Nightly builds are static binaries on Vibium's GitHub
-[releases](https://github.com/VibiumDev/vibium/releases):
-
-```bash
-ARCH=arm64   # or amd64
-NIGHTLY=nightly-2026.11.12-dev.20261112015632-bf3355b
-curl -fLO https://github.com/VibiumDev/vibium/releases/download/$NIGHTLY/vibium-linux-$ARCH
-curl -fLO https://github.com/VibiumDev/vibium/releases/download/$NIGHTLY/SHA256SUMS
-sha256sum vibium-linux-$ARCH
-grep "vibium-linux-$ARCH\$" SHA256SUMS
-sudo install -m 755 vibium-linux-$ARCH /usr/local/bin/vibium
-vibium --version
-```
-
-The two checksums printed must be the same. With this build a jam on a
-phone can tap, swipe, long press, type text, send its record, and speak
-and listen. Speaking through the station's own Piper needs a Vibium with
-Piper server support, which no nightly has yet: build your own for that.
-
-### Vibium: your own build
-
-To use a Vibium you built, such as one from a branch, build it from your
-Vibium checkout with this clone's script:
-
-```bash
-ARCHES=arm64 scripts/vibium-local.sh ../vibium   # amd64 on a PC
-sudo install -m 755 deploy/vibium/vibium-linux-arm64 /usr/local/bin/vibium
-vibium --version                                  # vibium v26.8.21-local.<commit>
-```
-
-Vibium needs no browser for this: a jam's session is the station's own
-device, reached through `/session`. The station looks for Vibium when it
-starts, so restart the station after installing or replacing it.
+Jam sessions, the prompt on the station's front page, also need the
+Vibium binary. [Set Up Jams](set-up-jams.md#1-vibium) has three ways to
+get it: a tagged release, a nightly, or your own build.
 
 ## 2. The user and the service
 
@@ -240,77 +180,11 @@ yet` means step 3 was skipped. In tailnet mode without an auth key the
 first command waits for the login, so follow the journal from a second
 terminal.
 
-## 6. Sign in
+## 6. First steps
 
-Open the station's address in a browser:
-
-- Tailnet mode: `https://station.<tailnet>.ts.net`. A login on
-  `--allow` is signed in at once, as an admin. Anyone else gets the
-  sign-in page.
-- LAN mode: `https://<this machine's address>:8443`. The browser warns
-  about the station's own certificate.
-- Public mode: `https://station.example.com`.
-
-On the sign-in page the login is `owner` and the password is the one
-from step 3. The first password sign-in shows a QR code. Scan it with
-an authenticator app and type the six-digit code the app shows. The
-station then lists ten backup codes, once. Keep them: each signs you in
-one time when the authenticator is out of reach. Every later password
-sign-in asks for a code from the app. The codes follow the clock, so
-the station's clock has to be right.
-
-## 7. Tokens and the first rig
-
-An API token lets an agent or `station-probe` in, and the secret is
-shown once:
-
-```bash
-sudo -u station station token create laptop --data-dir /var/lib/station
-```
-
-A rig enrolls with a one-time code, from the Rigs tab of the Settings
-page or the command line:
-
-```bash
-sudo -u station station enroll --data-dir /var/lib/station
-```
-
-On the rig, `roadie enroll` with the code and a restart of `roadie`
-bring the device onto the station's Devices page. On a Pi where Roadie
-runs as a service the two commands are:
-
-```bash
-sudo -u roadie roadie enroll https://station.<tailnet>.ts.net --code ABCD-1234-7F3A
-sudo systemctl restart roadie
-```
-
-Where the rig has to be depends on the mode:
-
-- A LAN station is reached from its own network only.
-- A tailnet station is reached from the tailnet only, so the rig's Pi
-  runs Tailscale and is joined to the same tailnet.
-- A public station is reached by any rig that can open an outbound
-  HTTPS connection.
-
-Roadie's [How to Run
-Roadie](https://github.com/VibiumDev/roadie/blob/main/docs/how-to/run-roadie.md)
-has the details under "Join a station". The same page covers reaching
-Roadie directly on the tailnet with `--auth tailscale` and HTTPS through
-`tailscale serve` or `tailscale cert`, which works beside a station: the
-rig keeps its tunnel to the station for everyone else while people on
-the tailnet open its own `/view`.
-
-Then check the whole path from another machine:
-
-```bash
-station-probe -station https://station.<tailnet>.ts.net -token stk_... -device RIG/DEVICE -ice all
-```
-
-It takes a hold, connects over WebRTC, watches the picture for ten
-seconds, taps, and exits non-zero when anything fails. `-ice all` is
-for a tailnet or LAN station, which runs no TURN. Leave it out for a
-public station, and the probe sends the media through TURN only. Add
-`-insecure` for a LAN-mode station's self-signed certificate.
+[First Steps on a New Station](first-steps.md) takes it from here: sign in
+and set up your authenticator, enroll a rig, and check the whole path with
+`station-probe`.
 
 ## Docker
 
@@ -321,11 +195,9 @@ publish it as `ghcr.io/vibiumdev/station`.
 docker build -t vibium-station .
 ```
 
-The image holds the same binaries and the Vibium nightly that step 1
-describes, with the data directory at `/data`. To put a Vibium you built
-in it instead, run `scripts/vibium-local.sh` first and add
-`--build-arg VIBIUM_LOCAL=1`
-([details](deploy-to-fly.md#use-a-vibium-you-built)). A public station:
+The image holds the same binaries and a Vibium nightly, with the data
+directory at `/data`. [Set Up Jams](set-up-jams.md#1-vibium) covers
+another nightly or your own build. A public station:
 
 ```bash
 docker run -d --name station --restart unless-stopped \
@@ -432,20 +304,5 @@ restarted the station.
 - The authenticator's codes are refused: the station's clock or the
   phone's is off. `timedatectl` says whether the station's is
   synchronized.
-- A forgotten password: this sets one at once, for the owner or for
-  the login named after `passwd`.
-
-  ```bash
-  sudo -u station station passwd --data-dir /var/lib/station
-  ```
-
-- A lost authenticator: sign in with a backup code, or have another
-  admin hold Reset sign-in on your row under Users, on the Access tab
-  of Settings. For an
-  owner with neither, this sets a password and forgets the
-  authenticator and the backup codes, so the next sign-in sets up an
-  authenticator again.
-
-  ```bash
-  sudo -u station station passwd --reset --data-dir /var/lib/station
-  ```
+- A forgotten password or a lost authenticator: see
+  [If you're locked out](first-steps.md#if-youre-locked-out).

@@ -18,8 +18,88 @@ one marked **in use**, and **Use** on another row switches to it. The
 A jam session drives the device through `vibium mcp`. The station looks
 for Vibium at `--vibium`, then `STATION_VIBIUM`, then `vibium` on its
 `PATH`, and the **Vibium** row under **Jam sessions** shows the path it
-found. Install it as [the self-host guide](self-host.md#1-get-the-binary)
-describes, and restart the station after installing or replacing it.
+found. Restart the station after installing or replacing it.
+
+The Docker image, which Fly.io runs, comes with a Vibium nightly already.
+On a host of your own, install one of the three below under
+`/usr/local/bin`: the service's sandbox (`ProtectHome=yes`) keeps the
+station out of home directories, so a binary in your checkout is not found.
+
+### A tagged release
+
+Releases ship their binaries as npm packages, `@vibium/linux-arm64` and
+`@vibium/linux-x64`. The station needs only the binary inside, so Node is
+not needed:
+
+```bash
+ARCH=arm64   # or x64 on a PC
+VERSION=26.8.21
+PKG=https://registry.npmjs.org/@vibium/linux-$ARCH
+curl -fsSLo vibium.tgz $PKG/-/linux-$ARCH-$VERSION.tgz
+curl -fsSL $PKG/$VERSION | grep -o '"integrity":"[^"]*"'
+echo "sha512-$(openssl dgst -sha512 -binary vibium.tgz | base64 -w0)"
+tar xzf vibium.tgz package/bin/vibium
+sudo install -m 755 package/bin/vibium /usr/local/bin/vibium
+vibium --version
+```
+
+The two integrity strings must be the same. Release 26.8.21 cannot tap,
+swipe, long press or type text on a phone, and cannot send a jam's record
+to the station, so use a nightly until a later release is out. The Docker
+image does not take a release yet.
+
+### A nightly
+
+Nightly builds are static binaries on Vibium's GitHub
+[releases](https://github.com/VibiumDev/vibium/releases):
+
+```bash
+ARCH=arm64   # or amd64
+NIGHTLY=nightly-2026.11.12-dev.20261112015632-bf3355b
+curl -fLO https://github.com/VibiumDev/vibium/releases/download/$NIGHTLY/vibium-linux-$ARCH
+curl -fLO https://github.com/VibiumDev/vibium/releases/download/$NIGHTLY/SHA256SUMS
+sha256sum vibium-linux-$ARCH
+grep "vibium-linux-$ARCH\$" SHA256SUMS
+sudo install -m 755 vibium-linux-$ARCH /usr/local/bin/vibium
+vibium --version
+```
+
+The two checksums printed must be the same. With this build a jam on a
+phone can tap, swipe, long press, type text, send its record, and speak
+and listen. The Docker image installs this nightly by default; for
+another, add `--build-arg VIBIUM_NIGHTLY=<its tag>` to `docker build` or
+`fly deploy`.
+
+Speaking through the station's own Piper (step 4) needs a Vibium with
+Piper server support, which no nightly has yet: build your own for that.
+
+### Your own build
+
+To use a Vibium you built, such as one from a branch that has no nightly
+yet, build it from your Vibium checkout with the station clone's script.
+The version it stamps is Vibium's own plus the commit, such as
+`26.8.21-local.328d74a`, with `.dirty` when the checkout has changes that
+are not committed. On a host:
+
+```bash
+ARCHES=arm64 scripts/vibium-local.sh ../vibium   # amd64 on a PC
+sudo install -m 755 deploy/vibium/vibium-linux-arm64 /usr/local/bin/vibium
+vibium --version                                  # vibium v26.8.21-local.<commit>
+```
+
+For the Docker image, which is how Fly.io runs it, build for amd64 and
+tell the image to take it: add `--build-arg VIBIUM_LOCAL=1` to `docker
+build`, or to the `fly deploy` command in
+[Deploy to Fly.io](deploy-to-fly.md#4-deploy).
+
+```bash
+ARCHES=amd64 scripts/vibium-local.sh ../vibium
+```
+
+The binaries in `deploy/vibium/` stay out of git. The build log says
+`Vibium from deploy/vibium` with the file's checksum, and the build stops if
+`VIBIUM_LOCAL=1` is set but the file is missing. Leave the build argument
+out to go back to the nightly.
 
 ## 2. An agent model
 

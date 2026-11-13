@@ -81,65 +81,19 @@ set from STATION_PASSWORD`. The image carries the Vibium binary too, for
 jams: once the station is up, adding an agent model on the AI tab of
 Settings turns on jam sessions.
 
-The image installs a Vibium nightly build (`VIBIUM_NIGHTLY` in the
-[`Dockerfile`](../../Dockerfile)), checked against that build's own
-checksums. With it a jam on a phone can tap, swipe, long press, type
-text, send its record, and speak and listen. Speaking through the
-station's own Piper needs a Vibium with Piper server support, which no
-nightly has yet: see below. To use a later nightly from Vibium's
-[releases](https://github.com/VibiumDev/vibium/releases), add
-`--build-arg VIBIUM_NIGHTLY=<its tag>` to `fly deploy`.
-
-### Use a Vibium you built
-
-To deploy a Vibium you just built, such as one from a branch that has no
-nightly yet, build it for Linux into `deploy/vibium/` and tell the image to
-take it:
-
-```bash
-ARCHES=amd64 scripts/vibium-local.sh ../vibium   # the path to your Vibium checkout
-fly deploy --build-arg VIBIUM_LOCAL=1
-```
-
-Fly.io's machines are amd64, so that is the one to build; without `ARCHES`
-the script builds arm64 too. The version it stamps is Vibium's own plus the
-commit, such as `26.8.21-local.328d74a`, with `.dirty` when the checkout has
-changes not yet committed. The binaries stay out of git. The build log says
-`Vibium from deploy/vibium` with the file's checksum, and the build stops if
-`VIBIUM_LOCAL=1` is set but the file is missing. Leave the build argument
-out to go back to the nightly.
+The image includes a Vibium nightly for jam sessions.
+[Set Up Jams](set-up-jams.md#1-vibium) covers another nightly or your own
+build, with a build argument added to the command above.
 
 ## 5. Check it
 
-Open `https://NAME.fly.dev` and sign in. The login is `owner` and the
-password is the secret from step 2. The first sign-in shows a QR code.
-Scan it with an authenticator app and type the six-digit code the app
-shows. The station then lists ten backup codes, once. Keep them.
+Open `https://NAME.fly.dev` and sign in as `owner`, with the secret from
+step 2. On **Settings**, under **Network**, the TURN line should carry the
+IPv4 address from step 1.
 
-Settings shows the station's name, and under Network its key and the
-TURN line, which should carry the public address from step 1.
-
-Then enroll a rig: make an enrollment code on the Rigs tab of Settings
-and run these on the rig, a Pi where Roadie runs as a service:
-
-```bash
-sudo -u roadie roadie enroll https://NAME.fly.dev --code ABCD-1234-7F3A
-sudo systemctl restart roadie
-```
-
-The device then shows as online on the Devices page.
-
-To prove the relay path end to end, make an API token on the Access tab
-of Settings and run the probe from your machine, which uses relay-only
-media by default:
-
-```bash
-go run ./cmd/station-probe -station https://NAME.fly.dev -token stk_... -device RIG/DEVICE
-```
-
-The probe takes the device, streams over WebRTC through TURN, taps the
-screen, checks that the picture changed, and releases the device; a
-non-zero exit names what failed.
+Then follow [First Steps on a New Station](first-steps.md): set up your
+authenticator, enroll a rig, and check the whole path with
+`station-probe`, which on Fly.io sends the media through TURN.
 
 ## 6. Use your own domain
 
@@ -193,6 +147,5 @@ carry the new name.
   `Fly-Client-IP`, since every connection reaches the station from Fly's
   proxy. Five misses from one address lock that address out for up to
   15 minutes.
-- **A lost authenticator**: a backup code signs you in once. Another
-  admin can hold Reset sign-in on your row under Users, on the Access
-  tab of Settings.
+- **Locked out**: see
+  [If you're locked out](first-steps.md#if-youre-locked-out).
