@@ -9,9 +9,11 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 	"sync/atomic"
@@ -416,6 +418,7 @@ func (f *fullStation) rows() []row {
 		{"POST", "/settings/users", "/settings/users", "login=new@example.com", ruleManage, false, false},
 		{"POST", "/settings/users/role", "/settings/users/role", "user=none&admin=1", ruleManage, false, false},
 		{"POST", "/settings/users/lock", "/settings/users/lock", "user=none&locked=1", ruleManage, false, false},
+		{"POST", "/settings/users/expires", "/settings/users/expires", "user=none&never=1", ruleManage, false, false},
 		{"POST", "/settings/users/reset", "/settings/users/reset", "user=none", ruleManage, false, false},
 		{"POST", "/settings/users/remove", "/settings/users/remove", "user=none", ruleManage, false, false},
 		{"POST", "/settings/teams", "/settings/teams", "name=t", ruleManage, false, false},
@@ -839,5 +842,127 @@ func TestRigAnswersCannotActAsTheStation(t *testing.T) {
 	}
 	if got := shown.Load(); got != nil {
 		t.Errorf("the rig was shown the browser's own headers: %v", got)
+	}
+}
+
+// An account with an expiry works until then, no hold or grant outlasts
+// it, and at that time it stops as if locked: sign-in, sessions, tokens
+// and the device it holds. An admin can move the expiry or clear it.
+func TestUserExpiry(t *testing.T) {
+	f := newFullStation(t)
+	by := map[string]caller{}
+	for _, c := range f.callers() {
+		by[c.name] = c
+	}
+	drive := f.users["drive"]
+	tokens := []string{"drive user's watch token", "drive user's drive token", "drive user's admin token"}
+
+	// Set through the API, a few minutes ahead.
+	at := time.Now().Add(3 * time.Minute).Truncate(time.Second).UTC()
+	w := f.do(by["admin"], "PUT", "/v1/users/"+drive.ID, `{"expires":"`+at.Format(time.RFC3339)+`"}`, true)
+	var put struct{ Expires time.Time }
+	if json.Unmarshal(w.Body.Bytes(), &put); w.Code != http.StatusOK || !put.Expires.Equal(at) {
+		t.Fatalf("setting it: %d %s", w.Code, w.Body)
+	}
+	if w := f.do(by["admin"], "PUT", "/v1/users/"+drive.ID, `{"expires":"next tuesday"}`, true); w.Code != http.StatusBadRequest {
+		t.Errorf("a bad expiry: %d", w.Code)
+	}
+	// Until then it works, and a hold it takes ends by the expiry.
+	w = f.do(by["drive user"], "POST", "/v1/devices/"+devA+"/hold", `{"scopes":["view","input"]}`, true)
+	if w.Code != http.StatusOK {
+		t.Fatalf("a hold before the expiry: %d %s", w.Code, w.Body)
+	}
+	var got struct {
+		Hold struct {
+			Subject string
+			Expires time.Time
+		}
+	}
+	json.Unmarshal(w.Body.Bytes(), &got)
+	if !got.Hold.Expires.Equal(at) {
+		t.Errorf("the grant ends %s, want the expiry %s", got.Hold.Expires, at)
+	}
+	for _, who := range tokens {
+		if w := f.do(by[who], "GET", "/v1/devices", "", true); w.Code != http.StatusOK {
+			t.Errorf("%s before the expiry: %d", who, w.Code)
+		}
+	}
+	if page := f.do(by["drive user"], "GET", "/account", "", true).Body.String(); !strings.Contains(page, "<th>Expires</th>") {
+		t.Error("the Account page does not say when the account expires")
+	}
+	page := f.do(by["admin"], "GET", "/settings/access", "", true).Body.String()
+	if !strings.Contains(page, `data-utc="`+at.Format(time.RFC3339)+`"`) || !strings.Contains(page, "<th>Expires</th>") {
+		t.Error("Settings does not show the expiry")
+	}
+
+	// Moved into the past from the page: what it has open ends at once.
+	past := time.Now().Add(-time.Minute).UTC().Format(time.RFC3339)
+	if w := f.do(by["admin"], "POST", "/settings/users/expires", "user="+drive.ID+"&expires_utc="+url.QueryEscape(past), true); w.Code != http.StatusSeeOther {
+		t.Fatalf("moving it: %d %s", w.Code, w.Body)
+	}
+	held, _ := f.db.Held(f.ctx)
+	for _, h := range held {
+		if h.Subject == got.Hold.Subject {
+			t.Errorf("the expired user still holds %s", h.DeviceID)
+		}
+	}
+	for _, who := range append([]string{"drive user"}, tokens...) {
+		if w := f.do(by[who], "GET", "/v1/devices", "", true); w.Code != http.StatusUnauthorized {
+			t.Errorf("%s after the expiry: %d", who, w.Code)
+		}
+	}
+	if w := f.do(by["admin"], "GET", "/settings/access", "", true); !strings.Contains(w.Body.String(), `<td data-l="Sign-in">expired</td>`) {
+		t.Error("Settings does not say the account expired")
+	}
+	// An admin cannot set one on their own account.
+	if w := f.do(by["admin"], "POST", "/settings/users/expires", "user="+f.admin.User+"&expires_utc="+url.QueryEscape(at.Format(time.RFC3339)), true); !strings.Contains(w.Body.String(), errLockout.Error()) {
+		t.Errorf("an expiry on one's own account: %d", w.Code)
+	}
+	// Never: the account works again, through its tokens at once.
+	if w := f.do(by["admin"], "POST", "/settings/users/expires", "user="+drive.ID+"&never=1", true); w.Code != http.StatusSeeOther {
+		t.Fatalf("clearing it: %d %s", w.Code, w.Body)
+	}
+	if w := f.do(by["drive user's drive token"], "GET", "/v1/devices", "", true); w.Code != http.StatusOK {
+		t.Errorf("a token after Never: %d", w.Code)
+	}
+	if u, _ := f.db.User(f.ctx, drive.ID); !u.ExpiresAt.IsZero() {
+		t.Errorf("still expires %s", u.ExpiresAt)
+	}
+	// Added with an expiry from the page, in the station's own time when
+	// the page's script did not run.
+	w = f.do(by["admin"], "POST", "/settings/users", "login=demo%40example.com&expires="+url.QueryEscape(time.Now().Add(48*time.Hour).Local().Format("2006-01-02T15:04")), true)
+	demo, err := f.db.UserByLogin(f.ctx, "demo@example.com")
+	if err != nil || demo.ExpiresAt.IsZero() || demo.ExpiresAt.Before(time.Now().Add(47*time.Hour)) {
+		t.Errorf("a user added with an expiry: %+v %v (%d)", demo.ExpiresAt, err, w.Code)
+	}
+}
+
+// A jam an expired user started loses its device with them, though its
+// hold is in the jam's name.
+func TestUserExpiryEndsTheirJamsHold(t *testing.T) {
+	f := newFullStation(t)
+	drive := f.users["drive"]
+	jam := station.Jam{ID: station.NewID("jam"), Subject: drive.Login, DeviceID: devA, Prompt: "look", Status: "running", CreatedAt: time.Now()}
+	if err := f.db.CreateJam(f.ctx, jam); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.s.holds.Take(f.ctx, hold.Request{DeviceID: devA, Subject: jamSubject(jam.ID), Scopes: []station.Scope{station.ScopeBidi}}); err != nil {
+		t.Fatal(err)
+	}
+	other := station.Jam{ID: station.NewID("jam"), Subject: f.users["jam"].Login, DeviceID: devB, Prompt: "look", Status: "running", CreatedAt: time.Now()}
+	f.db.CreateJam(f.ctx, other)
+	if _, err := f.s.holds.Take(f.ctx, hold.Request{DeviceID: devB, Subject: jamSubject(other.ID), Scopes: []station.Scope{station.ScopeBidi}}); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.s.setExpiry(f.ctx, f.admin, drive.ID, time.Now().Add(-time.Second)); err != nil {
+		t.Fatal(err)
+	}
+	held, _ := f.db.Held(f.ctx)
+	var left []string
+	for _, h := range held {
+		left = append(left, h.Subject)
+	}
+	if slices.Contains(left, jamSubject(jam.ID)) || !slices.Contains(left, jamSubject(other.ID)) {
+		t.Errorf("holds left: %v; the expired user's jam should have lost its device, the other jam not", left)
 	}
 }

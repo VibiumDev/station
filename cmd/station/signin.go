@@ -159,7 +159,7 @@ func (s *server) setupLinkPage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	u, err := s.db.User(r.Context(), inv.UserID)
-	if err != nil || u.Locked {
+	if err != nil || u.Stopped(time.Now()) {
 		w.WriteHeader(http.StatusGone)
 		s.render(w, "setup", s.signinData(r, map[string]any{"Expired": true}))
 		return
@@ -182,7 +182,7 @@ func (s *server) setupLinkPost(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	u, err := s.db.User(ctx, inv.UserID)
-	if err != nil || u.Locked {
+	if err != nil || u.Stopped(time.Now()) {
 		w.WriteHeader(http.StatusGone)
 		s.render(w, "setup", s.signinData(r, map[string]any{"Expired": true}))
 		return

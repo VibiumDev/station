@@ -389,9 +389,9 @@ user who owns them and never manage.
 
 | Method and path | What it does |
 |---|---|
-| `GET /v1/users` | Every user: `id`, `login`, `name`, `admin`, `locked`, `created`, `last_login`, `teams`, `has_password`, `two_factor`, `two_factor_at` |
-| `POST /v1/users` | `{"login", "name", "admin"}`: a new user, 201, with `setup_url`, the single-use link where they choose a password and add an authenticator |
-| `PUT /v1/users/{id}` | Any of `name`, `admin`, `locked`; an admin cannot take their own rights or sign-in away. A locked user's sessions and tokens stop |
+| `GET /v1/users` | Every user: `id`, `login`, `name`, `admin`, `locked`, `created`, `last_login`, `teams`, `has_password`, `two_factor`, `two_factor_at`, and `expires` for an account that expires |
+| `POST /v1/users` | `{"login", "name", "admin", "expires"}`: a new user, 201, with `setup_url`, the single-use link where they choose a password and add an authenticator. `expires` is optional, in RFC 3339 |
+| `PUT /v1/users/{id}` | Any of `name`, `admin`, `locked`, `expires`; an admin cannot take their own rights or sign-in away, or set an expiry on their own account. A locked user's sessions and tokens stop. `expires` is RFC 3339, or `""` for an account that doesn't expire; at that time the account stops as if locked, and loses any device it holds |
 | `POST /v1/users/{id}/reset` | Forget their password, authenticator and backup codes, end their sessions, and answer with a new `setup_url` |
 | `DELETE /v1/users/{id}` | Remove a user and their tokens |
 | `GET /v1/teams` | Every team with its `members` (user ids) |

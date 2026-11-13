@@ -656,6 +656,7 @@ func serve(args []string) int {
 						fmt.Printf("hold %s on %s ended\n", l.ID, l.DeviceID)
 					}
 				}
+				s.endExpired(context.Background(), time.Now())
 			}
 		}
 	}()

@@ -168,7 +168,9 @@ station starts, for hosts whose secrets are environment variables; the
 owner sets up an authenticator at their first sign-in, like everyone.
 Other users never get a password from anyone: an admin adds them on
 Settings and passes on the setup link, where they choose their own and
-add an authenticator.
+add an authenticator. An account can also be given an expiry, for a
+trial or a demo: at that time it stops working as if it were locked, and
+loses any device it holds.
 `STATION_VIBIUM` names the Vibium binary the same way `--vibium` does,
 and `VIBIUM_AI_PROVIDER`, `VIBIUM_AI_MODEL` and the provider's key
 variable in the environment are one more agent model on Settings, named

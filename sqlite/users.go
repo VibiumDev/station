@@ -13,14 +13,14 @@ import (
 // Users, teams and device access: who may sign in, and what a regular
 // user's teams let them see and do.
 
-const userCols = `id, login, name, password_hash, admin, locked, created_at, last_login, totp_secret, totp_at`
+const userCols = `id, login, name, password_hash, admin, locked, created_at, last_login, totp_secret, totp_at, expires_at`
 
 func scanUser(s scanner) (station.User, string, error) {
 	var u station.User
 	var hash, secret string
 	var admin, locked int
-	var created, last, totpAt int64
-	if err := s.Scan(&u.ID, &u.Login, &u.Name, &hash, &admin, &locked, &created, &last, &secret, &totpAt); err != nil {
+	var created, last, totpAt, expires int64
+	if err := s.Scan(&u.ID, &u.Login, &u.Name, &hash, &admin, &locked, &created, &last, &secret, &totpAt, &expires); err != nil {
 		return u, "", err
 	}
 	u.Admin, u.Locked = admin != 0, locked != 0
@@ -31,6 +31,9 @@ func scanUser(s scanner) (station.User, string, error) {
 	}
 	if totpAt != 0 {
 		u.TwoFactorAt = time.Unix(0, totpAt)
+	}
+	if expires != 0 {
+		u.ExpiresAt = time.Unix(0, expires)
 	}
 	return u, hash, nil
 }
@@ -132,9 +135,13 @@ func (d *DB) PutUser(ctx context.Context, u station.User) error {
 	if created.IsZero() {
 		created = time.Now()
 	}
-	_, err := d.db.ExecContext(ctx, `INSERT INTO users (id, login, name, admin, locked, created_at) VALUES (?, ?, ?, ?, ?, ?)
-		ON CONFLICT(id) DO UPDATE SET login = excluded.login, name = excluded.name, admin = excluded.admin, locked = excluded.locked`,
-		u.ID, strings.ToLower(strings.TrimSpace(u.Login)), strings.TrimSpace(u.Name), admin, locked, created.UnixNano())
+	var expires int64
+	if !u.ExpiresAt.IsZero() {
+		expires = u.ExpiresAt.UnixNano()
+	}
+	_, err := d.db.ExecContext(ctx, `INSERT INTO users (id, login, name, admin, locked, created_at, expires_at) VALUES (?, ?, ?, ?, ?, ?, ?)
+		ON CONFLICT(id) DO UPDATE SET login = excluded.login, name = excluded.name, admin = excluded.admin, locked = excluded.locked, expires_at = excluded.expires_at`,
+		u.ID, strings.ToLower(strings.TrimSpace(u.Login)), strings.TrimSpace(u.Name), admin, locked, created.UnixNano(), expires)
 	if err != nil && strings.Contains(err.Error(), "UNIQUE") {
 		return ErrLoginTaken
 	}

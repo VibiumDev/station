@@ -127,6 +127,24 @@
         });
       });
     }
+    // Times in the viewer's own time zone. An expiry form shows its time
+    // on the viewer's clock and sends it as UTC, so the station's own time
+    // zone does not matter.
+    var two = function (n) { return (n < 10 ? '0' : '') + n; };
+    Array.prototype.forEach.call(document.querySelectorAll('time[data-local]'), function (t) {
+      var d = new Date(t.getAttribute('datetime'));
+      if (!isNaN(d)) t.textContent = d.toLocaleString([], {year: 'numeric', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit'});
+    });
+    Array.prototype.forEach.call(document.querySelectorAll('form[data-expiry]'), function (f) {
+      var pick = f.querySelector('input[type=datetime-local]'), utc = f.querySelector('input[name=expires_utc]');
+      if (!pick || !utc) return;
+      var was = new Date(pick.getAttribute('data-utc') || '');
+      if (!isNaN(was)) pick.value = was.getFullYear() + '-' + two(was.getMonth() + 1) + '-' + two(was.getDate()) + 'T' + two(was.getHours()) + ':' + two(was.getMinutes());
+      f.addEventListener('submit', function () {
+        var d = new Date(pick.value);
+        utc.value = pick.value && !isNaN(d) ? d.toISOString() : '';
+      });
+    });
     // A row's ⋯ menu closes on a click anywhere else.
     document.addEventListener('click', function (e) {
       Array.prototype.forEach.call(document.querySelectorAll('details.more[open]'), function (d) {
