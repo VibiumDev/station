@@ -133,7 +133,10 @@
     var two = function (n) { return (n < 10 ? '0' : '') + n; };
     Array.prototype.forEach.call(document.querySelectorAll('time[data-local]'), function (t) {
       var d = new Date(t.getAttribute('datetime'));
-      if (!isNaN(d)) t.textContent = d.toLocaleString([], {year: 'numeric', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit'});
+      if (isNaN(d)) return;
+      var o = {month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit'};
+      if (d.getFullYear() !== new Date().getFullYear()) o.year = 'numeric';
+      t.textContent = d.toLocaleString([], o);
     });
     Array.prototype.forEach.call(document.querySelectorAll('form[data-expiry]'), function (f) {
       var pick = f.querySelector('input[type=datetime-local]'), utc = f.querySelector('input[name=expires_utc]');

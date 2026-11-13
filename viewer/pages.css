@@ -459,7 +459,9 @@ main.home { padding-top: clamp(44px, 30vh, 320px); }
 .more .menu button { white-space: nowrap; }
 .more summary.link { color: var(--link); }
 .more summary.link:hover { color: var(--link-hover); }
-.more.expiry .menu { min-width: 0; }
+.more.expiry summary { white-space: nowrap; }
+.more.expiry .menu { position: static; min-width: 0; margin-top: 8px; padding: 10px; box-shadow: none; }
+.more.expiry .menu .row { flex-wrap: wrap; gap: 6px; }
 .tabs { display: flex; flex-wrap: wrap; gap: 4px 24px; margin: 28px 0 0; border-bottom: 1px solid var(--line-card); font-size: 15px; }
 .tabs a { padding: 8px 0 10px; margin-bottom: -1px; color: var(--text-2); text-decoration: none; border-bottom: 2px solid transparent; }
 .tabs a:hover { color: var(--text); }
