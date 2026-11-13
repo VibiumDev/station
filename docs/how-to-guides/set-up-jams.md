@@ -138,6 +138,13 @@ speech to text:
 Each model needs its own copy of the key, because models don't share
 keys.
 
+Speech to text is never exact. A jam session is told so: it compares
+what it heard with what it expected by meaning, not letter by letter.
+When a result turns on one exact word, such as a name or a number, it
+listens again or looks for the word on the screen. For checks like that,
+a more exact listen model helps. Step 5 compares them under "Which
+model".
+
 ## 4. Talk with Piper, on this machine
 
 [Piper](https://github.com/OHF-voice/piper1-gpl) is text to speech that

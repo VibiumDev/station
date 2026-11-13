@@ -29,6 +29,20 @@ func TestNotesGoToTheModelWithTheInstruction(t *testing.T) {
 		t.Errorf("an instruction with no notes speaks of them: %s", text)
 	}
 
+	// A jam that hears is told a transcript is not exact. One that only
+	// speaks, or does neither, is not.
+	const care = "by meaning, not letter by letter"
+	for _, opt := range []Options{{Hears: true}, {Hears: true, Speaks: true}} {
+		if text := said(opt); !strings.Contains(text, care) || !strings.Contains(text, "listen again or find the word on the screen") {
+			t.Errorf("a jam that hears (%+v) is not told how to read a transcript: %s", opt, text)
+		}
+	}
+	for _, opt := range []Options{{}, {Speaks: true}} {
+		if text := said(opt); strings.Contains(text, care) {
+			t.Errorf("a jam that cannot hear is told about transcripts: %s", text)
+		}
+	}
+
 	// Both sets, the station's first, after everything the station says
 	// itself, and marked as not from the device.
 	text := said(Options{StationNotes: "Leave the device on its home screen.", PersonNotes: "Say what you tapped."})
