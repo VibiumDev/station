@@ -120,6 +120,7 @@ func (s *server) teamsData(ctx context.Context, p station.Principal, data map[st
 		rows = append(rows, row)
 	}
 	data["Users"], data["Teams"], data["AccessRows"], data["TokenUsers"] = uviews, tviews, rows, logins
+	data["Zone"] = time.Now().Format("MST") // what an expiry is typed in when the page's script does not run
 	data["Levels"] = []station.Level{station.LevelNone, station.LevelWatch, station.LevelDrive, station.LevelJam}
 }
 
@@ -390,13 +391,13 @@ func (s *server) addUserForm(w http.ResponseWriter, r *http.Request, p station.P
 }
 
 // userExpiryForm is POST /settings/users/expires: user, and the expiry to
-// set, or never=1 to clear it.
+// set, or clear=1 for an account that doesn't expire.
 func (s *server) userExpiryForm(w http.ResponseWriter, r *http.Request, p station.Principal) {
 	var expires time.Time
 	var err error
-	if r.FormValue("never") != "1" {
+	if r.FormValue("clear") != "1" {
 		if expires, err = formExpiry(r); err == nil && expires.IsZero() {
-			err = errors.New("pick a date and time for the account to expire, or press Never")
+			err = errors.New("pick a day for the account to expire, or press Clear")
 		}
 	}
 	if err == nil {
@@ -406,8 +407,9 @@ func (s *server) userExpiryForm(w http.ResponseWriter, r *http.Request, p statio
 }
 
 // formExpiry is the expiry a form asks for: expires_utc, which the page's
-// script fills in from the viewer's own clock, or else expires, a date and
-// time on the station's clock. Neither means none.
+// script fills in from the viewer's own clock, or else expires_date and
+// expires_time (12:01 AM when empty) on the station's clock. No date
+// means none.
 func formExpiry(r *http.Request) (time.Time, error) {
 	if v := strings.TrimSpace(r.FormValue("expires_utc")); v != "" {
 		t, err := time.Parse(time.RFC3339, v)
@@ -416,8 +418,12 @@ func formExpiry(r *http.Request) (time.Time, error) {
 		}
 		return t, nil
 	}
-	if v := strings.TrimSpace(r.FormValue("expires")); v != "" {
-		t, err := time.ParseInLocation("2006-01-02T15:04", v, time.Local)
+	if day := strings.TrimSpace(r.FormValue("expires_date")); day != "" {
+		clock := strings.TrimSpace(r.FormValue("expires_time"))
+		if clock == "" {
+			clock = "00:01"
+		}
+		t, err := time.ParseInLocation("2006-01-02 15:04", day+" "+clock, time.Local)
 		if err != nil {
 			return time.Time{}, errors.New("the expiry is not a date and time")
 		}

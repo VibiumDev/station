@@ -460,6 +460,14 @@ main.home { padding-top: clamp(44px, 30vh, 320px); }
 .more summary.link { color: var(--link); }
 .more summary.link:hover { color: var(--link-hover); }
 .more.expiry summary { white-space: nowrap; }
+/* Menus inside the users table open in their cell, so the table's edge
+   never cuts them off. */
+table.users .more .menu { position: static; min-width: 0; margin-top: 8px; padding: 10px; box-shadow: none; }
+table.users td.act { white-space: nowrap; }
+table.users td.act form.inline, table.users td.act details.more { display: inline-block; vertical-align: top; }
+table.users td.act .menu { white-space: normal; }
+.expiryrow { align-items: center; }
+.expiryrow input[type=date], .expiryrow input[type=time] { width: auto; }
 .more.expiry .menu { position: static; min-width: 0; margin-top: 8px; padding: 10px; box-shadow: none; }
 .more.expiry .menu .row { flex-wrap: wrap; gap: 6px; }
 .tabs { display: flex; flex-wrap: wrap; gap: 4px 24px; margin: 28px 0 0; border-bottom: 1px solid var(--line-card); font-size: 15px; }

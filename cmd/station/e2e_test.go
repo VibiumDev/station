@@ -418,7 +418,7 @@ func (f *fullStation) rows() []row {
 		{"POST", "/settings/users", "/settings/users", "login=new@example.com", ruleManage, false, false},
 		{"POST", "/settings/users/role", "/settings/users/role", "user=none&admin=1", ruleManage, false, false},
 		{"POST", "/settings/users/lock", "/settings/users/lock", "user=none&locked=1", ruleManage, false, false},
-		{"POST", "/settings/users/expires", "/settings/users/expires", "user=none&never=1", ruleManage, false, false},
+		{"POST", "/settings/users/expires", "/settings/users/expires", "user=none&clear=1", ruleManage, false, false},
 		{"POST", "/settings/users/reset", "/settings/users/reset", "user=none", ruleManage, false, false},
 		{"POST", "/settings/users/remove", "/settings/users/remove", "user=none", ruleManage, false, false},
 		{"POST", "/settings/teams", "/settings/teams", "name=t", ruleManage, false, false},
@@ -911,29 +911,40 @@ func TestUserExpiry(t *testing.T) {
 			t.Errorf("%s after the expiry: %d", who, w.Code)
 		}
 	}
-	if w := f.do(by["admin"], "GET", "/settings/access", "", true); !strings.Contains(w.Body.String(), `<td data-l="Sign-in">expired</td>`) {
+	if w := f.do(by["admin"], "GET", "/settings/access", "", true); !strings.Contains(w.Body.String(), `<td data-l="Sign-in">expired<span class="sub">`) {
 		t.Error("Settings does not say the account expired")
 	}
 	// An admin cannot set one on their own account.
 	if w := f.do(by["admin"], "POST", "/settings/users/expires", "user="+f.admin.User+"&expires_utc="+url.QueryEscape(at.Format(time.RFC3339)), true); !strings.Contains(w.Body.String(), errLockout.Error()) {
 		t.Errorf("an expiry on one's own account: %d", w.Code)
 	}
-	// Never: the account works again, through its tokens at once.
-	if w := f.do(by["admin"], "POST", "/settings/users/expires", "user="+drive.ID+"&never=1", true); w.Code != http.StatusSeeOther {
+	// Clear: the account works again, through its tokens at once.
+	if w := f.do(by["admin"], "POST", "/settings/users/expires", "user="+drive.ID+"&clear=1", true); w.Code != http.StatusSeeOther {
 		t.Fatalf("clearing it: %d %s", w.Code, w.Body)
 	}
 	if w := f.do(by["drive user's drive token"], "GET", "/v1/devices", "", true); w.Code != http.StatusOK {
-		t.Errorf("a token after Never: %d", w.Code)
+		t.Errorf("a token after Clear: %d", w.Code)
 	}
 	if u, _ := f.db.User(f.ctx, drive.ID); !u.ExpiresAt.IsZero() {
 		t.Errorf("still expires %s", u.ExpiresAt)
 	}
 	// Added with an expiry from the page, in the station's own time when
-	// the page's script did not run.
-	w = f.do(by["admin"], "POST", "/settings/users", "login=demo%40example.com&expires="+url.QueryEscape(time.Now().Add(48*time.Hour).Local().Format("2006-01-02T15:04")), true)
+	// the page's script did not run: a day alone means 12:01 AM.
+	day := time.Now().Add(72 * time.Hour).Local()
+	w = f.do(by["admin"], "POST", "/settings/users", "login=demo%40example.com&expires_date="+day.Format("2006-01-02")+"&expires_time=", true)
 	demo, err := f.db.UserByLogin(f.ctx, "demo@example.com")
-	if err != nil || demo.ExpiresAt.IsZero() || demo.ExpiresAt.Before(time.Now().Add(47*time.Hour)) {
-		t.Errorf("a user added with an expiry: %+v %v (%d)", demo.ExpiresAt, err, w.Code)
+	want := time.Date(day.Year(), day.Month(), day.Day(), 0, 1, 0, 0, time.Local)
+	if err != nil || !demo.ExpiresAt.Equal(want) {
+		t.Errorf("a user added with an expiry: %s, want %s, %v (%d)", demo.ExpiresAt, want, err, w.Code)
+	}
+	// Without a date, the account does not expire.
+	f.do(by["admin"], "POST", "/settings/users", "login=lasting%40example.com&expires_date=&expires_time=00%3A01", true)
+	if u, err := f.db.UserByLogin(f.ctx, "lasting@example.com"); err != nil || !u.ExpiresAt.IsZero() {
+		t.Errorf("a user added with no date: %s %v", u.ExpiresAt, err)
+	}
+	page = f.do(by["admin"], "GET", "/settings/access", "", true).Body.String()
+	if !strings.Contains(page, `name="expires_time" value="00:01"`) || !strings.Contains(page, `data-tz>`) || !strings.Contains(page, `data-clear-expiry`) {
+		t.Error("the add form should offer a day, a time of 12:01 AM, the time zone and Clear")
 	}
 }
 
@@ -964,5 +975,24 @@ func TestUserExpiryEndsTheirJamsHold(t *testing.T) {
 	}
 	if slices.Contains(left, jamSubject(jam.ID)) || !slices.Contains(left, jamSubject(other.ID)) {
 		t.Errorf("holds left: %v; the expired user's jam should have lost its device, the other jam not", left)
+	}
+}
+
+// Everyone picks their own theme on their Account page; it is kept in
+// their browser, so Settings, which only admins open, has none.
+func TestAppearanceOnAccount(t *testing.T) {
+	f := newFullStation(t)
+	for _, c := range f.callers() {
+		switch c.name {
+		case "watch user", "drive user", "admin":
+			if page := f.do(c, "GET", "/account", "", true).Body.String(); !strings.Contains(page, `id="themePick"`) {
+				t.Errorf("%s's Account page has no theme picker", c.name)
+			}
+		}
+		if c.name == "admin" {
+			if page := f.do(c, "GET", "/settings", "", true).Body.String(); strings.Contains(page, `id="themePick"`) {
+				t.Error("Settings still has the theme picker")
+			}
+		}
 	}
 }

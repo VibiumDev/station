@@ -127,25 +127,42 @@
         });
       });
     }
-    // Times in the viewer's own time zone. An expiry form shows its time
-    // on the viewer's clock and sends it as UTC, so the station's own time
-    // zone does not matter.
+    // Times in the viewer's own time zone, with its name. An expiry form
+    // shows its day and time on the viewer's clock and sends them as UTC,
+    // so the station's own time zone does not matter.
     var two = function (n) { return (n < 10 ? '0' : '') + n; };
+    var zone = '', zoneName = '';
+    try {
+      zoneName = Intl.DateTimeFormat().resolvedOptions().timeZone || '';
+      new Intl.DateTimeFormat([], {timeZoneName: 'short'}).formatToParts(new Date()).forEach(function (p) {
+        if (p.type === 'timeZoneName') zone = p.value;
+      });
+    } catch (e) {}
+    Array.prototype.forEach.call(document.querySelectorAll('[data-tz]'), function (el) {
+      if (!zone) return;
+      el.textContent = zone;
+      el.title = zoneName ? 'Your time zone, ' + zoneName : 'Your time zone';
+    });
     Array.prototype.forEach.call(document.querySelectorAll('time[data-local]'), function (t) {
       var d = new Date(t.getAttribute('datetime'));
       if (isNaN(d)) return;
-      var o = {month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit'};
+      var o = {month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', timeZoneName: 'short'};
       if (d.getFullYear() !== new Date().getFullYear()) o.year = 'numeric';
       t.textContent = d.toLocaleString([], o);
     });
     Array.prototype.forEach.call(document.querySelectorAll('form[data-expiry]'), function (f) {
-      var pick = f.querySelector('input[type=datetime-local]'), utc = f.querySelector('input[name=expires_utc]');
-      if (!pick || !utc) return;
-      var was = new Date(pick.getAttribute('data-utc') || '');
-      if (!isNaN(was)) pick.value = was.getFullYear() + '-' + two(was.getMonth() + 1) + '-' + two(was.getDate()) + 'T' + two(was.getHours()) + ':' + two(was.getMinutes());
+      var day = f.querySelector('input[type=date]'), clock = f.querySelector('input[type=time]'), utc = f.querySelector('input[name=expires_utc]');
+      if (!day || !clock || !utc) return;
+      var was = new Date(day.getAttribute('data-utc') || '');
+      if (!isNaN(was)) {
+        day.value = was.getFullYear() + '-' + two(was.getMonth() + 1) + '-' + two(was.getDate());
+        clock.value = two(was.getHours()) + ':' + two(was.getMinutes());
+      }
+      var clear = f.querySelector('[data-clear-expiry]');
+      if (clear) clear.addEventListener('click', function () { day.value = ''; clock.value = '00:01'; });
       f.addEventListener('submit', function () {
-        var d = new Date(pick.value);
-        utc.value = pick.value && !isNaN(d) ? d.toISOString() : '';
+        var d = new Date(day.value + 'T' + (clock.value || '00:01'));
+        utc.value = day.value && !isNaN(d) ? d.toISOString() : '';
       });
     });
     // A row's ⋯ menu closes on a click anywhere else.
