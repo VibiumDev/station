@@ -11,7 +11,7 @@ rig dials out to the station, so it works from behind any router.
 
 ```mermaid
 flowchart TB
-    J["Jam sessions on the station<br/>an LLM drives Vibium (MCP),<br/>with text to speech and speech to text"]
+    J["Jam sessions on the station<br/>a chat with your LLM,<br/>which drives Vibium (MCP)<br/>with text to speech<br/>and speech to text"]
     C["People and agents<br/>a browser or an API token"]
     S["Station"]
     R["Rig<br/>Roadie on a Pi"]
@@ -26,9 +26,10 @@ flowchart TB
 
 - **People** open a device in the browser and drive it.
 - **Agents** drive it through the API, with REST and WebDriver BiDi.
-- **Jam sessions** run on the station itself: type a prompt, and an LLM
-  drives the device through Vibium's MCP tools, speaking and listening with
-  text-to-speech and speech-to-text models.
+- **Jam sessions** are chat sessions with an LLM you set up on the station.
+  You type what you want done, and the LLM does it on the device through
+  Vibium's MCP tools, speaking and listening with text-to-speech and
+  speech-to-text models.
 - **Video, sound and input** go over WebRTC, directly or through the
   station's TURN relay.
 - **The rig** checks a grant signed by the station before it takes any
@@ -54,7 +55,7 @@ test voice assistants, voice agents and any app where sound matters.
 - Sign-in with a password and an authenticator app, or a tailnet identity
 - Users and teams: regular users see only the devices their teams were given
 - One person or agent in control of a device at a time, and one watching
-- Jam sessions: type a prompt, and an AI model carries it out on a device
+- Jam sessions: a chat with an LLM you set up, which does what you ask on a device
 - Two-way sound, with speech on the station (Piper) or in the cloud
 - A Record Store for recordings, screenshots and sound, played in place
 - Runs on your LAN, your tailnet, or the public internet
