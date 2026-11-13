@@ -58,7 +58,8 @@ type Config struct {
 	Watch bool `json:"watch,omitempty"`
 	// Device is the device id on a station, empty on a Roadie.
 	Device string `json:"device,omitempty"`
-	// Name is shown in the title and screenshots.
+	// Name is the device's name for people. Saved screenshots are named
+	// after it.
 	Name string    `json:"name,omitempty"`
 	API  Endpoints `json:"api"`
 	// InputMode preselects mouse or touch for this load; empty leaves it

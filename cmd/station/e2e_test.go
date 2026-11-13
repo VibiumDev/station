@@ -7,6 +7,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"html"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -1004,6 +1005,38 @@ func TestAppearanceOnAccount(t *testing.T) {
 			if page := f.do(c, "GET", "/settings", "", true).Body.String(); strings.Contains(page, `id="themePick"`) {
 				t.Error("Settings still has the theme picker")
 			}
+		}
+	}
+}
+
+// The viewer is told the device's name alone, which names the screenshots
+// it saves: the label, else the model, else the name in the rig.
+func TestViewerConfigNamesTheDevice(t *testing.T) {
+	f := newFullStation(t)
+	var admin caller
+	for _, c := range f.callers() {
+		if c.name == "admin" {
+			admin = c
+		}
+	}
+	for _, c := range []struct{ label, model, want string }{
+		{"", "", "phone"},
+		{"", "iPhone 15 Pro Max", "iPhone 15 Pro Max"},
+		{"Test phone", "iPhone 15 Pro Max", "Test phone"},
+	} {
+		dev := station.Device{ID: devA, Kind: "phone", Caps: []string{station.CapVideo, station.CapHID}, Label: c.label, Model: c.model}
+		if err := f.db.SetDevices(f.ctx, "rig_a", []station.Device{dev}); err != nil {
+			t.Fatal(err)
+		}
+		page := f.do(admin, "GET", "/devices/"+devA+"/drive", "", false).Body.String()
+		_, rest, _ := strings.Cut(page, `data-config="`)
+		raw, _, _ := strings.Cut(rest, `"`)
+		var cfg struct{ Name string }
+		if err := json.Unmarshal([]byte(html.UnescapeString(raw)), &cfg); err != nil {
+			t.Fatalf("label %q, model %q: config: %v", c.label, c.model, err)
+		}
+		if cfg.Name != c.want {
+			t.Errorf("label %q, model %q: the viewer's name is %q, want %q", c.label, c.model, cfg.Name, c.want)
 		}
 	}
 }

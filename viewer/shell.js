@@ -597,15 +597,11 @@
   }
 
   // --- Screenshot: the picture as it is now, saved by the browser as
-  // <site>-<device>-<local time>.jpg. Nothing is sent to the device.
-  function siteName() {
-    var h = location.hostname;
-    if (!h || h.indexOf('.') < 0 || h.indexOf(':') >= 0 || /^[\d.]+$/.test(h)) return 'roadie';
-    var parts = h.split('.'), last = parts.length - 1;
-    if (parts[last] === 'local') return parts[last - 1];
-    var i = last - 1;
-    if (i > 0 && parts[i].length <= 3 && parts[last].length === 2) i--;  // vibium.co.uk
-    return parts[i];
+  // <device>-<local time>.jpg. Nothing is sent to the device.
+  function shotName() {
+    var plat = window.__roadiePlatform;
+    var name = (cfg.name || '').replace(/[^\p{L}\p{N}]+/gu, '-').replace(/^-|-$/g, '').toLowerCase();
+    return name || (plat === 'ios' ? 'iphone' : plat) || 'screenshot';
   }
   $('shotBtn').onclick = function () {
     fetch(api.snapshot + '?quality=' + shotQuality(), opts({cache: 'no-store'})).then(function (r) {
@@ -616,9 +612,7 @@
       var stamp = d.getFullYear() + '-' + two(d.getMonth() + 1) + '-' + two(d.getDate()) + '-' + two(d.getHours()) + two(d.getMinutes()) + two(d.getSeconds());
       var a = document.createElement('a');
       a.href = URL.createObjectURL(blob);
-      var plat = window.__roadiePlatform;
-      var kind = plat === 'ios' ? 'iphone' : (plat || (cfg.name ? cfg.name.replace(/[^a-z0-9]+/gi, '-').toLowerCase() : ''));
-      a.download = siteName() + (kind ? '-' + kind : '') + '-' + stamp + '.jpg';
+      a.download = shotName() + '-' + stamp + '.jpg';
       document.body.appendChild(a);
       a.click();
       a.remove();

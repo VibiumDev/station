@@ -927,7 +927,7 @@ func (s *server) devicePage(w http.ResponseWriter, r *http.Request, p station.Pr
 	if q.Get("minimal") == "1" {
 		w.Header().Set("Content-Security-Policy", framedCSP)
 	}
-	cfg := viewer.Config{Mode: "station", Watch: watch, Device: dev.ID, Name: rg.Name + " / " + dev.Title(), API: viewer.Relayed("", dev.ID),
+	cfg := viewer.Config{Mode: "station", Watch: watch, Device: dev.ID, Name: dev.Title(), API: viewer.Relayed("", dev.ID),
 		InputMode: dev.Input, Shortcuts: dev.Shortcuts, CSRF: s.auth.csrfToken(r), WebRTC: true, Recorded: s.tunnel.RecordsHolds(rg.ID)}
 	for _, c := range dev.Caps {
 		if c == station.CapVideo {
