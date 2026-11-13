@@ -165,6 +165,30 @@
         utc.value = day.value && !isNaN(d) ? d.toISOString() : '';
       });
     });
+    // A floating menu is placed under its button, to the button's right
+    // edge or, with data-float="left", its left, and above it when there
+    // is no room below. It follows the page as it scrolls.
+    var place = function (d) {
+      var menu = d.querySelector('.menu'), r = d.querySelector('summary').getBoundingClientRect();
+      var w = menu.offsetWidth, h = menu.offsetHeight;
+      var left = d.getAttribute('data-float') === 'left' ? r.left : r.right - w;
+      left = Math.max(8, Math.min(left, window.innerWidth - w - 8));
+      var top = r.bottom + 6;
+      if (top + h > window.innerHeight - 8 && r.top - h - 6 > 8) top = r.top - h - 6;
+      menu.style.left = left + 'px';
+      menu.style.top = top + 'px';
+    };
+    var floats = document.querySelectorAll('details[data-float]');
+    Array.prototype.forEach.call(floats, function (d) {
+      d.addEventListener('toggle', function () {
+        if (d.open) place(d); else d.querySelector('.menu').style.left = '';
+      });
+    });
+    var follow = function () {
+      Array.prototype.forEach.call(floats, function (d) { if (d.open) place(d); });
+    };
+    window.addEventListener('scroll', follow, true);
+    window.addEventListener('resize', follow);
     // A row's ⋯ menu closes on a click anywhere else.
     document.addEventListener('click', function (e) {
       Array.prototype.forEach.call(document.querySelectorAll('details.more[open]'), function (d) {
