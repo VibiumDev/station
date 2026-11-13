@@ -11,14 +11,14 @@ rig dials out to the station, so it works from behind any router.
 
 ```mermaid
 flowchart TB
+    J["Jam sessions on the station<br/>an LLM drives Vibium (MCP),<br/>with text to speech and speech to text"]
     C["People and agents<br/>a browser or an API token"]
     S["Station"]
-    M["AI models"]
     R["Rig<br/>Roadie on a Pi"]
     D["Phone"]
 
+    J --> S
     C --> S
-    S --> M
     S <-- "tunnel" --> R
     R --- D
     C -. "WebRTC" .- R
@@ -26,6 +26,9 @@ flowchart TB
 
 - **People** open a device in the browser and drive it.
 - **Agents** drive it through the API, with REST and WebDriver BiDi.
+- **Jam sessions** run on the station itself: type a prompt, and an LLM
+  drives the device through Vibium's MCP tools, speaking and listening with
+  text-to-speech and speech-to-text models.
 - **Video, sound and input** go over WebRTC, directly or through the
   station's TURN relay.
 - **The rig** checks a grant signed by the station before it takes any
