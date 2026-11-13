@@ -13,16 +13,26 @@ RUN CGO_ENABLED=0 go build -trimpath -ldflags="-s -w -X main.version=${VERSION}"
 # binary of a nightly build, checked against that build's own list of
 # checksums. The last release, 26.8.21, cannot tap or swipe on a phone or
 # send a jam's record, so a nightly stands in until a release can.
+# VIBIUM_LOCAL=1 takes a Vibium you built instead: deploy/vibium/
+# vibium-linux-<arch>, from scripts/vibium-local.sh.
 FROM alpine:3.22 AS vibium
 ARG TARGETARCH
 ARG VIBIUM_NIGHTLY=nightly-2026.11.10-dev.20261110220518-01f5372
+ARG VIBIUM_LOCAL=0
+COPY deploy/vibium/ /local/
 RUN apk add --no-cache curl \
  && case "${TARGETARCH:-$(uname -m)}" in arm64|aarch64) ARCH=arm64 ;; *) ARCH=amd64 ;; esac \
- && URL=https://github.com/VibiumDev/vibium/releases/download/${VIBIUM_NIGHTLY} \
- && curl -fsSLo /out-vibium $URL/vibium-linux-$ARCH \
- && curl -fsSLo /tmp/SHA256SUMS $URL/SHA256SUMS \
- && want=$(grep " release/bin/vibium-linux-$ARCH\$" /tmp/SHA256SUMS | cut -d' ' -f1) \
- && [ -n "$want" ] && [ "$want" = "$(sha256sum /out-vibium | cut -d' ' -f1)" ] \
+ && if [ "$VIBIUM_LOCAL" = 1 ]; then \
+      [ -s /local/vibium-linux-$ARCH ] || { echo "VIBIUM_LOCAL=1, but there is no deploy/vibium/vibium-linux-$ARCH: run scripts/vibium-local.sh" >&2; exit 1; }; \
+      cp /local/vibium-linux-$ARCH /out-vibium; \
+      echo "Vibium from deploy/vibium: $(sha256sum /out-vibium)"; \
+    else \
+      URL=https://github.com/VibiumDev/vibium/releases/download/${VIBIUM_NIGHTLY} \
+      && curl -fsSLo /out-vibium $URL/vibium-linux-$ARCH \
+      && curl -fsSLo /tmp/SHA256SUMS $URL/SHA256SUMS \
+      && want=$(grep " release/bin/vibium-linux-$ARCH\$" /tmp/SHA256SUMS | cut -d' ' -f1) \
+      && [ -n "$want" ] && [ "$want" = "$(sha256sum /out-vibium | cut -d' ' -f1)" ]; \
+    fi \
  && chmod 755 /out-vibium
 
 FROM alpine:3.22

@@ -38,3 +38,6 @@ go.work.sum
 /dist/
 # The running log for the agent sessions stays local.
 /docs/progress.md
+
+# A Vibium built by scripts/vibium-local.sh for the image
+deploy/vibium/vibium-*

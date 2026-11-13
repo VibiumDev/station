@@ -89,6 +89,25 @@ text and send its record. Say and listen are in builds made after
 [releases](https://github.com/VibiumDev/vibium/releases), add
 `--build-arg VIBIUM_NIGHTLY=<its tag>` to `fly deploy`.
 
+### Use a Vibium you built
+
+To deploy a Vibium you just built, such as one from a branch that has no
+nightly yet, build it for Linux into `deploy/vibium/` and tell the image to
+take it:
+
+```bash
+ARCHES=amd64 scripts/vibium-local.sh ../vibium   # the path to your Vibium checkout
+fly deploy --build-arg VIBIUM_LOCAL=1
+```
+
+Fly.io's machines are amd64, so that is the one to build; without `ARCHES`
+the script builds arm64 too. The version it stamps is Vibium's own plus the
+commit, such as `26.8.21-local.328d74a`, with `.dirty` when the checkout has
+changes not yet committed. The binaries stay out of git. The build log says
+`Vibium from deploy/vibium` with the file's checksum, and the build stops if
+`VIBIUM_LOCAL=1` is set but the file is missing. Leave the build argument
+out to go back to the nightly.
+
 ## 5. Check it
 
 Open `https://NAME.fly.dev` and sign in. The login is `owner` and the
