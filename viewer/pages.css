@@ -442,6 +442,7 @@ main.home { padding-top: clamp(44px, 30vh, 320px); }
 .models .acts { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-left: auto; }
 .models .acts form.inline { display: inline-flex; align-items: center; gap: 6px; }
 .models .voice { font: 13px/1.4 var(--mono); color: var(--text-2); }
+.models [hidden] { display: none; }
 .more { position: relative; }
 .more summary { list-style: none; cursor: pointer; }
 .more summary::-webkit-details-marker { display: none; }
