@@ -11,7 +11,7 @@ rig dials out to the station, so it works from behind any router.
 
 ```mermaid
 flowchart TB
-    P["People<br/>in a browser"]
+    P["Web browser"]
     A["Agents<br/>with an API token"]
     C["Chat<br/>an LLM on the station<br/>with Vibium (MCP)<br/>and voice"]
     S["Station<br/>the hub"]
