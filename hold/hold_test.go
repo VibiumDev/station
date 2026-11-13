@@ -382,3 +382,45 @@ func TestWatcherGivesWay(t *testing.T) {
 		t.Fatalf("the watcher should observe the agent: %+v %v", again, err)
 	}
 }
+
+// A request's Until bounds the hold and every grant on it, and once it has
+// passed nothing is granted: how an account's expiry reaches the rig.
+func TestUntilBoundsHoldAndGrant(t *testing.T) {
+	f := setup(t)
+	ctx := context.Background()
+	until := f.clock.Add(3 * time.Minute)
+	req := Request{DeviceID: "rig_1/phone", Subject: "ann@example.com", Scopes: []station.Scope{station.ScopeInput}, Until: until}
+	res, err := f.m.Take(ctx, req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !res.Hold.ExpiresAt.Equal(until) || !res.Grant.ExpiresAt.Equal(until) {
+		t.Errorf("hold ends %s and grant %s, want both at %s", res.Hold.ExpiresAt, res.Grant.ExpiresAt, until)
+	}
+	// Refreshed with an earlier Until, as when an admin moves the expiry:
+	// the same hold, its grant ending at the new time.
+	f.clock = f.clock.Add(time.Minute)
+	req.Until = f.clock.Add(30 * time.Second)
+	again, err := f.m.Take(ctx, req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if again.Hold.ID != res.Hold.ID || !again.Grant.ExpiresAt.Equal(req.Until) {
+		t.Errorf("refresh: hold %s, grant ends %s, want %s", again.Hold.ID, again.Grant.ExpiresAt, req.Until)
+	}
+	// A watcher's seat is bounded the same way.
+	watch, err := f.m.Take(ctx, Request{DeviceID: "rig_1/phone", Subject: "bob@example.com", Watch: true, Until: f.clock.Add(10 * time.Second)})
+	if err != nil || !watch.Observer || !watch.Grant.ExpiresAt.Equal(f.clock.Add(10*time.Second)) {
+		t.Errorf("watcher: %+v %v", watch.Grant, err)
+	}
+	// Past it: nothing.
+	f.clock = req.Until
+	if _, err := f.m.Take(ctx, req); !errors.Is(err, ErrAccessEnded) {
+		t.Errorf("after Until: %v", err)
+	}
+	// No Until: the usual limits.
+	other, err := f.m.Take(ctx, Request{DeviceID: "rig_1/phone", Subject: "owner", Scopes: []station.Scope{station.ScopeInput}, Recall: true})
+	if err != nil || !other.Hold.ExpiresAt.Equal(f.clock.Add(MaxDuration)) {
+		t.Errorf("without Until: ends %s, %v", other.Hold.ExpiresAt, err)
+	}
+}

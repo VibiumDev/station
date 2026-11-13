@@ -457,6 +457,15 @@ main.home { padding-top: clamp(44px, 30vh, 320px); }
 .more .menu { position: absolute; right: 0; top: calc(100% + 6px); z-index: 5; display: flex; flex-direction: column; align-items: flex-start; gap: 10px; padding: 12px; min-width: 280px; border: 1px solid var(--line-card); border-radius: 12px; background: var(--surface); box-shadow: 0 8px 24px rgb(0 0 0 / 0.12); }
 .more .menu .row { margin: 0; flex-wrap: nowrap; }
 .more .menu button { white-space: nowrap; }
+.more summary.link { color: var(--link); }
+.more summary.link:hover { color: var(--link-hover); }
+.more.expiry summary { white-space: nowrap; }
+/* A menu in a table floats over the page, placed by pages.js under its
+   button: opening it moves nothing, and the table's edge never cuts it. */
+details[data-float] > .menu { position: fixed; top: 0; right: auto; left: -9999px; z-index: 30; min-width: 0; }
+.expiryrow { align-items: center; }
+.expiryrow input[type=date], .expiryrow input[type=time] { width: auto; }
+.more.expiry .menu .row { flex-wrap: nowrap; gap: 6px; }
 .tabs { display: flex; flex-wrap: wrap; gap: 4px 24px; margin: 28px 0 0; border-bottom: 1px solid var(--line-card); font-size: 15px; }
 .tabs a { padding: 8px 0 10px; margin-bottom: -1px; color: var(--text-2); text-decoration: none; border-bottom: 2px solid transparent; }
 .tabs a:hover { color: var(--text); }

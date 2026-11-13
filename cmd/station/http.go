@@ -213,6 +213,7 @@ func (s *server) handler() http.Handler {
 	mux.Handle("POST /settings/users", s.page(station.ActionManage, s.addUserForm))
 	mux.Handle("POST /settings/users/role", s.page(station.ActionManage, s.userRoleForm))
 	mux.Handle("POST /settings/users/lock", s.page(station.ActionManage, s.userLockForm))
+	mux.Handle("POST /settings/users/expires", s.page(station.ActionManage, s.userExpiryForm))
 	mux.Handle("POST /settings/users/reset", s.page(station.ActionManage, s.userResetForm))
 	mux.Handle("POST /settings/users/remove", s.page(station.ActionManage, s.userRemoveForm))
 	mux.Handle("POST /settings/teams", s.page(station.ActionManage, s.addTeamForm))
@@ -662,7 +663,7 @@ func (s *server) takeHold(w http.ResponseWriter, r *http.Request, p station.Prin
 		apiError(w, http.StatusForbidden, "this token may only view")
 		return
 	}
-	res, err := s.holds.Take(r.Context(), hold.Request{DeviceID: id, Subject: p.Subject, Scopes: scopes, Recall: s.mayRecall(r.Context(), p, id), Watch: body.Watch})
+	res, err := s.holds.Take(r.Context(), hold.Request{DeviceID: id, Subject: p.Subject, Until: p.Expires, Scopes: scopes, Recall: s.mayRecall(r.Context(), p, id), Watch: body.Watch})
 	var queued *hold.Queued
 	switch {
 	case errors.Is(err, station.ErrNotFound):
@@ -726,7 +727,7 @@ func (s *server) reserve(w http.ResponseWriter, r *http.Request, p station.Princ
 		apiError(w, http.StatusForbidden, "this token may only view")
 		return
 	}
-	pos, err := s.holds.Reserve(r.Context(), hold.Request{DeviceID: id, Subject: p.Subject, Scopes: scopes}, at)
+	pos, err := s.holds.Reserve(r.Context(), hold.Request{DeviceID: id, Subject: p.Subject, Until: p.Expires, Scopes: scopes}, at)
 	if errors.Is(err, station.ErrNotFound) {
 		apiError(w, http.StatusNotFound, "no such device")
 		return
@@ -813,7 +814,7 @@ func (s *server) relayTo(w http.ResponseWriter, r *http.Request, p station.Princ
 		apiError(w, http.StatusForbidden, "this token may only view")
 		return
 	}
-	res, err := s.holds.Take(r.Context(), hold.Request{DeviceID: id, Subject: p.Subject, Scopes: scopes})
+	res, err := s.holds.Take(r.Context(), hold.Request{DeviceID: id, Subject: p.Subject, Until: p.Expires, Scopes: scopes})
 	var queued *hold.Queued
 	switch {
 	case errors.Is(err, station.ErrNotFound):

@@ -37,7 +37,7 @@ a team at one of three levels, each including the ones before it:
 
 | Level | May |
 |---|---|
-| `watch` | Open the watching page, see the device's jams and records |
+| `watch` | Open the watching page, see the device's jams and records; read-only, so no uploads |
 | `drive` | Take the device and drive it from the viewer |
 | `jam` | Start jams and drive the device with an agent over the API |
 
@@ -89,10 +89,12 @@ nothing, not even its user's own.
 A Teams section on Settings, for admins:
 
 - **Users**: login, name, admin or regular, the teams they are in, how
-  they sign in, last sign-in. Add a user with a login, a name and
-  whether they are an admin, and get their setup link. Make a user an
-  admin or a regular user, lock and unlock, reset their sign-in (held
-  for a moment; a new setup link), and remove (held).
+  they sign in, last sign-in, and when the account expires. Add a user
+  with a login, a name, whether they are an admin and, optionally, when
+  the account expires, and get their setup link. Make a user an admin or
+  a regular user, lock and unlock, set, move or clear the expiry, reset
+  their sign-in (held for a moment; a new setup link), and remove
+  (held).
 - **Teams**: name and members. Add a team, add and remove members,
   remove a team (held).
 - **Device access**: a grid of every known device against every team,
@@ -101,11 +103,30 @@ A Teams section on Settings, for admins:
 
 Every change is audited.
 
+## Expiring accounts
+
+An account MAY have an expiry, for a trial or a demo. Accounts have none
+unless an admin sets one, and an admin MUST NOT be able to set one on
+their own account. At the expiry the account stops as if it were locked:
+
+- Sign-in, the setup link, sessions and the user's API tokens are
+  refused from then on.
+- A hold taken for the user, or for a token or jam of theirs, MUST NOT
+  outlast it. The hold and every grant on it end by the expiry, so the
+  rig enforces it even if the station is late.
+- Within 30 seconds the station ends what the user still has open: their
+  sessions, their holds (with a revocation to the rig) and the jams they
+  started. This covers holds taken before the expiry was set or moved.
+
+Locking a user ends the same things at once. Moving the expiry later,
+or clearing it, lets the user back in. Their
+tokens work again; sessions ended at the expiry stay ended.
+
 ## Data
 
 Four tables beside the ones the station has: `users` (id, login, name,
-password hash, admin, locked, created, last sign-in, and the second
-factor's columns), `teams` (id,
+password hash, admin, locked, created, last sign-in, expiry, and the
+second factor's columns), `teams` (id,
 name), `team_members` (team, user) and `device_access` (device, team,
 level). API tokens gain the user they belong to. The owner user is
 seeded from the config file's password hash the first time a station
@@ -118,8 +139,8 @@ are signed for users or teams.
 | Method and path | What it does |
 |---|---|
 | `GET /v1/users` | Every user, for admins |
-| `POST /v1/users` | `{"login", "name", "admin"}`: a new user and their `setup_url` |
-| `PUT /v1/users/{id}` | Change `name`, `admin` or `locked` |
+| `POST /v1/users` | `{"login", "name", "admin", "expires"}`: a new user and their `setup_url` |
+| `PUT /v1/users/{id}` | Change `name`, `admin`, `locked` or `expires` (`""` for none) |
 | `POST /v1/users/{id}/reset` | Forget their sign-in; a new `setup_url` |
 | `DELETE /v1/users/{id}` | Remove a user; their tokens go with them |
 | `GET /v1/teams` | Every team with its members |

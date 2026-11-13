@@ -192,6 +192,9 @@ type Principal struct {
 	// are in, which decide what a regular user may see and do.
 	User  string
 	Teams []string
+	// Expires is when that user's account expires, zero for never: no
+	// hold taken for them lasts past it.
+	Expires time.Time
 }
 
 // Manages says whether the principal wields an admin's power to change
@@ -218,7 +221,19 @@ type User struct {
 	HasPassword bool      `json:"has_password"`
 	TwoFactor   bool      `json:"two_factor"`
 	TwoFactorAt time.Time `json:"two_factor_at,omitempty"`
+	// ExpiresAt, when set, is when the account stops working on its own,
+	// as if locked then: for a trial or a demo. An admin can move it.
+	ExpiresAt time.Time `json:"expires,omitzero"`
 }
+
+// Expired says whether the user's expiry has passed.
+func (u User) Expired(now time.Time) bool {
+	return !u.ExpiresAt.IsZero() && !now.Before(u.ExpiresAt)
+}
+
+// Stopped says whether the user may not use the station: locked, or past
+// their expiry. Their sign-ins, sessions, tokens and holds all stop.
+func (u User) Stopped(now time.Time) bool { return u.Locked || u.Expired(now) }
 
 // Invite is a setup link: one user's single-use way to choose a
 // password and set up an authenticator, good until it expires.
