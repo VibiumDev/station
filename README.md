@@ -1,6 +1,7 @@
 # Vibium Station
 
-Vibium Station lets people and AI agents use real devices from anywhere.
+Vibium Station lets people and AI agents use real devices from anywhere:
+see them, touch them, and talk to them.
 
 Each device sits on a rig: today, a Raspberry Pi running
 [Roadie](https://github.com/VibiumDev/roadie) with a phone plugged in. The
@@ -30,13 +31,28 @@ flowchart TB
 - **The rig** checks a grant signed by the station before it takes any
   input.
 
+## Voice, both ways
+
+A station carries each device's sound in both directions, so people and
+agents can talk to a device and hear it answer. That makes it a place to
+test voice assistants, voice agents and any app where sound matters.
+
+- In the viewer, you hear the device and talk to it with your own
+  microphone.
+- Agents speak and listen with Vibium: `vibium say` speaks into the
+  device, and `vibium listen` turns its answer into text, with how long it
+  took ([say and listen](https://github.com/VibiumDev/vibium/blob/main/docs/specs/say-listen-spec.md)).
+- Jam sessions can talk to the device and check what it says back, with
+  Piper on the station or a cloud voice.
+- Recordings keep both sides of the sound, and the Record Store plays them.
+
 ## What it does
 
 - Sign-in with a password and an authenticator app, or a tailnet identity
 - Users and teams: regular users see only the devices their teams were given
 - One person or agent in control of a device at a time, and one watching
 - Jam sessions: type a prompt, and an AI model carries it out on a device
-- Speech: Piper on the station, or a cloud voice
+- Two-way sound, with speech on the station (Piper) or in the cloud
 - A Record Store for recordings, screenshots and sound, played in place
 - Runs on your LAN, your tailnet, or the public internet
 
