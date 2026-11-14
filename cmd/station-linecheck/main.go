@@ -1,11 +1,11 @@
-// Command station-probe checks a station from outside, the way a browser
+// Command station-linecheck checks a station from outside, the way a browser
 // would: it signs in with an API token, holds a device, connects over
 // WebRTC through TURN only (unless told otherwise), measures what arrives,
 // taps the screen and confirms the screenshot changed, and releases the
 // hold. It exits non-zero on any failure, so it doubles as a smoke test
 // for any station, including a hosted one.
 //
-//	station-probe -station https://host -token stk_... [-device rig_x/phone] [-t 10s] [-ice relay|all] [-tap 0.5,0.5] [-insecure]
+//	station-linecheck -station https://host -token stk_... [-device rig_x/phone] [-t 10s] [-ice relay|all] [-tap 0.5,0.5] [-insecure]
 //
 // With -bidi it is a plain WebDriver BiDi client instead: it opens the
 // device's BiDi socket through the station (the URL the hold endpoint
@@ -83,7 +83,7 @@ type message struct {
 	Grant     json.RawMessage          `json:"grant,omitempty"`
 }
 
-type probe struct {
+type lineCheck struct {
 	base, token string
 	client      *http.Client
 	failures    []string
@@ -91,23 +91,31 @@ type probe struct {
 
 func main() {
 	station := flag.String("station", os.Getenv("STATION_URL"), "the station, https://host[:port] (or $STATION_URL)")
-	token := flag.String("token", os.Getenv("STATION_TOKEN"), "an API token that may control (or $STATION_TOKEN)")
+	token := flag.String("token", "", "an API token that may control (default: $STATION_TOKEN)")
 	dev := flag.String("device", "", "the device, rig_x/name (default: the first online one)")
 	dur := flag.Duration("t", 10*time.Second, "how long to watch the picture")
 	ice := flag.String("ice", "relay", "ICE transport policy: relay (through TURN only, as across the Internet) or all")
 	tap := flag.String("tap", "0.5,0.5", "where to tap, as fractions of the picture; empty for no tap")
 	insecure := flag.Bool("insecure", false, "accept the station's self-signed certificate (LAN mode)")
-	diff := flag.Bool("diff", false, "no probe: print the mean luma difference between the two JPEG files given, for scripts")
-	bidi := flag.Bool("bidi", false, "run the WebDriver BiDi sequence through the station instead of the WebRTC probe")
+	diff := flag.Bool("diff", false, "no check: print the mean luma difference between the two JPEG files given, for scripts")
+	bidi := flag.Bool("bidi", false, "run the WebDriver BiDi sequence through the station instead of the WebRTC check")
 	bidiDirect := flag.String("bidi-direct", "", "with -bidi: also run the sequence straight at the rig's BiDi socket, this URL, and compare")
-	bidiDirectToken := flag.String("bidi-direct-token", os.Getenv("ROADIE_TOKEN"), "with -bidi-direct: the rig's own bearer token (or $ROADIE_TOKEN)")
+	bidiDirectToken := flag.String("bidi-direct-token", "", "with -bidi-direct: the rig's own bearer token (default: $ROADIE_TOKEN)")
 	bidiEntry := flag.String("bidi-entry", "", "with -bidi: open this path on the station instead of the device's, such as /session (the standard entry point), with no hold taken first")
 	flag.Parse()
+	// The tokens are read from the environment here, not as flag defaults:
+	// a default is printed by -h.
+	if *token == "" {
+		*token = os.Getenv("STATION_TOKEN")
+	}
+	if *bidiDirectToken == "" {
+		*bidiDirectToken = os.Getenv("ROADIE_TOKEN")
+	}
 	if *diff {
 		a, err1 := os.ReadFile(flag.Arg(0))
 		b, err2 := os.ReadFile(flag.Arg(1))
 		if err1 != nil || err2 != nil {
-			fmt.Fprintln(os.Stderr, "station-probe -diff A.jpg B.jpg")
+			fmt.Fprintln(os.Stderr, "station-linecheck -diff A.jpg B.jpg")
 			os.Exit(2)
 		}
 		d, err := difference(a, b)
@@ -119,10 +127,10 @@ func main() {
 		return
 	}
 	if *station == "" || *token == "" {
-		fmt.Fprintln(os.Stderr, "station-probe needs -station and -token")
+		fmt.Fprintln(os.Stderr, "station-linecheck needs -station and -token")
 		os.Exit(2)
 	}
-	p := &probe{base: strings.TrimRight(*station, "/"), token: *token,
+	p := &lineCheck{base: strings.TrimRight(*station, "/"), token: *token,
 		client: &http.Client{Timeout: 30 * time.Second, Transport: &http.Transport{TLSClientConfig: &tls.Config{InsecureSkipVerify: *insecure}}}}
 	if *bidi {
 		if err := p.runBiDi(*dev, *tap, *bidiDirect, *bidiDirectToken, *bidiEntry); err != nil {
@@ -138,13 +146,13 @@ func main() {
 	fmt.Println("PASS")
 }
 
-func (p *probe) fail(msg string) {
+func (p *lineCheck) fail(msg string) {
 	fmt.Println("   ✗ " + msg)
 	p.failures = append(p.failures, msg)
 }
 
 // api calls the station with the token.
-func (p *probe) api(ctx context.Context, method, path string, body, out any) error {
+func (p *lineCheck) api(ctx context.Context, method, path string, body, out any) error {
 	var rd io.Reader
 	if body != nil {
 		data, _ := json.Marshal(body)
@@ -184,7 +192,7 @@ func (p *probe) api(ctx context.Context, method, path string, body, out any) err
 	return json.Unmarshal(data, out)
 }
 
-func (p *probe) run(devID string, dur time.Duration, icePolicy, tap string) error {
+func (p *lineCheck) run(devID string, dur time.Duration, icePolicy, tap string) error {
 	ctx, cancel := context.WithTimeout(context.Background(), dur+90*time.Second)
 	defer cancel()
 
@@ -201,7 +209,7 @@ func (p *probe) run(devID string, dur time.Duration, icePolicy, tap string) erro
 		}
 	}
 	if dev == nil {
-		return fmt.Errorf("no device to probe among %d listed", len(devices))
+		return fmt.Errorf("no device to check among %d listed", len(devices))
 	}
 	fmt.Printf("device %s (%s) online=%v caps=%v\n", dev.ID, dev.Kind, dev.Online, dev.Caps)
 	if !dev.Online {
@@ -608,7 +616,7 @@ type bidiStep struct {
 
 // bidiRun opens a BiDi socket and runs the sequence, tapping at fx, fy
 // of the viewport when tap is set. It returns every reply.
-func (p *probe) bidiRun(ctx context.Context, wsURL, bearer string, tap string, caps map[string]any) ([]bidiStep, error) {
+func (p *lineCheck) bidiRun(ctx context.Context, wsURL, bearer string, tap string, caps map[string]any) ([]bidiStep, error) {
 	header := http.Header{}
 	if bearer != "" {
 		header.Set("Authorization", "Bearer "+bearer)
@@ -759,7 +767,7 @@ func summarize(st bidiStep) string {
 	}
 }
 
-func (p *probe) runBiDi(devID, tap, direct, directToken, entry string) error {
+func (p *lineCheck) runBiDi(devID, tap, direct, directToken, entry string) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 	defer cancel()
 	var devices []device
@@ -780,7 +788,7 @@ func (p *probe) runBiDi(devID, tap, direct, directToken, entry string) error {
 		dev = &device{ID: devID}
 	}
 	if dev == nil {
-		return fmt.Errorf("no device to probe among %d listed", len(devices))
+		return fmt.Errorf("no device to check among %d listed", len(devices))
 	}
 	fmt.Printf("device %s (%s) online=%v\n", dev.ID, dev.Kind, dev.Online)
 	// The hold endpoint names the BiDi URL; the socket is opened with the

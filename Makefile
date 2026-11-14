@@ -6,9 +6,9 @@ ARCHES   = amd64 arm64
 
 .PHONY: build test dist clean
 
-build:  ## station and station-probe for this machine
+build:  ## station and station-linecheck for this machine
 	go build -trimpath -ldflags "$(LDFLAGS)" -o station ./cmd/station
-	go build -trimpath -ldflags "$(LDFLAGS)" -o station-probe ./cmd/station-probe
+	go build -trimpath -ldflags "$(LDFLAGS)" -o station-linecheck ./cmd/station-linecheck
 
 test:  ## go vet and go test
 	go vet ./...
@@ -21,11 +21,11 @@ dist:  ## Static linux/amd64 and linux/arm64 tarballs in dist/, with checksums
 		echo "  $$name"; \
 		mkdir -p $$dir/deploy && \
 		CGO_ENABLED=0 GOOS=linux GOARCH=$$arch go build -trimpath -ldflags "$(LDFLAGS)" -o $$dir/station ./cmd/station && \
-		CGO_ENABLED=0 GOOS=linux GOARCH=$$arch go build -trimpath -ldflags "$(LDFLAGS)" -o $$dir/station-probe ./cmd/station-probe && \
+		CGO_ENABLED=0 GOOS=linux GOARCH=$$arch go build -trimpath -ldflags "$(LDFLAGS)" -o $$dir/station-linecheck ./cmd/station-linecheck && \
 		cp LICENSE README.md $$dir && cp -r deploy/systemd deploy/fly $$dir/deploy && \
 		tar -C dist -czf $$dir.tar.gz $$name && rm -r $$dir || exit 1; \
 	done
 	cd dist && sha256sum *.tar.gz > sha256sums.txt
 
 clean:
-	rm -rf dist station station-probe
+	rm -rf dist station station-linecheck

@@ -166,7 +166,7 @@ clients that were handed it. See
 [docs/bidi-conventions.md](docs/bidi-conventions.md) and the tutorial,
 [docs/tutorials/agent-through-the-station.md](docs/tutorials/agent-through-the-station.md).
 
-`station-probe -bidi` runs that sequence as a plain BiDi client, and
+`station-linecheck -bidi` runs that sequence as a plain BiDi client, and
 with `-bidi-direct ws://<rig>/session` it runs the same sequence straight
 at the rig as well, comparing the shape of every reply.
 
@@ -356,13 +356,14 @@ tells it so after four such steps, and after eight takes no more
 actions and has it deliver its result. It then presses the device's Home shortcut when it announces one,
 so the device is left on its home screen.
 
-## station-probe
+## station-linecheck
 
-`station-probe` is the headless check the spec asks for, built from
-`cmd/station-probe`:
+`station-linecheck` is the headless check the spec asks for, built from
+`cmd/station-linecheck`. A line check is what a roadie does before a
+soundcheck: each line is tried, to see that its signal gets through.
 
 ```bash
-station-probe -station https://station.example -token stk_... [-device rig_x/phone] [-t 10s] [-ice relay|all] [-tap 0.5,0.5] [-insecure]
+station-linecheck -station https://station.example -token stk_... [-device rig_x/phone] [-t 10s] [-ice relay|all] [-tap 0.5,0.5] [-insecure]
 ```
 
 It lists the devices and takes one with `view` and `input`, then
