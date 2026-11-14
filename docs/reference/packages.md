@@ -23,4 +23,4 @@ any path prefix.
 | `jam` | Jam sessions: the station's own agent loop, the AI models and their providers, and the settings handed to Vibium for speech |
 | `viewer` | The one viewer page a station and a Roadie both serve (the toolbar, settings panel and on-screen keyboard, the MJPEG reader, sound and microphone, input in picture space, WebRTC), told its endpoints by a config and extended by a rig's own extras module. The embedded Record Player is under `player/`, built from the [record-player](https://github.com/VibiumDev/record-player) repository by `scripts/update-player.sh` |
 | `cmd/station` | The station binary |
-| `cmd/station-probe` | A headless check of any station: token, hold, WebRTC through TURN only, a tap and the screenshot it changes |
+| `cmd/station-linecheck` | A headless check of any station: token, hold, WebRTC through TURN only, a tap and the screenshot it changes |

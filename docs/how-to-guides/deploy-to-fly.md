@@ -101,7 +101,7 @@ IPv4 address from step 1.
 
 Then follow [First Steps on a New Station](first-steps.md): set up your
 authenticator, enroll a rig, and check the whole path with
-`station-probe`, which on Fly.io sends the media through TURN.
+`station-linecheck`, which on Fly.io sends the media through TURN.
 
 ## 6. Use your own domain
 

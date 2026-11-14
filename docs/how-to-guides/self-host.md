@@ -23,7 +23,7 @@ repository. That needs Go 1.27.4 or newer:
 git clone https://github.com/VibiumDev/station
 cd station
 make build
-sudo install -m 755 station station-probe /usr/local/bin/
+sudo install -m 755 station station-linecheck /usr/local/bin/
 station version
 ```
 
@@ -184,7 +184,7 @@ terminal.
 
 [First Steps on a New Station](first-steps.md) takes it from here: sign in
 and set up your authenticator, enroll a rig, and check the whole path with
-`station-probe`.
+`station-linecheck`.
 
 ## Docker
 
@@ -228,7 +228,7 @@ in the clone, install the binaries over the old ones and restart:
 ```bash
 git pull
 make build
-sudo install -m 755 station station-probe /usr/local/bin/
+sudo install -m 755 station station-linecheck /usr/local/bin/
 sudo systemctl restart station
 ```
 
@@ -296,7 +296,7 @@ restarted the station.
   the relay range is closed, or `--turn-public-ip` is wrong.
 - A rig shows offline: its own journal (`journalctl -u roadie`) says why
   the tunnel is not up.
-- `station-probe` fails at the hold: the token is read-only, or someone
+- `station-linecheck` fails at the hold: the token is read-only, or someone
   else holds the device.
 - The sign-in page refuses a right password: five misses from one
   address lock that address out for up to 15 minutes, and each miss

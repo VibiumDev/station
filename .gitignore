@@ -34,7 +34,7 @@ go.work.sum
 
 # Built here
 /station
-/station-probe
+/station-linecheck
 /dist/
 # The running log for the agent sessions stays local.
 /docs/progress.md

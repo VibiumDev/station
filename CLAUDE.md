@@ -93,7 +93,7 @@ device-neutral from the start.
   linux/amd64 and darwin/arm64.
 - Packages as the spec names them: `tunnel`, `signal`, `relay`, `hold`,
   `token`, `turn`, `viewer`, plus `rig`, `cmd/station` and
-  `cmd/station-probe`.
+  `cmd/station-linecheck`.
 - Holds: per-device seq, takeover by input scope, one view-only observer,
   release after 5 idle minutes or 8 hours. Hold grants live 10 minutes and
   are refreshed over the data channel or tunnel.
@@ -117,7 +117,7 @@ device-neutral from the start.
 - Develop against a local `station` on the dev Pi, then tailnet mode
   (`--tailnet`, tsnet), then the public test station. Deploy only to the
   public test station you are given a scoped token for, and to nothing else.
-- From R4 on, run `cmd/station-probe` against the public test station and
+- From R4 on, run `cmd/station-linecheck` against the public test station and
   include its output in the milestone report.
 
 ## How to work

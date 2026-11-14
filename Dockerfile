@@ -7,7 +7,7 @@ COPY go.mod go.sum ./
 RUN go mod download
 COPY . .
 RUN CGO_ENABLED=0 go build -trimpath -ldflags="-s -w -X main.version=${VERSION}" -o /out/station ./cmd/station \
- && CGO_ENABLED=0 go build -trimpath -ldflags="-s -w -X main.version=${VERSION}" -o /out/station-probe ./cmd/station-probe
+ && CGO_ENABLED=0 go build -trimpath -ldflags="-s -w -X main.version=${VERSION}" -o /out/station-linecheck ./cmd/station-linecheck
 
 # Vibium, whose MCP server a jam drives devices through: the static
 # binary of a nightly build, checked against that build's own list of
@@ -37,7 +37,7 @@ RUN apk add --no-cache curl \
 
 FROM alpine:3.22
 RUN apk add --no-cache ca-certificates tzdata
-COPY --from=build /out/station /out/station-probe /usr/local/bin/
+COPY --from=build /out/station /out/station-linecheck /usr/local/bin/
 COPY --from=vibium /out-vibium /usr/local/bin/vibium
 ENV STATION_DIR=/data
 VOLUME /data

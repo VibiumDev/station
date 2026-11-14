@@ -71,15 +71,15 @@ laptop` makes one too. The secret is shown once.
 Then, from another machine with a clone of this repository:
 
 ```bash
-go run ./cmd/station-probe -station https://STATION -token stk_... -device RIG/DEVICE
+go run ./cmd/station-linecheck -station https://STATION -token stk_... -device RIG/DEVICE
 ```
 
-The probe takes the phone, streams it over WebRTC, taps the screen,
+The line check takes the phone, streams it over WebRTC, taps the screen,
 checks that the picture changed, and lets the phone go. A non-zero exit
 names what failed.
 
 - For a tailnet or LAN station, add `-ice all`: they run no TURN relay.
-- For a public station or Fly.io, leave it out: the probe then sends the
+- For a public station or Fly.io, leave it out: the line check then sends the
   media through TURN only, which proves the relay works.
 - For a LAN station, add `-insecure` for its own certificate.
 
