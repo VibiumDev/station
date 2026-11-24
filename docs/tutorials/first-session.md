@@ -46,6 +46,10 @@ What you may do depends on the level the admin gave your team:
 | drive | Also drive it in your browser |
 | jam | Also drive it from Vibium, with a script or an agent, and start jam sessions |
 
+A jam session is a chat on the station's own pages: you type a prompt, and
+an AI chat model carries it out on the phone. A station has them only when
+its admin has set up a model.
+
 ## 3. Hello, in your browser
 
 1. On **Devices**, press **Drive** next to the phone. Its screen appears.
