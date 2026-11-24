@@ -26,8 +26,10 @@ a URL with a token, as it would to a remote browser.
 
 - The station's URL, such as `https://example.vibium.cloud` for a hosted
   one or `https://station.<tailnet>.ts.net` for your own.
-- An API token from the station's Settings page (or `station token create
-  laptop`), shown once. It starts with `stk_`.
+- An API token, shown once. It starts with `stk_`. You make your own on
+  your Account page. An admin can also make one on Settings, or with
+  `station token create laptop`.
+- The **jam** level on the device, if you are not an admin.
 - The device listed on the station's front page as online.
 - [Vibium](https://github.com/VibiumDev/vibium) on the laptop:
   `npm install -g vibium`, or `npx vibium` for one-off use.

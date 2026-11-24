@@ -101,12 +101,15 @@ On **Settings → Access**:
    hours. Send it through a channel you trust.
 3. **Teams**: add each of them to the team.
 4. **Device access**: give the team a level on the phone. **Watch** only
-   watches, **drive** also takes control from the viewer, and **jam** also
-   starts jam sessions.
+   watches, and **drive** also takes control from the viewer. **Jam** also
+   starts jam sessions and lets a script or an agent drive the phone over
+   the API, with Vibium for example.
 
 Tell each person to open the link within 24 hours, choose a password,
 scan the QR code with an authenticator app, and keep the backup codes the
 station shows. Then they open **Devices** and pick the phone.
+[Your first session on a station](../tutorials/first-session.md) walks
+them through it.
 
 To stop someone sooner, hold **Lock** in the **⋯** menu on their row, which
 also takes the phone from them at once. **Remove** deletes the account.
