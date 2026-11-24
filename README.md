@@ -98,6 +98,7 @@ Then:
 | Run one on Fly.io | [Deploy to Fly.io](docs/how-to-guides/deploy-to-fly.md) |
 | Sign in, enroll a rig and check it all works | [First steps](docs/how-to-guides/first-steps.md) |
 | Set up chat and voices | [Set Up Jams](docs/how-to-guides/set-up-jams.md) |
+| Use a device someone shared with you | [Your first session on a station](docs/tutorials/first-session.md) |
 | Point an agent at a device | [Reach a device through the station](docs/tutorials/agent-through-the-station.md) |
 | Use the API | [API.md](API.md) |
 | Look up a command or flag | [Commands and flags](docs/reference/commands-and-flags.md) |
