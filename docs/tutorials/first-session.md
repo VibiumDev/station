@@ -101,6 +101,13 @@ This needs the **jam** level on the phone.
    Open `hello.jpg`, find the arrow or button, and put its position in
    place of `X Y`. `next.jpg` shows the screen that follows.
 
+If `hello.jpg` is black, the phone's screen is off. Wake it with Home,
+then take the screenshot again:
+
+```bash
+vibium keys Meta+h
+```
+
 If `vibium start` answers `no device is online`, the phone is offline or
 your team does not have **jam** on it. Ask the admin.
 
