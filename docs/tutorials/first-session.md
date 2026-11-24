@@ -28,12 +28,15 @@ password and a code from the app.
 
 ## 2. Watch or drive
 
-**Devices** lists what your teams were given. Each device has two ways in:
+**Devices** lists what your teams were given. Each device has two buttons:
 
 - **Watch**, the eye, only looks. It sends no input, so it is safe while
   someone else is using the phone.
 - **Drive**, the wheel, takes the phone. Your mouse and keyboard now
   control it.
+
+The phone's name is a link too, and it opens **Watch**. To drive from
+there, press **Drive**, the same wheel, in the toolbar.
 
 One person or agent drives at a time. The **Status** column says who has
 the phone, or "available".
